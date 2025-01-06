@@ -1,0 +1,10 @@
+name = "simple_meta"
+version = "0.1.0"
+defaultTargets = ["simple_meta"]
+
+[[lean_lib]]
+name = "SimpleMeta"
+
+[[lean_exe]]
+name = "simple_meta"
+root = "Main"
