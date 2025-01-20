@@ -1,0 +1,1 @@
+ocamlfind ocamlc -o test -package pretty_expressive -linkpkg $1.lean.ml && (./test > $1.out.lean)

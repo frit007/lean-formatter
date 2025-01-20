@@ -1,10 +1,34 @@
 name = "simple_meta"
 version = "0.1.0"
-defaultTargets = ["simple_meta"]
+defaultTargets = ["simple_meta", "PrettyFormat"]
+
 
 [[lean_lib]]
 name = "SimpleMeta"
 
+[[lean_lib]]
+name = "PrettyFormat"
+root = "PrettyFormat"
+srcDir = "PrettyFormat"
+
+[[lean_lib]]
+name = "Formatter"
+root = "Formatter"
+srcDir = "PrettyFormat"
+
+[[lean_lib]]
+name = "annotations"
+root = "annotations"
+
+[[lean_lib]]
+name = "annotations_keyed"
+root = "annotations_keyed"
+
+
+[[lean_lib]]
+name = "read2"
+root = "read2"
+
 [[lean_exe]]
 name = "simple_meta"
-root = "Main"
+root = "read2"
