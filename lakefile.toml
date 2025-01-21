@@ -1,6 +1,6 @@
 name = "simple_meta"
 version = "0.1.0"
-defaultTargets = ["simple_meta", "PrettyFormat"]
+defaultTargets = ["runner", "PrettyFormat"]
 
 
 [[lean_lib]]
@@ -21,14 +21,5 @@ name = "annotations"
 root = "annotations"
 
 [[lean_lib]]
-name = "annotations_keyed"
-root = "annotations_keyed"
-
-
-[[lean_lib]]
-name = "read2"
-root = "read2"
-
-[[lean_exe]]
-name = "simple_meta"
-root = "read2"
+name = "runner"
+root = "runner"

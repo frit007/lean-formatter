@@ -1,4 +1,5 @@
-import read2
+import PrettyFormat
+import annotations
 
 open Lean Elab PrettyPrinter PrettyFormat
 
@@ -9,10 +10,15 @@ def runPrettyExpressive (fileName : String) : IO Unit := do
   let child ← IO.Process.spawn { cmd := s!"./prettyExpressive.bat", args := #[fileName]}
 
   let exitCode ← child.wait
+  if exitCode == 0 then
+    IO.println "success"
+  else
+    IO.println "failure"
 
-unsafe def mainOutputPPL (args : List String) : MetaM (String) := do
+unsafe def mainOutputPPL (args : List String) : MetaM (Array Syntax) := do
   let [fileName] := args | failWith "Usage: reformat file"
   initSearchPath (← findSysroot)
+  IO.println "what?"
   let input ← IO.FS.readFile (fileName++".lean")
 
   let template ← IO.FS.readFile "template.ml"
@@ -31,18 +37,29 @@ unsafe def mainOutputPPL (args : List String) : MetaM (String) := do
   let introduceContext := ((pfCombineWithSeparator nl leadingUpdated).run { tmp:= 0 })
   let introduceState := introduceContext.run' {nextId := 0, otherEnv := env}
   let ppl ← introduceState
-  -- let ppl := ((pfCombineWithSeparator nl leadingUpdated).run { tmp:= 0 }).run' {nextId := 0, otherEnv := env})
 
-  -- let ppl := syntaxArrToPPLWithNewLines empty leadingUpdated
+  IO.println "what?"
+
+
+  IO.FS.writeFile (fileName++".lean.syntax") (s!"{leadingUpdated}")
   let ocamlOutput := toOcaml ppl
   let templateWithConttent := template.replace "$$$FORMAT$$$" (ocamlOutput)
-  let ocamlFile := fileName++"lean.ml"
+  let ocamlFile := fileName++".lean.ml"
   IO.FS.writeFile ocamlFile templateWithConttent
   IO.println "done"
   let _ ← runPrettyExpressive fileName
   let result ← IO.FS.readFile (fileName++".out.lean")
 
-  -- IO.FS.writeFile (fileName++".out.lean") result
-  return result ++ "\n\n" ++ ocamlOutput
+  IO.FS.writeFile (fileName++".out.lean") result
+  return leadingUpdated
+    -- return "|"
 
 #eval mainOutputPPL ["./test"]
+
+
+
+
+
+
+
+-- #eval runPrettyExpressive "test"

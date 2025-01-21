@@ -26,7 +26,6 @@ inductive PPL where
   | commentText : String → PPL
   -- If we get into a scenario where we cannot parse the
   | error : String → PPL
-
   | choice : PPL → PPL → PPL
   | unallignedConcat : PPL → PPL → PPL
   | flatten : PPL → PPL
@@ -69,8 +68,7 @@ def align (s: PPL): PPL:=
 def group (s: PPL): PPL:=
   s <^> flatten s
 
-def nl : PPL:=
-  PPL.nl
+
 
 def empty := -- used when starting a new node
   text ""
@@ -145,11 +143,14 @@ partial def output : PPL → String
   | PPL.unallignedConcat left right => s!"({output left}) <> ({output right})"
   | PPL.letExpr var expr body => s!"let {var} = ({output expr}) in ({output body})"
 
+def escapeQuotes (s : String) : String :=
+  s.replace "\"" "\\\""
+
 partial def toOcaml : PPL → String
   | PPL.var v => "exit_"++v
-  | PPL.commentText s => s!"text \"{s}\"\n"
-  | PPL.error s => s!"error {s}\n"
-  | PPL.text s => s!"text \"{s}\""
+  | PPL.commentText s => s!"text \"{escapeQuotes s}\"\n"
+  | PPL.error s => s!"error {escapeQuotes s}\n"
+  | PPL.text s => s!"text \"{escapeQuotes s}\""
   | PPL.nl => "nl\n"
   | PPL.choice left right => s!"({toOcaml left})\n<|>({toOcaml right})"
   | PPL.flatten inner => s!"flatten ({toOcaml inner})\n"
@@ -255,6 +256,8 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
     nextId : Nat -- used to generate ids
     otherEnv: Environment -- The env from the formatted file
     nesting: Nat := 0 -- how many times we have nested
+    startOfLine: Bool := true -- whether we are at the start of a line
+    unknown: Bool := false -- whether we are in an unknown state (If we are in an unkown state we will try to keep the value the same as it was)
 
 
   abbrev formatPPLM := ReaderT FormatContext (StateRefT MyState MetaM)
@@ -290,7 +293,9 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
     let state' ← get
     set {state' with nesting := state.nesting}
     return o
-
+  partial def nl : formatPPLM PPL := do
+    modify fun s => {s with startOfLine := true}
+    return PPL.nl
 
   partial def findPatternStartAux (s pattern : String) : Option String :=
     if s.length < pattern.length then none
@@ -346,9 +351,17 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
             none
           match res with
           | some p => return p
-          | none => return text s!"could not find something for {kind}" -- we could not find a formatter
+          | none =>
+          IO.println s!"could not find something for {kind}" -- we could not find a formatter
+          pfCombine args
+          --return text s!"could not find something for {kind}" -- we could not find a formatter
           -- | none => failure -- we could not find a formatter
-      | .atom (info : SourceInfo) (val : String) => return (unknownSurroundWithComments info (text "")) (fun p => p <> text val)
+      | .atom (info : SourceInfo) (val : String) =>
+        if state.unknown then
+          return (surroundWithComments info (text "")) (fun p => p <> text val)
+        else
+          return (unknownSurroundWithComments info (text "")) (fun p => p <> text val)
+
       | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) =>
           match val with
           | _ => return (unknownSurroundWithComments info (text "")) (fun p => p <> text rawVal.toString)
@@ -378,58 +391,26 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
         |> unknownStringToPPL trailing.toString
       | _ => f p
 
+    
+
+    -- combine the formatters without separators
+    partial def pfCombine :formatPPL
+    | a => do
+      a.foldlM (fun p s => do
+        let p' ← pf s
+        return p <> p') (text "")
+
+    partial def pfCombineWithSeparator (sep: PPL) :formatPPL
+    | a => do
+      IO.println "first time through?"
+      a.foldlM (fun p s => do
+        let p' ← pf s
+        if isEmpty [] p' then
+          return p
+        else
+          return p <> sep <> p'
+        ) (text "")
   end
 
-  -- combine the formatters without separators
-  partial def pfCombine :formatPPL
-  | a => do
-    a.foldlM (fun p s => do
-      let p' ← pf s
-      return p <> p') (text "")
-
-  partial def pfCombineWithSeparator (sep: PPL) :formatPPL
-  | a => do
-    IO.println "first time through?"
-    a.foldlM (fun p s => do
-      let p' ← pf s
-      return p <> sep <> p') (text "")
 
 end PrettyFormat
-
-
-
--- initialize blaAttr : TagAttribute ← registerTagAttribute `bla "simple user defined attribute"
-
--- -- so initialize
--- initialize formatAttr : ParametricAttribute Name ← do
---   registerParametricAttribute {
---     name := `format
---     descr := "Custom format attribute"
---     getParam := fun _ stx => do
---       match stx with
---       | `(attr| format $id:ident) => pure id.getId
---       | _ => throwError "invalid [format] attribute usage"
---   }
-
-
--- initialize registerBuiltinAttribute {
---   name := `trace_add
---   descr := "Simply traces when added, to debug double-application bugs"
---   add   := fun decl _stx _kind => do
---     logInfo m!"trace_add attribute added to {decl}"
---   -- applicationTime := .afterCompilation
--- }
-
--- namespace PPL
--- end PPL
-
--- syntax text
--- syntax nl
--- -- arbitrary choice
--- syntax <_> -- should be <|>
--- syntax <>
--- syntax nest n
--- syntax flatten
--- syntax align
-
--- let $a = $v in
