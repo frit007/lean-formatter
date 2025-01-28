@@ -17,8 +17,14 @@ root = "Formatter"
 srcDir = "PrettyFormat"
 
 [[lean_lib]]
+name = "BaseFormatter"
+root = "BaseFormatter"
+srcDir = "PrettyFormat"
+
+[[lean_lib]]
 name = "annotations"
 root = "annotations"
+
 
 [[lean_lib]]
 name = "runner"

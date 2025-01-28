@@ -1,1 +1,66 @@
-#[(Module.header [] [(Module.import "import" [] `Lean [])]), (Command.eoi "")]
+#[(Module.header
+ []
+ [(Module.import "import" [] `Lean [])
+  (Module.import "import" [] `PrettyFormat [])
+  (Module.import "import" [] `Formatter [])]), (Command.declaration
+ (Command.declModifiers [] [] [(Command.private "private")] [] [] [])
+ (Command.definition
+  "def"
+  (Command.declId `b [])
+  (Command.optDeclSig
+   [(Term.explicitBinder "(" [`y] [":" `Nat] [] ")") (Term.explicitBinder "(" [`a1] [":" `Nat] [] ")")]
+   [(Term.typeSpec ":" `Nat)])
+  (Command.declValSimple
+   ":="
+   (Term.let
+    "let"
+    (Term.letDecl
+     (Term.letIdDecl
+      `tmp
+      []
+      [(Term.typeSpec ":" `Nat)]
+      ":="
+      («term_-_»
+       («term_+_» («term_/_» («term_/_» `y "/" (num "2")) "/" (num "3")) "+" («term_*_» (num "2") "*" (num "3")))
+       "-"
+       (num "2"))))
+    []
+    (Term.let "let" (Term.letDecl (Term.letIdDecl `tmp2 [] [] ":=" («term_*_» `tmp "*" (num "5")))) [] `tmp2))
+   (Termination.suffix [] [])
+   [])
+  [])), (Command.declaration
+ (Command.declModifiers [] [] [(Command.private "private")] [] [] [])
+ (Command.definition
+  "def"
+  (Command.declId `c [])
+  (Command.optDeclSig
+   [(Term.explicitBinder "(" [`y] [":" `Nat] [] ")")
+    (Term.explicitBinder "(" [`a1] [":" `Nat] [] ")")
+    (Term.explicitBinder "(" [`a2] [":" `Nat] [] ")")
+    (Term.explicitBinder "(" [`a3] [":" `Nat] [] ")")
+    (Term.explicitBinder "(" [`a4] [":" `Nat] [] ")")
+    (Term.explicitBinder "(" [`a5] [":" `Nat] [] ")")
+    (Term.explicitBinder "(" [`a6] [":" `Nat] [] ")")
+    (Term.explicitBinder "(" [`a7] [":" `Nat] [] ")")
+    (Term.explicitBinder "(" [`a8] [":" `Nat] [] ")")
+    (Term.explicitBinder "(" [`a9] [":" `Nat] [] ")")]
+   [(Term.typeSpec ":" `Nat)])
+  (Command.declValSimple
+   ":="
+   (Term.let
+    "let"
+    (Term.letDecl
+     (Term.letIdDecl
+      `tmp
+      []
+      [(Term.typeSpec ":" `Nat)]
+      ":="
+      («term_-_»
+       («term_+_» («term_/_» («term_/_» `y "/" (num "2")) "/" (num "3")) "+" («term_*_» (num "2") "*" (num "3")))
+       "-"
+       (num "2"))))
+    []
+    (Term.let "let" (Term.letDecl (Term.letIdDecl `tmp2 [] [] ":=" («term_*_» `tmp "*" (num "5")))) [] `tmp2))
+   (Termination.suffix [] [])
+   [])
+  [])), (Command.eoi "")]

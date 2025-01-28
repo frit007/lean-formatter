@@ -18,6 +18,12 @@ open Lean.Elab.Command
 
 namespace PrettyFormat
 
+inductive PPLSpacing where
+  | space : PPLSpacing
+  | newline : PPLSpacing
+  | either : PPLSpacing
+  deriving Repr, BEq
+
 inductive PPL where
   | nl : PPL
   | text : String → PPL
@@ -26,6 +32,8 @@ inductive PPL where
   | commentText : String → PPL
   -- If we get into a scenario where we cannot parse the
   | error : String → PPL
+  -- optional space, that will be reduced to a single space or a newline
+  | optionalSpace : PPLSpacing → PPL
   | choice : PPL → PPL → PPL
   | unallignedConcat : PPL → PPL → PPL
   | flatten : PPL → PPL
@@ -68,8 +76,6 @@ def align (s: PPL): PPL:=
 def group (s: PPL): PPL:=
   s <^> flatten s
 
-
-
 def empty := -- used when starting a new node
   text ""
 
@@ -77,19 +83,6 @@ def v (s: String): PPL:=
   PPL.var s
 
 
-
-#eval let x = text "s" in flatten (text "hello" <^> text "b")
-
-def genTest: PPL :=
-  let o := (text "function␣append(first,second,third){"
-          <> PPL.nest 4 (
-          let f = text "first +" in
-          let s = text "second +" in
-          let t = text "third" in
-          nl <> text "return " <>
-          group (PPL.nest 4 ((v "f") <> nl <> (v "s") <> nl <> (v "t")))
-          ) <> nl <> text "}")
-  o
 -- def genTest2: PPL :=
 --   let o := (text "function␣append(first,second,third){" <$> ( let f = text "first␣+" in
 --         let s = text "second␣+" in
@@ -117,6 +110,11 @@ partial def prettyPrintWithVars (vars : List (String × PPL)) (indent:Nat): (ppl
     match vars.find? (fun (name, _) => name = v) with
     | some (_, value) => prettyPrintWithVars vars indent value
     | none => v
+  | PPL.optionalSpace spacing =>
+    match spacing with
+    | PPLSpacing.space => " "
+    | PPLSpacing.newline => "\n"
+    | PPLSpacing.either => "\n"
   | PPL.commentText s => s
   | PPL.error s => "\n" ++ s ++ " "
   | PPL.text s => s
@@ -132,6 +130,11 @@ partial def prettyPrintWithVars (vars : List (String × PPL)) (indent:Nat): (ppl
 
 partial def output : PPL → String
   | PPL.var v => v
+  | PPL.optionalSpace spacing =>
+    match spacing with
+    | PPLSpacing.space => s!"text \" \"\n"
+    | PPLSpacing.newline => "nl\n"
+    | PPLSpacing.either => s!"text \" \"\n"
   | PPL.commentText s => s!"text \"{s}\"\n"
   | PPL.error s => s!"error {s}"
   | PPL.text s => s!"text \"{s}\""
@@ -149,6 +152,11 @@ def escapeQuotes (s : String) : String :=
 partial def toOcaml : PPL → String
   | PPL.var v => "exit_"++v
   | PPL.commentText s => s!"text \"{escapeQuotes s}\"\n"
+  | PPL.optionalSpace spacing =>
+    match spacing with
+    | PPLSpacing.space => s!"text \" \"\n"
+    | PPLSpacing.newline => "nl\n"
+    | PPLSpacing.either => s!"text \" \"\n"
   | PPL.error s => s!"error {escapeQuotes s}\n"
   | PPL.text s => s!"text \"{escapeQuotes s}\""
   | PPL.nl => "nl\n"
@@ -165,6 +173,8 @@ partial def isEmpty (vars : List (String × PPL)): (ppl : PPL) → Bool
     | some (_, value) => isEmpty vars value
     | none => true
   | PPL.commentText s => s.trim.length == 0
+  | PPL.optionalSpace _ =>
+    true
   | PPL.error s => true
   | PPL.text s => s.trim.length == 0
   | PPL.nl => false
@@ -176,10 +186,6 @@ partial def isEmpty (vars : List (String × PPL)): (ppl : PPL) → Bool
   | PPL.letExpr var expr body =>
     let vars := (var, expr) :: vars
     isEmpty vars body
-
-#eval output genTest
-#eval prettyPrintWithVars [] 0 genTest
-#eval genTest
 
 structure CommentFix where
   flatten : Bool
@@ -209,6 +215,11 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
     | none => (PPL.error s!"Using undefined variable {v}", state)
    else (PPL.var v, state)
   | PPL.commentText s => (PPL.commentText s, {state with startedComment := true })
+  | PPL.optionalSpace spacing =>
+    if state.flatten && spacing == PPLSpacing.newline then
+      (PPL.optionalSpace spacing, state)
+    else
+      (PPL.optionalSpace spacing, {state with startedComment := state.startedComment && spacing != PPLSpacing.newline})
   | PPL.error s => (PPL.error s, state)
   | PPL.text s =>
     if state.flatten && state.startedComment && s.trim.length > 0 then
@@ -249,12 +260,24 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
   | PPL.letExpr var expr body => (body, state) -- TODO
 
 
+  inductive newlineState where
+    | none
+    | space
+    | newline
+
+  -- partial def removeDuplicateSpaces : PPL → (PPL × newlineState)
+  -- | PPL.var v => (PPL.var v, newlineState.space)
+  -- | PPL.unallignedConcat left right =>
+  --   let (l, s):= removeDuplicateSpaces left
+
   structure FormatContext where
-    tmp : Nat := 0
+    -- prefer the first environment
+    envs: List Environment
+    -- myEnv: Environment -- The env from the file
+    -- otherEnv: Environment -- The env from the formatted file
 
   structure MyState where
     nextId : Nat -- used to generate ids
-    otherEnv: Environment -- The env from the formatted file
     nesting: Nat := 0 -- how many times we have nested
     startOfLine: Bool := true -- whether we are at the start of a line
     unknown: Bool := false -- whether we are in an unknown state (If we are in an unkown state we will try to keep the value the same as it was)
@@ -262,155 +285,23 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
 
   abbrev formatPPLM := ReaderT FormatContext (StateRefT MyState MetaM)
   abbrev formatPPL := Array Syntax → formatPPLM PrettyFormat.PPL
-  -- abbrev formatPPLArg := Array Syntax → formatPPLM PrettyFormat.PPL
 
   unsafe def mkPFormatAttr : IO (KeyedDeclsAttribute formatPPL) :=
     KeyedDeclsAttribute.init {
       builtinName := `builtin_pFormat,
       name := `pFormat,
-      descr    := "Register a delaborator.
+      descr    := "Register a formatter.
 
     [pFormat k]",
       valueTypeName := `PrettyFormat.formatPPL
       evalKey := fun _ stx => do
         let stx ← Attribute.Builtin.getIdent stx
         let kind := stx.getId
-        if (← Elab.getInfoState).enabled && kind.getRoot == `app then
-          let c := kind.replacePrefix `app .anonymous
-          if (← getEnv).contains c then
-            Elab.addConstInfo stx c none
         pure kind
     } `pFormat
   @[init mkPFormatAttr] opaque pFormatAttr : KeyedDeclsAttribute formatPPL
 
 
-  partial def nest (n:Nat) (s: formatPPLM PPL): formatPPLM PPL :=
-    do
-    let state ← get
-    set {state with nesting := state.nesting + n}
-    let result ← s
-    let o:PPL := PPL.nest n (result)
-    let state' ← get
-    set {state' with nesting := state.nesting}
-    return o
-  partial def nl : formatPPLM PPL := do
-    modify fun s => {s with startOfLine := true}
-    return PPL.nl
-
-  partial def findPatternStartAux (s pattern : String) : Option String :=
-    if s.length < pattern.length then none
-    else if s.take pattern.length == pattern then some (s.drop pattern.length)
-    else findPatternStartAux (s.drop 1) pattern
-
-  def findPatternStart (s pattern : String) : Option String :=
-    findPatternStartAux s pattern
-
-  def stringCommentsStr (s:String) : List String :=
-  s.split (fun c => c == '\n')
-  |>.filterMap (fun s => findPatternStart s "--")
-  |>.filter (fun (s:String) => s.trim.length > 0)
-  |>.map (fun (s:String) => "-- " ++ s.trim)
-
-  mutual
-    partial def pf (stx: Syntax): formatPPLM PPL := do
-      -- can we assume that the other environment has all of the attributes? for now we do not
-      let state ← get
-      match stx with
-      | .missing => pure (text "")
-      | .node (info : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
-        -- try to use the other environments attributes
-        -- We prefer the other environment
-        let options := pFormatAttr.getValues state.otherEnv kind
-          -- get the first formatter that does not fail
-        let res ← options.foldlM (fun p f => do
-            match p with
-            | none =>
-              try
-                return some (← f args)
-              catch _ =>
-                return none
-            | some p => return some p
-            )
-          none
-        match res with
-        | some p => return p
-        | none =>
-          let env ← getEnv
-          -- try to use the current environment attributes
-          let options := pFormatAttr.getValues env kind
-          -- get the first formatter that does not fail
-          let res ← options.foldlM (fun p f => do
-              match p with
-              | none =>
-                try
-                  return some (← f args)
-                catch _ =>
-                  return none
-              | some p => return some p
-              )
-            none
-          match res with
-          | some p => return p
-          | none =>
-          IO.println s!"could not find something for {kind}" -- we could not find a formatter
-          pfCombine args
-          --return text s!"could not find something for {kind}" -- we could not find a formatter
-          -- | none => failure -- we could not find a formatter
-      | .atom (info : SourceInfo) (val : String) =>
-        if state.unknown then
-          return (surroundWithComments info (text "")) (fun p => p <> text val)
-        else
-          return (unknownSurroundWithComments info (text "")) (fun p => p <> text val)
-
-      | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) =>
-          match val with
-          | _ => return (unknownSurroundWithComments info (text "")) (fun p => p <> text rawVal.toString)
-
-
-    partial def unknownStringCommentsStr (s:String) : List String :=
-    if s.contains '\n' then
-      s.split (fun c => c == '\n')
-      |>.filterMap (fun s => findPatternStart s "--")
-      |>.filter (fun (s:String) => s.trim.length > 0)
-      |>.map (fun (s:String) => "-- " ++ s.trim)
-    else
-      if s.length > 0 then
-        [" "]
-      else
-        []
-
-    partial def unknownStringToPPL (s:String) (p: PPL) : PPL :=
-      stringCommentsStr s |>.foldl (fun p' c => p' <> commentText c <> nl) p
-
-    -- if the value is unknown then we will try to keep the value the same as it was
-    partial def unknownSurroundWithComments (info : SourceInfo) (p:PPL) (f : PPL → PPL): PPL:=
-      match info with
-      | .original (leading : Substring) (pos : String.Pos) (trailing : Substring) (endPos : String.Pos) =>
-        unknownStringToPPL leading.toString p
-        |> f
-        |> unknownStringToPPL trailing.toString
-      | _ => f p
-
-    
-
-    -- combine the formatters without separators
-    partial def pfCombine :formatPPL
-    | a => do
-      a.foldlM (fun p s => do
-        let p' ← pf s
-        return p <> p') (text "")
-
-    partial def pfCombineWithSeparator (sep: PPL) :formatPPL
-    | a => do
-      IO.println "first time through?"
-      a.foldlM (fun p s => do
-        let p' ← pf s
-        if isEmpty [] p' then
-          return p
-        else
-          return p <> sep <> p'
-        ) (text "")
-  end
 
 
 end PrettyFormat

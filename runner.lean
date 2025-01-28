@@ -18,7 +18,6 @@ def runPrettyExpressive (fileName : String) : IO Unit := do
 unsafe def mainOutputPPL (args : List String) : MetaM (Array Syntax) := do
   let [fileName] := args | failWith "Usage: reformat file"
   initSearchPath (← findSysroot)
-  IO.println "what?"
   let input ← IO.FS.readFile (fileName++".lean")
 
   let template ← IO.FS.readFile "template.ml"
@@ -32,10 +31,11 @@ unsafe def mainOutputPPL (args : List String) : MetaM (Array Syntax) := do
   let leadingUpdated := mkNullNode (moduleStx.map (·.stx)) |>.updateLeading |>.getArgs
   -- let withComments := introduceCommentsToTheCST leadingUpdated
 
-
+  -- The Env of the program that reformats the other program. In case that the formatted code does not include the standard annotations
+  let currentEnv := (← getEnv)
   -- let _ ← modify fun s => {s with nextId := 0, MyState.otherEnv}
-  let introduceContext := ((pfCombineWithSeparator nl leadingUpdated).run { tmp:= 0 })
-  let introduceState := introduceContext.run' {nextId := 0, otherEnv := env}
+  let introduceContext := ((pfCombineWithSeparator PPL.nl leadingUpdated).run { envs:= [currentEnv, env] })
+  let introduceState := introduceContext.run' {nextId := 0}
   let ppl ← introduceState
 
   IO.println "what?"
@@ -54,7 +54,48 @@ unsafe def mainOutputPPL (args : List String) : MetaM (Array Syntax) := do
   return leadingUpdated
     -- return "|"
 
+
+partial def tellMeAbout (kind: SyntaxNodeKind) (args: Array Syntax): MetaM (Array Syntax) := do
+  let res : MetaM (Option (Array Syntax)) := args.foldlM (fun (acc: Option (Array Syntax)) (arg : Syntax) => do
+    match acc with
+    | some p => return some p
+    | none =>
+        match arg with
+        | Syntax.node _ k args => do
+          if k == kind then
+            return some args
+          else
+            try
+              let result ← tellMeAbout kind args
+              return some result
+            catch _ =>
+              return none
+        | _ => return none
+      ) none
+  match ← res with
+  | some p => return p
+  | none => failure
+
+
+
+    -- IO.println s!"{arg}"
+
+
+unsafe def mainWithInfo (kind: SyntaxNodeKind) (args : List String) : MetaM (Array Syntax) := do
+  let x ← mainOutputPPL args
+  let info ← tellMeAbout kind x
+  IO.println s!"parts {info.size}"
+  return info
+
+-- #eval mainWithInfo `Lean.Parser.Term.letIdDecl ["./test"]
+
 #eval mainOutputPPL ["./test"]
+
+#eval mainOutputPPL ["./test_with_custom_syntax"]
+
+
+
+
 
 
 

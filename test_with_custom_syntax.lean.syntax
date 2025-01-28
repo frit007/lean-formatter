@@ -1,0 +1,168 @@
+#[(Module.header
+ []
+ [(Module.import "import" [] `Lean [])
+  (Module.import "import" [] `PrettyFormat [])
+  (Module.import "import" [] `Formatter [])]), (Command.declaration
+ (Command.declModifiers [] [] [] [] [] [])
+ (Command.inductive
+  "inductive"
+  (Command.declId `Arith [])
+  (Command.optDeclSig [] [(Term.typeSpec ":" (Term.type "Type" []))])
+  ["where"]
+  [(Command.ctor
+    []
+    "|"
+    (Command.declModifiers [] [] [] [] [] [])
+    `add
+    (Command.optDeclSig [] [(Term.typeSpec ":" (Term.arrow `Arith "→" (Term.arrow `Arith "→" `Arith)))]))
+   (Command.ctor
+    []
+    "|"
+    (Command.declModifiers [] [] [] [] [] [])
+    `mul
+    (Command.optDeclSig [] [(Term.typeSpec ":" (Term.arrow `Arith "→" (Term.arrow `Arith "→" `Arith)))]))
+   (Command.ctor
+    []
+    "|"
+    (Command.declModifiers [] [] [] [] [] [])
+    `nat
+    (Command.optDeclSig [] [(Term.typeSpec ":" (Term.arrow `Nat "→" `Arith))]))
+   (Command.ctor
+    []
+    "|"
+    (Command.declModifiers [] [] [] [] [] [])
+    `var
+    (Command.optDeclSig [] [(Term.typeSpec ":" (Term.arrow `String "→" `Arith))]))]
+  []
+  (Command.optDeriving ["deriving" [(group `Repr [])]]))), (Command.syntaxCat [] "declare_syntax_cat" `arith []), (Command.syntax [] [] (Term.attrKind []) "syntax" [] [] [] [(Syntax.cat `num [])] ":" `arith), (Command.syntax [] [] (Term.attrKind []) "syntax" [] [] [] [(Syntax.cat `str [])] ":" `arith), (Command.syntax
+ []
+ []
+ (Term.attrKind [])
+ "syntax"
+ [(precedence ":" (num "50"))]
+ []
+ []
+ [(Syntax.cat `arith [(precedence ":" (num "50"))])
+  (Syntax.atom (str "\" + \""))
+  (Syntax.cat `arith [(precedence ":" (num "51"))])]
+ ":"
+ `arith), (Command.syntax
+ []
+ []
+ (Term.attrKind [])
+ "syntax"
+ [(precedence ":" (num "60"))]
+ []
+ []
+ [(Syntax.cat `arith [(precedence ":" (num "60"))])
+  (Syntax.atom (str "\" * \""))
+  (Syntax.cat `arith [(precedence ":" (num "61"))])]
+ ":"
+ `arith), (Command.syntax
+ []
+ []
+ (Term.attrKind [])
+ "syntax"
+ []
+ []
+ []
+ [(Syntax.atom (str "\" ( \"")) (Syntax.cat `arith []) (Syntax.atom (str "\" ) \""))]
+ ":"
+ `arith), (Command.syntax
+ []
+ []
+ (Term.attrKind [])
+ "syntax"
+ []
+ []
+ []
+ [(Syntax.atom (str "\" ⟪ \"")) (Syntax.cat `arith []) (Syntax.atom (str "\" ⟫ \""))]
+ ":"
+ `term), (Command.macro_rules
+ []
+ []
+ (Term.attrKind [])
+ "macro_rules"
+ []
+ (Term.matchAlts
+  [(Term.matchAlt
+    "|"
+    [[(Term.quot "`(" («term⟪_⟫» "⟪" (arith__1 (str.antiquot "$" [] `s (antiquotName ":" "str"))) "⟫") ")")]]
+    "=>"
+    (Term.quot "`(" (Term.app `Arith.var [(term.pseudo.antiquot "$" [] `s [])]) ")"))
+   (Term.matchAlt
+    "|"
+    [[(Term.quot "`(" («term⟪_⟫» "⟪" (arith_ (num.antiquot "$" [] `num (antiquotName ":" "num"))) "⟫") ")")]]
+    "=>"
+    (Term.quot "`(" (Term.app `Arith.nat [(term.pseudo.antiquot "$" [] `num [])]) ")"))
+   (Term.matchAlt
+    "|"
+    [[(Term.quot
+       "`("
+       («term⟪_⟫»
+        "⟪"
+        («arith_+_»
+         (arith.pseudo.antiquot "$" [] `x (antiquotName ":" "arith"))
+         "+"
+         (arith.pseudo.antiquot "$" [] `y (antiquotName ":" "arith")))
+        "⟫")
+       ")")]]
+    "=>"
+    (Term.quot
+     "`("
+     (Term.app
+      `Arith.add
+      [(«term⟪_⟫» "⟪" (arith.pseudo.antiquot "$" [] `x []) "⟫")
+       («term⟪_⟫» "⟪" (arith.pseudo.antiquot "$" [] `y []) "⟫")])
+     ")"))
+   (Term.matchAlt
+    "|"
+    [[(Term.quot
+       "`("
+       («term⟪_⟫»
+        "⟪"
+        («arith_*_»
+         (arith.pseudo.antiquot "$" [] `x (antiquotName ":" "arith"))
+         "*"
+         (arith.pseudo.antiquot "$" [] `y (antiquotName ":" "arith")))
+        "⟫")
+       ")")]]
+    "=>"
+    (Term.quot
+     "`("
+     (Term.app
+      `Arith.mul
+      [(«term⟪_⟫» "⟪" (arith.pseudo.antiquot "$" [] `x []) "⟫")
+       («term⟪_⟫» "⟪" (arith.pseudo.antiquot "$" [] `y []) "⟫")])
+     ")"))
+   (Term.matchAlt
+    "|"
+    [[(Term.quot "`(" («term⟪_⟫» "⟪" («arith(_)» "(" (arith.pseudo.antiquot "$" [] `x []) ")") "⟫") ")")]]
+    "=>"
+    (Term.quot "`(" («term⟪_⟫» "⟪" (arith.pseudo.antiquot "$" [] `x []) "⟫") ")"))])), (Command.eval "#eval" («term⟪_⟫» "⟪" («arith_+_» (arith_ (num "2")) "+" (arith_ (num "3"))) "⟫")), (Command.declaration
+ (Command.declModifiers [] [] [(Command.private "private")] [] [] [])
+ (Command.definition
+  "def"
+  (Command.declId `b [])
+  (Command.optDeclSig
+   [(Term.explicitBinder "(" [`y] [":" `Nat] [] ")") (Term.explicitBinder "(" [`a1] [":" `Nat] [] ")")]
+   [(Term.typeSpec ":" `Nat)])
+  (Command.declValSimple
+   ":="
+   (Term.let
+    "let"
+    (Term.letDecl
+     (Term.letIdDecl
+      `tmp
+      []
+      [(Term.typeSpec ":" `Nat)]
+      ":="
+      («term_-_»
+       («term_+_» («term_/_» («term_/_» `y "/" (num "2")) "/" (num "3")) "+" («term_*_» (num "2") "*" (num "3")))
+       "-"
+       (num "2"))))
+    []
+    (Term.let "let" (Term.letDecl (Term.letIdDecl `tmp2 [] [] ":=" («term_*_» `tmp "*" (num "5")))) [] `tmp2))
+   (Termination.suffix [] [])
+   [])
+  [])), (Command.eoi "")]
