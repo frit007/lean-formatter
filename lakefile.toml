@@ -17,6 +17,10 @@ root = "Formatter"
 srcDir = "PrettyFormat"
 
 [[lean_lib]]
+name = "temporary_imported"
+root = "temporary_imported"
+
+[[lean_lib]]
 name = "BaseFormatter"
 root = "BaseFormatter"
 srcDir = "PrettyFormat"

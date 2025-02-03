@@ -1,6 +1,6 @@
 import Lean
 import PrettyFormat
-import Formatter
+-- import Formatter
 
 inductive Arith : Type where
   | add : Arith → Arith → Arith -- e + f
@@ -8,6 +8,10 @@ inductive Arith : Type where
   | nat : Nat → Arith           -- constant
   | var : String → Arith        -- variable
   deriving Repr
+
+@[pFormat «arith_+_»]
+def formatPlus: PrettyFormat.formatPPL
+  | a => return (PrettyFormat.text " -- TODO: improve custom formatter for arith_+_ 22" <> PrettyFormat.PPL.nl)
 
 
 declare_syntax_cat arith

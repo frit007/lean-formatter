@@ -292,7 +292,7 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
       name := `pFormat,
       descr    := "Register a formatter.
 
-    [pFormat k]",
+    [pFormat k]"
       valueTypeName := `PrettyFormat.formatPPL
       evalKey := fun _ stx => do
         let stx ← Attribute.Builtin.getIdent stx
@@ -303,5 +303,15 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
 
 
 
+register_option pf.lineLength : Nat := {
+  defValue := 100
+  group    := "pf"
+  descr    := "(pretty format) Maximum number of characters in a line"
+}
+
+def getPFLineLength (o : Options) : Nat := o.get pf.lineLength.name pf.lineLength.defValue
+
+-- @[inline] def formatPPL.run (x : formatPPL) : MetaM PPL :=
+--   x ctx |>.run s
 
 end PrettyFormat

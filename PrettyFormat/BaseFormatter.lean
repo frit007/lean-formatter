@@ -1,4 +1,5 @@
 import PrettyFormat
+import Lean
 
 open Lean
 open Data
@@ -7,6 +8,12 @@ open Std
 open Lean
 open Lean.Meta
 open Lean.Elab.Command
+open Lean Elab PrettyPrinter PrettyFormat
+open Lean.Meta
+
+
+open Lean.Meta
+open System
 
 namespace PrettyFormat
   partial def nest (n:Nat) (s: formatPPLM PPL): formatPPLM PPL :=
@@ -152,4 +159,6 @@ namespace PrettyFormat
           return p <> sep <> p'
         ) (text "")
   end
+
+
 end PrettyFormat
