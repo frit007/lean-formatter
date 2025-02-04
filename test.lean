@@ -14,6 +14,7 @@ private def b(y:Nat)(a1:Nat):Nat:=
   --tmp / 2 --and content
   -- let x := y
 
+set_option pf.lineLength 99
 
 private def c (y:Nat) (a1:Nat) (a2:Nat) (a3:Nat) (a4:Nat) (a5:Nat) (a6:Nat) (a7:Nat) (a8:Nat) (a9:Nat) :Nat :=
   -- comment on empty line

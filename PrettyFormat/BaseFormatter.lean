@@ -161,4 +161,10 @@ namespace PrettyFormat
   end
 
 
+@[inline] def formatMeta (stx: Syntax) (ctx:FormatContext) (s:MyState) : MetaM PPL :=
+  pf stx |>.run ctx |>.run' s
+
 end PrettyFormat
+
+
+initialize formattedCode : IO.Ref String ← IO.mkRef "initialString"

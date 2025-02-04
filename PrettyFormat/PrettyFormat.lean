@@ -273,11 +273,12 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
   structure FormatContext where
     -- prefer the first environment
     envs: List Environment
+    options: Options
     -- myEnv: Environment -- The env from the file
     -- otherEnv: Environment -- The env from the formatted file
 
   structure MyState where
-    nextId : Nat -- used to generate ids
+    nextId : Nat := 0-- used to generate ids
     nesting: Nat := 0 -- how many times we have nested
     startOfLine: Bool := true -- whether we are at the start of a line
     unknown: Bool := false -- whether we are in an unknown state (If we are in an unkown state we will try to keep the value the same as it was)
@@ -311,7 +312,5 @@ register_option pf.lineLength : Nat := {
 
 def getPFLineLength (o : Options) : Nat := o.get pf.lineLength.name pf.lineLength.defValue
 
--- @[inline] def formatPPL.run (x : formatPPL) : MetaM PPL :=
---   x ctx |>.run s
 
 end PrettyFormat

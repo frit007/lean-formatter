@@ -19,7 +19,6 @@ def runPrettyExpressive (fileName : String) : IO Unit := do
     IO.println "failure"
 
 unsafe def prettifyPPL (filename:String) (ppl: PPL) : IO String := do
-
   let template ← IO.FS.readFile "template.ml"
   let ocamlOutput := toOcaml ppl
   let templateWithConttent := template.replace "$$$FORMAT$$$" (ocamlOutput)
@@ -28,7 +27,7 @@ unsafe def prettifyPPL (filename:String) (ppl: PPL) : IO String := do
   IO.println "done"
   let _ ← runPrettyExpressive filename
   let result ← IO.FS.readFile (filename++".out.lean")
-  -- IO.FS.writeFile (filename++".out.lean") result
+
   return result
 
 unsafe def mainOutputPPL (args : List String) : MetaM (Array Syntax) := do
@@ -37,6 +36,9 @@ unsafe def mainOutputPPL (args : List String) : MetaM (Array Syntax) := do
   let input ← IO.FS.readFile (fileName++".lean")
 
   let (moduleStx, env) ← parseModule input fileName
+  for {options,..} in moduleStx do
+    let length := PrettyFormat.getPFLineLength options
+    IO.println s!"line length{length}"
   let options ← getOptions
   IO.println (getPFLineLength options)
   let values := pFormatAttr.getValues env `«arith_+_»
@@ -50,7 +52,7 @@ unsafe def mainOutputPPL (args : List String) : MetaM (Array Syntax) := do
   -- The Env of the program that reformats the other program. In case that the formatted code does not include the standard annotations
   let currentEnv := (← getEnv)
   -- let _ ← modify fun s => {s with nextId := 0, MyState.otherEnv}
-  let introduceContext := ((pfCombineWithSeparator PPL.nl leadingUpdated).run { envs:= [currentEnv, env] })
+  let introduceContext := ((pfCombineWithSeparator PPL.nl leadingUpdated).run { envs:= [currentEnv, env], options:= options })
   let introduceState := introduceContext.run' {nextId := 0}
   let ppl ← introduceState
 
@@ -107,119 +109,8 @@ unsafe def mainWithInfo (kind: SyntaxNodeKind) (args : List String) : MetaM (Arr
 
 -- #eval mainWithInfo `Lean.Parser.Term.letIdDecl ["./test"]
 
--- #eval mainOutputPPL ["./test"]
+#eval mainOutputPPL ["./test"]
+
 -- #eval mainInterpret ["./test"]
 
 -- #eval mainOutputPPL ["./test_with_custom_syntax"]
-
-
-
-
-/-- info: false -/
-#guard_msgs in
-#eval false
-
-def add (a b:Nat) : Nat := a + b
-
-
-
-syntax (name := formatCmd)
-  "#format" ppLine command : command
-
-@[command_elab formatCmd]
-unsafe def elabFormatCmd : CommandElab
-  | `(command|#format $cmd) => liftTermElabM do
-    let env ← getEnv
-    let opts ← getOptions
-    let stx := cmd.raw
-
-    match (stx.getPos?, stx.getTailPos?) with
-    | (some pos, some tailPos) => logInfo s!"{pos} {tailPos}"
-    | _ => logInfo s!"no pos"
-
-    -- let leadingUpdated := stx.updateLeading |>.getArgs
-    let leadingUpdated := stx|>.getArgs
-    let introduceContext := ((pfCombineWithSeparator PPL.nl leadingUpdated).run { envs:= [env]})
-    let introduceState := introduceContext.run' {nextId := 0}
-    let ppl ← introduceState
-
-    -- logInfo s!"\n{getPFLineLength opts}"
-    let result ← prettifyPPL "elab" ppl
-    logInfo s!"{result}"
-  | stx => logError m!"Syntax tree?: {stx.getKind}"
-
-
-
-
-def revealTrailingWhitespace (s : String) : String :=
-  s.replace "⏎\n" "⏎⏎\n" |>.replace "\t\n" "\t⏎\n" |>.replace " \n" " ⏎\n"
-
-open CodeAction Server RequestM in
-@[command_code_action Lean.Parser.Command.declaration]
-def guardMsgsCodeAction : CommandCodeAction := fun p sn _ node => do
-  -- p.
-  let .node i ts := node | return #[]
-  -- IO.println s!"nodes: {i.stx.getKind}"
-
-  let res := ts.findSome? fun
-    | .node (.ofCustomInfo { stx, value }) _ => return stx
-    | _ => none
-
-
-
-  -- match res with
-  -- | some _ => IO.println "some"
-  -- | none => IO.println "none"
-
-  let stx :Syntax := i.stx
-  let doc ← readDoc
-  let eager :Lsp.CodeAction := {
-    title := "Format code"
-    kind? := "quickfix"
-    isPreferred? := true
-  }
-  pure #[{
-    eager
-    lazy? := some do
-      -- let some start := stx.getPos? true | return eager
-      -- let some tail := stx.setArg 0 mkNullNode |>.getPos? true | return eager
-      -- let start := p.range.start
-      -- let tail := p.range.end
-      let r :String.Range := stx.getRange?.orElse (fun () => String.Range.mk ⟨0⟩  ⟨0⟩ )|>.get!
-      let start := r.start
-      let tail := r.stop
-      let res := "some weird string"
-      -- let newText := if res.isEmpty then
-      --   ""
-      -- else if res.length ≤ 100-7 && !res.contains '\n' then -- TODO: configurable line length?
-      --   s!"/-- aaa -/\n"
-      -- else
-      --   s!"/--\n bbb \n-/\n"
-      -- let kind := pf stx.run
-      let kind := stx.getKind
-      let newText := s!"kind: {kind}"
-      pure { eager with
-        edit? := some <|.ofTextEdit doc.versionedIdentifier {
-          -- range := p.range
-          range := doc.meta.text.utf8RangeToLspRange ⟨start, tail⟩
-          newText
-        }
-      }
-  }]
-
-
-
-
-def test : Nat :=
-  add 1 2
-
--- #format
---   def test2 : Nat := add 2 3
-
-
-
-
-
-
-
--- #eval runPrettyExpressive "test"

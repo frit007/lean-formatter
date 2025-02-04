@@ -28,6 +28,7 @@ srcDir = "PrettyFormat"
 [[lean_lib]]
 name = "annotations"
 root = "annotations"
+srcDir = "PrettyFormat"
 
 
 [[lean_lib]]

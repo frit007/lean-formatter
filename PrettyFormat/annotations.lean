@@ -47,6 +47,7 @@ def failWith (msg : String) (exitCode : UInt8 := 1) : IO α := do
 
 structure CommandSyntax where
   env : Environment
+  options: Options
   currNamespace : Name := Name.anonymous
   openDecls : List OpenDecl := []
   stx : Syntax
@@ -74,7 +75,8 @@ def parseModule (input : String) (fileName : String) (opts : Options := {}) (tru
   let (header, parserState, messages) ← Parser.parseHeader inputCtx
   let (env, messages) ← processHeader header opts messages inputCtx trustLevel
   let env := env.setMainModule mainModuleName
-  let env0 := env
+
+  -- let env0 := env
   let s ← IO.processCommands inputCtx parserState -- TODO: learn about this line
     { Command.mkState env messages opts with infoState := { enabled := true } }
 
@@ -82,8 +84,8 @@ def parseModule (input : String) (fileName : String) (opts : Options := {}) (tru
     | InfoTree.context i
         (InfoTree.node (Info.ofCommandInfo {stx, ..}) _) =>
         match i with
-        | .commandCtx { env, currNamespace, openDecls, .. } =>
-          pure {env, currNamespace, openDecls, stx}
+        | .commandCtx { env, currNamespace, openDecls, options,.. } =>
+          pure {env, options, currNamespace, openDecls, stx}
         | _ =>
           failWith "not a commandCtx"
     | _ =>
@@ -91,7 +93,7 @@ def parseModule (input : String) (fileName : String) (opts : Options := {}) (tru
 
   -- s.commandState.env.
 
-  return (#[{ env := s.commandState.env, stx := header : CommandSyntax }] ++ topLevelCmds, env)
+  return (#[{ env := s.commandState.env, options:= opts, stx := header : CommandSyntax }] ++ topLevelCmds, env)
 
 partial def interpretFormat' (inputCtx : Parser.InputContext) (parserState : Parser.ModuleParserState) (commandState : Command.State) (old : Option IncrementalState) (n:Nat): IO Unit := do
   if n == 0 then
@@ -99,7 +101,28 @@ partial def interpretFormat' (inputCtx : Parser.InputContext) (parserState : Par
   IO.println s!"{commandState.traceState.traces.size}"
   IO.println s!"next macro scope{commandState.nextMacroScope}"
   IO.println s!"size of tree:{commandState.infoState.trees.size}"
-  let run ← IO.processCommandsIncrementally inputCtx parserState commandState old
+  let run : IncrementalState ← IO.processCommandsIncrementally inputCtx parserState commandState old
+  let s : Frontend.State := run.toState
+  let st :=s.commandState
+  let aa:InfoTree := st.infoState.trees.toArray.get! 0
+
+  match aa with
+  | InfoTree.context (a:Lean.Elab.PartialContextInfo) (b:InfoTree) =>
+
+    IO.println "works!"
+  | _ => IO.println "unknown"
+
+  -- match aa with
+  -- | context => IO.println "ctx"
+  -- /-- The children contain information for nested term elaboration and tactic evaluation -/
+  -- | node => IO.println "node"
+  -- /-- The elaborator creates holes (aka metavariables) for tactics and postponed terms -/
+  -- | hole => IO.println "hold"
+
+  -- match aa with
+  -- |
+
+
 
   IO.println s!"pos:{run.commands.size}"
   interpretFormat' inputCtx run.parserState run.commandState run (n - 1)

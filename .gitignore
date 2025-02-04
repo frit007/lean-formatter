@@ -1,1 +1,7 @@
 /.lake
+*.lean.ml
+*.lean.syntax
+*.cmi
+*.cmo
+*.out.lean
+./test
