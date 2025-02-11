@@ -223,21 +223,21 @@ def interpretFormat (input : String) (fileName : String) (opts : Options := {}) 
   return (env)
 
 
--- def getStx : formatPPLM Syntax:= do
+-- def getStx : FormatPPLM Syntax:= do
 --   let state ← get
 --   pure state.stx
 
--- def updateStx (stx: Syntax) : formatPPLM Unit:= do
+-- def updateStx (stx: Syntax) : FormatPPLM Unit:= do
 --   let state ← get
 --   let _ ← set {state with stx := stx}
 --   pure ()
 
-def genId : formatPPLM String := do
+def genId : FormatPPLM String := do
   let state ← get
   let _ ← set {state with nextId := state.nextId + 1}
   pure (s!"v{state.nextId}")
 
-def blank : formatPPL
+def blank : FormatPPL
 | stx => do
   let state ← get
   pure (text "")
@@ -245,7 +245,7 @@ def blank : formatPPL
 def nullNode : Syntax := Syntax.node (Lean.SourceInfo.none) `null #[]
 
 
-partial def addSpaceOrNewLine (stx: Syntax) : formatPPLM PPL := do
+partial def addSpaceOrNewLine (stx: Syntax) : FormatPPLM PPL := do
   return (text " " <^> PPL.nl) <> (← pf stx)
 
 partial def followWithSpaceIfNonEmpty (ppl : PPL) : PPL :=
@@ -259,9 +259,9 @@ partial def followWithSpaceIfNonEmpty (ppl : PPL) : PPL :=
 function declaration
 -/
 @[pFormat Lean.Parser.Command.declaration]
-def formatDeclaration : formatPPL := pfCombine
+def formatDeclaration : FormatPPL := pfCombine
 
-partial def pfDeclId :formatPPL
+partial def pfDeclId :FormatPPL
 | args => do
   -- optionally insert a new line before the next line
   let first ← pf (args[0]!)
@@ -272,10 +272,10 @@ partial def pfDeclId :formatPPL
   return text " " <> PPL.letExpr var2 rest (PPL.letExpr var1 first ((v var1 <> v var2) <^> ((v var1 <$> v var2)))) <> text " "
 
 @[pFormat Lean.Parser.Command.declId]
-def formatDeclId : formatPPL := pfDeclId
+def formatDeclId : FormatPPL := pfDeclId
 
 @[pFormat Lean.Parser.Command.optDeclSig]
-def formatOptDeclId : formatPPL
+def formatOptDeclId : FormatPPL
 | #[arguments, returnVal] => do
   let returnVal ← (pf returnVal)
   let args ← (pfCombineWithSeparator (text " " <^> PPL.nl) arguments.getArgs)
@@ -286,7 +286,7 @@ def formatOptDeclId : formatPPL
 | _ => failure
 
 @[pFormat Lean.Parser.Command.declVal]
-def formatDeclVal : formatPPL
+def formatDeclVal : FormatPPL
 | args => do
   if args.size == 0 then
     return text ""
@@ -294,18 +294,18 @@ def formatDeclVal : formatPPL
     return (← pfCombineWithSeparator (text " ") args)
 
 @[pFormat Lean.Parser.Term.typeSpec]
-def formatTypeSpec : formatPPL := pfCombineWithSeparator (text " ")
+def formatTypeSpec : FormatPPL := pfCombineWithSeparator (text " ")
 
 @[pFormat Lean.Parser.Command.definition]
-def formatDefinition : formatPPL
+def formatDefinition : FormatPPL
 | args => do
   return PPL.nest 2 (← (pfCombineWithSeparator ((text "") <^> PPL.nl) args))
 
 @[pFormat Lean.Parser.Command.declValSimple]
-def formatDeclValSimple : formatPPL := pfCombineWithSeparator PPL.nl
+def formatDeclValSimple : FormatPPL := pfCombineWithSeparator PPL.nl
 
 @[pFormat Lean.Parser.Term.explicitBinder]
-def formatExplicitBinder : formatPPL
+def formatExplicitBinder : FormatPPL
 | args => do
   let first := args.get! 0
   let last := args.get! (args.size - 1)
@@ -313,15 +313,15 @@ def formatExplicitBinder : formatPPL
   return (← pf first) <>(← pfCombineWithSeparator (text " ") rest) <> (← pf last)
 
 @[pFormat Lean.Parser.Module.header]
-def formatHeader : formatPPL := pfCombine
+def formatHeader : FormatPPL := pfCombine
 
 @[pFormat Lean.Parser.Module.import]
-def formatImport : formatPPL
+def formatImport : FormatPPL
 | args => do
   return (← pfCombineWithSeparator (text " ") args) <> PPL.nl
 
 @[pFormat Lean.Parser.Command.declModifiers]
-def formatDeclModifiers : formatPPL
+def formatDeclModifiers : FormatPPL
 | args => do
   return (← pfCombineWithSeparator (text " ") args) <> text " "
 
@@ -329,13 +329,13 @@ def formatDeclModifiers : formatPPL
 let operator
 -/
 @[pFormat Lean.Parser.Term.let]
-def formatLet : formatPPL
+def formatLet : FormatPPL
 | #[letSymbol, declaration, unknown1, after] => do
   return (← pf letSymbol) <> text " " <> (← pf declaration) <> (← pf unknown1) <> PPL.nl <> (← pf after)
 | _ => failure
 
 @[pFormat Lean.Parser.Term.letIdDecl]
-def formatLetDecl : formatPPL
+def formatLetDecl : FormatPPL
 | #[var, unknown1, typeInfo, assignOperator, content] => do
   -- return (← pf var) <> text " " <> (← pf unknown1) <> (← pf typeInfo) <> (← pf assignOperator) <> (← nest 2 (do (text " " <^> PPL.nl)<>(← pf content)))
   return (← pf var) <> text " " <> (← pf unknown1) <> (followWithSpaceIfNonEmpty (← pf typeInfo)) <> (← pf assignOperator) <> (← nest 2 (addSpaceOrNewLine content))
@@ -344,7 +344,7 @@ def formatLetDecl : formatPPL
 
 
 -- @[pFormat Lean.Parser.Term.letIdDecl]
--- def formatLetIdDecl : formatPPL
+-- def formatLetIdDecl : FormatPPL
 --   | #[varName, probablyDecl, probablyDecl2, assignAtom, value] => do
 --     if (probablyDecl == nullNode) && probablyDecl2 == nullNode then
 --       -- return ((← (pf varName)) <> text " " <> (← pf assignAtom) <> (← nest 2 do

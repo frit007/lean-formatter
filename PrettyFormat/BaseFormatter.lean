@@ -1,5 +1,6 @@
 import PrettyFormat
 import Lean
+import PFMT
 
 open Lean
 open Data
@@ -16,7 +17,7 @@ open Lean.Meta
 open System
 
 namespace PrettyFormat
-  partial def nest (n:Nat) (s: formatPPLM PPL): formatPPLM PPL :=
+  partial def nest (n:Nat) (s: FormatPPLM PPL): FormatPPLM PPL :=
     do
     let state ← get
     set {state with nesting := state.nesting + n}
@@ -25,7 +26,7 @@ namespace PrettyFormat
     let state' ← get
     set {state' with nesting := state.nesting}
     return o
-  partial def nl : formatPPLM PPL := do
+  partial def nl : FormatPPLM PPL := do
     modify fun s => {s with startOfLine := true}
     return PPL.nl
 
@@ -44,10 +45,11 @@ namespace PrettyFormat
   |>.map (fun (s:String) => "-- " ++ s.trim)
 
   mutual
-    partial def pf (stx: Syntax): formatPPLM PPL := do
+    partial def pf (stx: Syntax): FormatPPLM PPL := withReader (fun s => {s  with stx:= stx::s.stx}) do
       -- can we assume that the other environment has all of the attributes? for now we do not
       let context ← read
       let state ← get
+
       match stx with
       | .missing => pure (text "")
       | .node (info : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
@@ -82,7 +84,14 @@ namespace PrettyFormat
           match formatted with
           | some p => return p
           | none =>
-            IO.println s!"could not find something for {kind}" -- we could not find a formatter
+            -- IO.println s!"could not find something for {kind}" -- we could not find a formatter
+            -- missing formatter
+            let s ← get
+            let d := s.diagnostic
+            let v := d.missingFormatters.insertIfNew kind stx
+            let _ ←  set {s with diagnostic := {d with missingFormatters:= v}}
+
+
             pfCombine args
             --return text s!"could not find something for {kind}" -- we could not find a formatter
             -- | none => failure -- we could not find a formatter
@@ -141,13 +150,13 @@ namespace PrettyFormat
 
 
     -- combine the formatters without separators
-    partial def pfCombine :formatPPL
+    partial def pfCombine :FormatPPL
     | a => do
       a.foldlM (fun p s => do
         let p' ← pf s
         return p <> p') (text "")
 
-    partial def pfCombineWithSeparator (sep: PPL) :formatPPL
+    partial def pfCombineWithSeparator (sep: PPL) :FormatPPL
     | a => do
       a.foldlM (fun p s => do
         let p' ← pf s
@@ -160,11 +169,101 @@ namespace PrettyFormat
         ) (text "")
   end
 
+  -- remove leading spaces based on the indentation level.
+  -- for this to work we would need the indentation level that the formatter wants to use
+  -- but we would also need the indentation level that the previous formatter used, to know whether we should increase the indentation level
+  -- def removeLeading SpacesBasedOnNesting (leading : String) FormatPPLM PPL:= do
+  --   leading.splitOn "\n"
+  --   |>.map.
 
-@[inline] def formatMeta (stx: Syntax) (ctx:FormatContext) (s:MyState) : MetaM PPL :=
-  pf stx |>.run ctx |>.run' s
+  private def whitespaceToPPL (str:String):PPL:=
+    let parts := str.split (fun c => c == '\n') |>.map (fun c => text c)
+    match parts with
+    | x::xs => xs.foldl (fun acc x => acc <> x <> PPL.nl) x
+    | _ => text ""
+
+  private def getLeading (info:SourceInfo) : String :=
+    match info with
+    | .original (leading : Substring) (pos : String.Pos) (trailing : Substring) (endPos : String.Pos) =>
+      leading.toString
+    | _ => ""
+
+  private def getTrailing (info:SourceInfo) : String :=
+    match info with
+    | .original (leading : Substring) (pos : String.Pos) (trailing : Substring) (endPos : String.Pos) =>
+      trailing.toString
+    | _ => ""
+
+  -- keep the syntax exactly the same
+  -- TODO: remove IO
+  partial def topLevelUnformatedSyntaxToPPL (stx:Syntax): IO PPL := do
+    match stx with
+    | .missing => return text ""
+    | .node   (info : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
+      let combined ← args.foldlM (fun acc c => do return acc <> (← topLevelUnformatedSyntaxToPPL c) ) (text "")
+      return combined
+      -- info.
+    | .atom   (info : SourceInfo) (val : String) => return (getLeading info |> whitespaceToPPL) <> text val <> (getTrailing info |> whitespaceToPPL)
+    | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) =>
+      return (getLeading info |> whitespaceToPPL) <> text rawVal.toString <> (getTrailing info |> whitespaceToPPL)
+
+
+
+-- @[inline] def formatMeta (stx: Syntax) (ctx:FormatContext) (s:MyState) : MetaM PPL :=
+--   pf stx |>.run ctx |>.run' s
+
+
+  def stringToPPL (s:String) : PPL:=
+    s.split (fun c => c == '\n') |>.map (fun s => text s) |>.foldl (fun acc p => acc <> p <> PPL.nl) (text "")
+
+  def debugReportAsPPL (stx:Syntax) (options : Options) (input : Except FormattingError (PPL × FormatState)): IO PPL := do
+
+    let mut errString := ""
+    if PrettyFormat.getDebugSyntax options then
+      errString := errString ++ "\nSyntax: \n" ++ toString (repr stx)
+
+    -- if (PrettyFormat.get)
+
+    match input with
+    | .ok (ppl, state) =>
+      if (PrettyFormat.getDebugMissingFormatters options) && state.diagnostic.missingFormatters.size > 0 then
+        errString := errString ++ "\nMissing formatters: \n"
+        for (kind,stx) in state.diagnostic.missingFormatters do
+          errString := errString ++ s!"{kind}: {stx}\n"
+      if (PrettyFormat.getDebugPPL options) then
+        errString := errString ++ "\n Generated PPL: \n" ++ (output ppl)
+    | .error e =>
+      if (PrettyFormat.getDebugErrors options) then
+        errString := errString ++ "\nFailed to format with error: \n" ++ (toString e) ++ "\n"
+
+
+    if errString.length > 0 then
+      return text "/-FORMAT DEBUG:" <> PPL.nl <> stringToPPL errString <> PPL.nl <> text "-/\n"
+    else
+      return text ""
+
+    -- let currentEnv := (← getEnv)
+
+    -- let _ ← modify fun s => {s with nextId := 0, MyState.otherEnv}
+  def pfTopLevel (stx : Syntax) (environments : List Environment) (options : Options) : IO (Except FormattingError (PPL × FormatState)) :=
+    let introduceContext := ((pf stx).run { envs:= environments, options:= options, stx:=[]})
+    let introduceState := introduceContext.run {nextId := 0, diagnostic:= {failures := [], missingFormatters := Std.HashMap.empty}}
+    introduceState.run
+
+  -- Also fallback to standard syntax if formatting fails
+  partial def pfTopLevelWithDebug (stx : Syntax) (environments : List Environment) (options : Options) : IO PPL := do
+    let s ← pfTopLevel stx environments options
+    let debugReport ← debugReportAsPPL stx options s
+    -- TODO: figure out do notation weirdness here
+    let ppl ← match s with
+    | .ok (ppl, _) => pure ppl  -- Use `pure` instead of `do return`
+    | .error _ => topLevelUnformatedSyntaxToPPL stx  -- No `do` needed
+
+    return debugReport <> ppl
+
 
 end PrettyFormat
+
 
 
 initialize formattedCode : IO.Ref String ← IO.mkRef "initialString"

@@ -10,6 +10,7 @@ open System
 
 
 def runPrettyExpressive (fileName : String) : IO Unit := do
+  IO.println s!"tryingToRun : {fileName}"
   let child ← IO.Process.spawn { cmd := s!"./prettyExpressive.bat", args := #[fileName]}
 
   let exitCode ← child.wait
@@ -30,15 +31,30 @@ unsafe def prettifyPPL (filename:String) (ppl: PPL) : IO String := do
 
   return result
 
+partial def findAllLeanFilesInProject (projectFolder:String) : IO (List String) := do
+  IO.println projectFolder
+  let files ← System.FilePath.readDir projectFolder
+  files.foldlM (fun (acc:List String) file => do
+    if ← file.path.isDir then
+      return (← findAllLeanFilesInProject (file.path.toString)) ++ acc
+    else
+      if file.path.extension.any (fun e => e == "lean") then
+        return file.path.toString :: acc
+      else
+        return acc
+  ) []
+  -- let files ← System
+
+
+
 unsafe def mainOutputPPL (args : List String) : MetaM (Array Syntax) := do
   let [fileName] := args | failWith "Usage: reformat file"
   initSearchPath (← findSysroot)
+  IO.println "loading file ???"
   let input ← IO.FS.readFile (fileName++".lean")
+  IO.println "loading file !!!"
 
   let (moduleStx, env) ← parseModule input fileName
-  for {options,..} in moduleStx do
-    let length := PrettyFormat.getPFLineLength options
-    IO.println s!"line length{length}"
   let options ← getOptions
   IO.println (getPFLineLength options)
   let values := pFormatAttr.getValues env `«arith_+_»
@@ -52,15 +68,38 @@ unsafe def mainOutputPPL (args : List String) : MetaM (Array Syntax) := do
   -- The Env of the program that reformats the other program. In case that the formatted code does not include the standard annotations
   let currentEnv := (← getEnv)
   -- let _ ← modify fun s => {s with nextId := 0, MyState.otherEnv}
-  let introduceContext := ((pfCombineWithSeparator PPL.nl leadingUpdated).run { envs:= [currentEnv, env], options:= options })
-  let introduceState := introduceContext.run' {nextId := 0}
-  let ppl ← introduceState
+  let initialState : FormatState := {nextId := 0, diagnostic:= {failures := [], missingFormatters := Std.HashMap.empty}}
+  let introduceContext := ((pfCombineWithSeparator PPL.nl leadingUpdated).run { envs:= [currentEnv, env], options:= options, stx:=[]})
 
-  IO.FS.writeFile (fileName++".lean.syntax") (s!"{leadingUpdated}")
+  let introduceState := introduceContext.run initialState
+  let a := introduceState.run
+  let ppl ← introduceState.run
+  match ppl with
+  | .ok (ppl, state) =>
+    IO.FS.writeFile (fileName++".lean.syntax") (s!"{leadingUpdated}")
 
-  let _ ← prettifyPPL fileName ppl
 
-  return leadingUpdated
+    for key in (state.diagnostic).missingFormatters.keys do
+      IO.println s!"missing formatter for: {key}"
+
+    let doc := toDoc [] ppl
+    let pretty := doc.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := 100)
+    IO.println "START"
+    IO.println ""
+    IO.println s!"{pretty}"
+    IO.println ""
+    IO.println ""
+    IO.println "END"
+
+
+    let _ ← prettifyPPL fileName ppl
+
+    return leadingUpdated
+  | .error e =>
+    IO.println s!"fail {repr e}"
+    return #[]
+
+
 
 unsafe def mainInterpret (args : List String) : MetaM (Array Syntax) := do
   let [fileName] := args | failWith "Usage: reformat file"
@@ -109,7 +148,15 @@ unsafe def mainWithInfo (kind: SyntaxNodeKind) (args : List String) : MetaM (Arr
 
 -- #eval mainWithInfo `Lean.Parser.Term.letIdDecl ["./test"]
 
-#eval mainOutputPPL ["./test"]
+-- #eval mainOutputPPL ["./test"]
+--
+-- #eval mainOutputPPL ["./../tmp/greeting-lean/Main"]
+
+-- #eval mainOutputPPL ["../../lean4/src/Init/Coe"]
+
+-- #eval findAllLeanFilesInProject "../../lean4/src"
+
+-- #eval mainOutputPPL ["./test"]
 
 -- #eval mainInterpret ["./test"]
 

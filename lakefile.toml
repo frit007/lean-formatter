@@ -30,6 +30,11 @@ name = "annotations"
 root = "annotations"
 srcDir = "PrettyFormat"
 
+[[lean_lib]]
+name = "PFMT"
+root = "PFMT"
+srcDir = "PrettyFormat"
+
 
 [[lean_lib]]
 name = "runner"
