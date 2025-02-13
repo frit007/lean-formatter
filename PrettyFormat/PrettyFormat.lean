@@ -43,6 +43,7 @@ inductive PPL where
   | nest : Nat → PPL → PPL
   | var : String → PPL
   | letExpr : String → PPL → PPL → PPL
+  | group : String → PPL → PPL
   deriving Repr
 
 infixl:60 " <^> " => fun l r => PPL.choice l r
@@ -107,10 +108,13 @@ def repeatString (s : String) (n : Nat) : String :=
 
 
 
-partial def prettyPrintWithVars (vars : List (String × PPL)) (indent:Nat): (ppl : PPL) → String
+partial def prettyPrintWithVars  (ppl : PPL) : String :=
+  prettyPrintWithVars' [] 0 ppl
+where
+  prettyPrintWithVars' (vars : List (String × PPL)) (indent:Nat): (ppl : PPL) → String
   | PPL.var v =>
     match vars.find? (fun (name, _) => name = v) with
-    | some (_, value) => prettyPrintWithVars vars indent value
+    | some (_, value) => prettyPrintWithVars' vars indent value
     | none => v
   | PPL.optionalSpace spacing =>
     match spacing with
@@ -121,39 +125,48 @@ partial def prettyPrintWithVars (vars : List (String × PPL)) (indent:Nat): (ppl
   | PPL.error s => "\n" ++ s ++ " "
   | PPL.text s => s
   | PPL.nl => "\n" ++ repeatString " " indent
-  | PPL.choice left right => prettyPrintWithVars vars indent left ++ " | " ++ prettyPrintWithVars vars indent right
-  | PPL.flatten inner => prettyPrintWithVars vars indent inner
-  | PPL.align inner => prettyPrintWithVars vars indent inner
-  | PPL.nest n inner => prettyPrintWithVars vars (indent + n) inner
-  | PPL.unallignedConcat left right => prettyPrintWithVars vars indent left ++ prettyPrintWithVars vars indent right
+  | PPL.choice left right => prettyPrintWithVars' vars indent left ++ " | " ++ prettyPrintWithVars' vars indent right
+  | PPL.flatten inner => prettyPrintWithVars' vars indent inner
+  | PPL.align inner => prettyPrintWithVars' vars indent inner
+  | PPL.nest n inner => prettyPrintWithVars' vars (indent + n) inner
+  | PPL.unallignedConcat left right => prettyPrintWithVars' vars indent left ++ prettyPrintWithVars' vars indent right
   | PPL.letExpr var expr body =>
     let vars := (var, expr) :: vars
-    prettyPrintWithVars vars indent body
+    prettyPrintWithVars' vars indent body
+  | PPL.group _ ppl => prettyPrintWithVars' vars indent ppl
 
-partial def output : PPL → String
+
+partial def output (ppl:PPL) : String :=
+  output' 0 ppl
+where
+  output' (indent : Nat) : PPL → String
   | PPL.var v => v
   | PPL.optionalSpace spacing =>
     match spacing with
-    | PPLSpacing.space => s!"text \" \"\n"
-    | PPLSpacing.newline => "nl\n"
-    | PPLSpacing.either => s!"text \" \"\n"
-  | PPL.commentText s => s!"text \"{s}\"\n"
+    | PPLSpacing.space => s!"text \" \""
+    | PPLSpacing.newline => "nl"
+    | PPLSpacing.either => s!"text \" \""
+  | PPL.commentText s => s!"text \"{s}\""
   | PPL.error s => s!"error {s}"
   | PPL.text s => s!"text \"{s}\""
-  | PPL.nl => "nl\n"
-  | PPL.choice left right => s!"({output left})<|>({output right})\n"
-  | PPL.flatten inner => s!"flatten ({output inner})"
-  | PPL.align inner => s!"align ({output inner})"
-  | PPL.nest n inner => s!"nest {n} ({output inner})"
-  | PPL.unallignedConcat left right => s!"({output left}) <> ({output right})"
-  | PPL.letExpr var expr body => s!"let {var} = ({output expr}) in ({output body})"
+  | PPL.nl => "nl"
+  | PPL.choice left right => s!"({output' indent left})<|>({output' indent right})\n"
+  | PPL.flatten inner => s!"flatten ({output' indent inner})"
+  | PPL.align inner => s!"align ({output' indent inner})"
+  | PPL.nest n inner => s!"nest {n} ({output' indent inner})"
+  | PPL.unallignedConcat left right => s!"({output' indent left}) <> ({output' indent right})"
+  | PPL.letExpr var expr body => s!"let {var} = ({output' indent expr}) in ({output' indent body})"
+  | PPL.group s inner => s!"\n {repeatString " " indent} ({s}: {output' (indent + 2) inner})"
 
 def escapeQuotes (s : String) : String :=
   s.replace "\"" "\\\""
 
 open Pfmt
 
-partial def toDoc (vars : List (String × Doc)) : PPL → Doc
+partial def toDoc (ppl:PPL): Doc :=
+  toDoc' [] ppl
+where
+ toDoc' (vars : List (String × Doc)) : PPL → Doc
   | PPL.var v =>
     match vars.find? (fun (name, _) => name = v) with
     | some (_, value) => value
@@ -167,12 +180,13 @@ partial def toDoc (vars : List (String × Doc)) : PPL → Doc
   | PPL.error s => Doc.text s
   | PPL.text s => Doc.text s
   | PPL.nl => Doc.newline ""
-  | PPL.choice l r => (toDoc vars l) <|||> (toDoc vars r)
-  | PPL.flatten inner => toDoc vars inner -- for now nothing
-  | PPL.align inner => Doc.align (toDoc vars inner)
-  | PPL.nest n inner => Doc.nest n (toDoc vars inner)
-  | PPL.unallignedConcat l r => Doc.concat (toDoc vars l) (toDoc vars r)
-  | PPL.letExpr var expr body => toDoc ((var, toDoc vars expr)::vars) body
+  | PPL.choice l r => (toDoc' vars l) <|||> (toDoc' vars r)
+  | PPL.flatten inner => toDoc' vars inner -- for now nothing
+  | PPL.align inner => Doc.align (toDoc' vars inner)
+  | PPL.nest n inner => Doc.nest n (toDoc' vars inner)
+  | PPL.unallignedConcat l r => Doc.concat (toDoc' vars l) (toDoc' vars r)
+  | PPL.letExpr var expr body => toDoc' ((var, toDoc' vars expr)::vars) body
+  | .group _ inner => toDoc' vars inner
 
 
 
@@ -193,6 +207,7 @@ partial def toOcaml : PPL → String
   | PPL.nest n inner => s!"nest {n} ({toOcaml inner})"
   | PPL.unallignedConcat left right => s!"({toOcaml left}) ^^ ({toOcaml right})"
   | PPL.letExpr var expr body => s!"let exit_{var} = ({toOcaml expr}) in ({toOcaml body})\n"
+  | PPL.group _ inner => toOcaml inner
 
 partial def isEmpty (vars : List (String × PPL)): (ppl : PPL) → Bool
   | PPL.var v =>
@@ -213,6 +228,7 @@ partial def isEmpty (vars : List (String × PPL)): (ppl : PPL) → Bool
   | PPL.letExpr var expr body =>
     let vars := (var, expr) :: vars
     isEmpty vars body
+  | PPL.group _ inner => isEmpty vars inner
 
 structure CommentFix where
   flatten : Bool
@@ -286,6 +302,7 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
         (PPL.nest n inner', {state with startedComment:= state'.startedComment})
   | PPL.unallignedConcat left right => (left, state) -- TODO
   | PPL.letExpr var expr body => (body, state) -- TODO
+  | .group _ inner => (inner, state)
 
 
   inductive newlineState where
@@ -358,13 +375,12 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
 
 
   structure FormatState where
-    nextId : Nat := 0-- used to generate ids
+    nextId : Nat := 0 -- used to generate ids
     nesting: Nat := 0 -- how many times we have nested
     startOfLine: Bool := true -- whether we are at the start of a line
     unknown: Bool := false -- whether we are in an unknown state (If we are in an unkown state we will try to keep the value the same as it was)
     diagnostic: FormattingDiagnostic := {}
   deriving Repr
-
 
 
   abbrev FormatPPLMOld := ReaderT FormatContext (StateRefT FormatState MetaM)
@@ -455,6 +471,11 @@ register_option pf.debugPPL : Nat := {
   defValue := 0
   group    := "pf"
   descr    := "(pretty format) Output the generated PPL above the function"
+}
+register_option pf.debugPPLGroups : Nat := {
+    defValue := 0
+    group    := "pf"
+    descr    := "(pretty format) Add grouping around every PPL formatter, "
 }
 
 def getPFLineLength (o : Options) : Nat := o.get pf.lineLength.name pf.lineLength.defValue

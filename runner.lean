@@ -82,7 +82,7 @@ unsafe def mainOutputPPL (args : List String) : MetaM (Array Syntax) := do
     for key in (state.diagnostic).missingFormatters.keys do
       IO.println s!"missing formatter for: {key}"
 
-    let doc := toDoc [] ppl
+    let doc := toDoc ppl
     let pretty := doc.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := 100)
     IO.println "START"
     IO.println ""

@@ -44,6 +44,16 @@ namespace PrettyFormat
   |>.filter (fun (s:String) => s.trim.length > 0)
   |>.map (fun (s:String) => "-- " ++ s.trim)
 
+  -- def findFirstMatch (envs : List Environment) (kind: SyntaxNodeKind) (args : Array Syntax) :FormatPPLM (List FormattingError ⊕ PPL):= Id.run do
+  --   let mut errors := #[]
+  --   for env in envs do
+  --     let options := pFormatAttr.getValues env kind
+  --     for opt in options do
+  --       let ppl ← opt args
+
+
+  --   return []
+
   mutual
     partial def pf (stx: Syntax): FormatPPLM PPL := withReader (fun s => {s  with stx:= stx::s.stx}) do
       -- can we assume that the other environment has all of the attributes? for now we do not
@@ -82,7 +92,7 @@ namespace PrettyFormat
           ) none
 
           match formatted with
-          | some p => return p
+          | some p => return PPL.group (toString kind) p
           | none =>
             -- IO.println s!"could not find something for {kind}" -- we could not find a formatter
             -- missing formatter
@@ -92,7 +102,8 @@ namespace PrettyFormat
             let _ ←  set {s with diagnostic := {d with missingFormatters:= v}}
 
 
-            pfCombine args
+            return PPL.group (toString kind) (← pfCombine args)
+            -- return text "fail"
             --return text s!"could not find something for {kind}" -- we could not find a formatter
             -- | none => failure -- we could not find a formatter
       | .atom (info : SourceInfo) (val : String) =>

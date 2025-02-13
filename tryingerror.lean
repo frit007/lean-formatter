@@ -13,3 +13,5 @@ def a : Except String Nat := do
 
 #eval handle (Except.ok 2)  -- "Success: 42"
 #eval handle (Except.error "what???")  -- "Error: Something went wrong"
+
+

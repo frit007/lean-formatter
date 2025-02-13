@@ -71,40 +71,33 @@ def test : Nat :=
 
 
 
--- @[command_elab formatCmd]
--- unsafe def elabFormatCmd : CommandElab
---   | `(command|#format $cmd) => liftTermElabM do
---     let env ← getEnv
---     let opts ← getOptions
---     let stx := cmd.raw
+@[command_elab formatCmd]
+unsafe def elabFormatCmd : CommandElab
+  | `(command|#format $cmd) => liftTermElabM do
+    let env ← getEnv
+    let opts ← getOptions
+    let stx := cmd.raw
 
---     match (stx.getPos?, stx.getTailPos?) with
---     | (some pos, some tailPos) => logInfo s!"{pos} {tailPos}"
---     | _ => logInfo s!"no pos"
+    -- match (stx.getPos?, stx.getTailPos?) with
+    -- | (some pos, some tailPos) => logInfo s!"{pos} {tailPos}"
+    -- | _ => logInfo s!"no pos"
 
---     -- let leadingUpdated := stx.updateLeading |>.getArgs
---     let leadingUpdated := stx|>.getArgs
---     let introduceContext := ((pfCombineWithSeparator PPL.nl leadingUpdated).run { envs:= [env], options := ← getOptions, stx := []})
---     let introduceState := introduceContext.run' {nextId := 0}
---     let ppl ← introduceState.run
+    -- let leadingUpdated := stx.updateLeading |>.getArgs
+    let leadingUpdated := stx|>.getArgs
+    let introduceContext := ((pfCombineWithSeparator PPL.nl leadingUpdated).run { envs:= [env], options := ← getOptions, stx := []})
+    let introduceState := introduceContext.run' {nextId := 0}
+    let ppl ← introduceState.run
 
---     let result :=
---     match ppl with
---     | .ok ppl =>
---       let doc := toDoc [] ppl
+    let result :=
+    match ppl with
+    | .ok ppl =>
+      let doc := toDoc ppl
 
---       doc.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := 100)
---       -- let result ← prettifyPPL "elab" ppl
---       -- formattedCode.set result -- I think we can't execute IO in cmd, therefore we do the work here and use the work later
+      doc.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := 100)
 
---     | _ => s!"Failed formatting: {stx.getKind}"
---     formattedCode.set result
-
---     -- -- logInfo s!"\n{getPFLineLength opts}"
-
---     -- let result := "hello"
---     -- logInfo s!"{result}"
---   | stx => logError m!"Syntax tree?: {stx.getKind}"
+    | _ => s!"Failed formatting: {stx.getKind}"
+    logInfo s!"{result}"
+  | stx => logError m!"Syntax tree?: {stx.getKind}"
 
 
 
@@ -138,7 +131,7 @@ def formatCmdCodeAction : CommandCodeAction := fun p sn info node => do
 
       let leadingUpdated := stx
       let ppl ← pfTopLevelWithDebug (stx) [info.env] opts
-      let newText := toDoc [] ppl |>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := 100)
+      let newText := toDoc ppl |>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := 100)
 
       -- let leadingUpdated := stx.getArgs
       -- let introduceContext := ((pfCombineWithSeparator PPL.nl leadingUpdated).run { envs:= [info.env], options := info.options, stx := []})
@@ -157,13 +150,28 @@ def formatCmdCodeAction : CommandCodeAction := fun p sn info node => do
       }
   }]
 
+@[pFormat Lean.Parser.Term.app]
+def formatLets : FormatPPL
+| s => do
+  throw <| FormattingError.NotHandled `Lean.Parser.Term.app s.toList
+  -- return text "add 2 9"
 
+set_option pf.debugErrors 1
+
+-- /--
+-- info: def test (n :Nat):=
+--   fail
+--   fail
+-- -/
+-- #guard_msgs in
+-- #format
+-- def test (n:Nat) :=
+--   add 2 3
 
 -- set_option pf.debugSyntax 1
--- set_option pf.debugMissingFormatters 1
+set_option pf.debugMissingFormatters 1
 -- set_option pf.debugSyntaxAfter 1 -- TODO:
--- set_option pf.debugErrors 1
--- set_option pf.debugPPL 1
+set_option pf.debugPPL 1
 -- #format
 
 def test2  : Nat :=
