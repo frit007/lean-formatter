@@ -45,12 +45,6 @@ def failWith (msg : String) (exitCode : UInt8 := 1) : IO α := do
   (← IO.getStderr).putStrLn msg
   IO.Process.exit exitCode
 
-structure CommandSyntax where
-  env : Environment
-  options: Options
-  currNamespace : Name := Name.anonymous
-  openDecls : List OpenDecl := []
-  stx : Syntax
 
 
 def prettyPrintSourceInfo : SourceInfo → String
@@ -67,6 +61,7 @@ partial def prettyPrintSyntax : Syntax → String
   | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) => s!"{val}"
 
 
+
 -- source reformat.lean
 def parseModule (input : String) (fileName : String) (opts : Options := {}) (trustLevel : UInt32 := 1024) :
     IO <| (Array CommandSyntax × Environment) := do
@@ -80,18 +75,7 @@ def parseModule (input : String) (fileName : String) (opts : Options := {}) (tru
   let s ← IO.processCommands inputCtx parserState -- TODO: learn about this line
     { Command.mkState env messages opts with infoState := { enabled := true } }
 
-  let topLevelCmds : Array CommandSyntax ← s.commandState.infoState.trees.toArray.mapM fun
-    | InfoTree.context i
-        (InfoTree.node (Info.ofCommandInfo {stx, ..}) _) =>
-        match i with
-        | .commandCtx { env, currNamespace, openDecls, options,.. } =>
-          pure {env, options, currNamespace, openDecls, stx}
-        | _ =>
-          failWith "not a commandCtx"
-    | _ =>
-      failWith "unknown info tree"
-
-  -- s.commandState.env.
+  let topLevelCmds : Array CommandSyntax ← extractTopLevelCommands s
 
   return (#[{ env := s.commandState.env, options:= opts, stx := header : CommandSyntax }] ++ topLevelCmds, env)
 
@@ -232,20 +216,19 @@ def interpretFormat (input : String) (fileName : String) (opts : Options := {}) 
 --   let _ ← set {state with stx := stx}
 --   pure ()
 
-def genId : FormatPPLM String := do
+def genId : RuleM String := do
   let state ← get
   let _ ← set {state with nextId := state.nextId + 1}
   pure (s!"v{state.nextId}")
 
-def blank : FormatPPL
+def blank : Rule
 | stx => do
-  let state ← get
   pure (text "")
 
 def nullNode : Syntax := Syntax.node (Lean.SourceInfo.none) `null #[]
 
 
-partial def addSpaceOrNewLine (stx: Syntax) : FormatPPLM PPL := do
+partial def addSpaceOrNewLine (stx: Syntax) : RuleM PPL := do
   return (text " " <^> PPL.nl) <> (← pf stx)
 
 partial def followWithSpaceIfNonEmpty (ppl : PPL) : PPL :=
@@ -258,10 +241,12 @@ partial def followWithSpaceIfNonEmpty (ppl : PPL) : PPL :=
 /-
 function declaration
 -/
-@[pFormat Lean.Parser.Command.declaration]
-def formatDeclaration : FormatPPL := pfCombine
 
-partial def pfDeclId :FormatPPL
+#coreFmt Lean.Parser.Command.declaration fun
+| s =>
+  pfCombine s
+
+partial def pfDeclId :Rule
 | args => do
   -- optionally insert a new line before the next line
   let first ← pf (args[0]!)
@@ -271,11 +256,11 @@ partial def pfDeclId :FormatPPL
 
   return text " " <> PPL.letExpr var2 rest (PPL.letExpr var1 first ((v var1 <> v var2) <^> ((v var1 <$> v var2)))) <> text " "
 
-@[pFormat Lean.Parser.Command.declId]
-def formatDeclId : FormatPPL := pfDeclId
 
-@[pFormat Lean.Parser.Command.optDeclSig]
-def formatOptDeclId : FormatPPL
+#coreFmt Lean.Parser.Command.declId pfDeclId
+
+
+#coreFmt Lean.Parser.Command.optDeclSig fun
 | #[arguments, returnVal] => do
   let returnVal ← (pf returnVal)
   let args ← (pfCombineWithSeparator (text " " <^> PPL.nl) arguments.getArgs)
@@ -285,63 +270,103 @@ def formatOptDeclId : FormatPPL
     return args <> (text " "<^> PPL.nl) <> (followWithSpaceIfNonEmpty returnVal)
 | _ => failure
 
-@[pFormat Lean.Parser.Command.declVal]
-def formatDeclVal : FormatPPL
+
+#coreFmt Lean.Parser.Command.declVal fun
 | args => do
   if args.size == 0 then
     return text ""
   else
     return (← pfCombineWithSeparator (text " ") args)
 
-@[pFormat Lean.Parser.Term.typeSpec]
-def formatTypeSpec : FormatPPL := pfCombineWithSeparator (text " ")
 
-@[pFormat Lean.Parser.Command.definition]
-def formatDefinition : FormatPPL
+#coreFmt Lean.Parser.Term.typeSpec fun
+|a => pfCombineWithSeparator (text " ") a
+
+
+#coreFmt Lean.Parser.Command.definition fun
 | args => do
   return PPL.nest 2 (← (pfCombineWithSeparator ((text "") <^> PPL.nl) args))
 
-@[pFormat Lean.Parser.Command.declValSimple]
-def formatDeclValSimple : FormatPPL := pfCombineWithSeparator PPL.nl
 
-@[pFormat Lean.Parser.Term.explicitBinder]
-def formatExplicitBinder : FormatPPL
-| args => do
-  let first := args.get! 0
-  let last := args.get! (args.size - 1)
-  let rest := args.extract 1 (args.size - 2)
-  return (← pf first) <>(← pfCombineWithSeparator (text " ") rest) <> (← pf last)
+#coreFmt Lean.Parser.Command.declValSimple fun
+| a => pfCombineWithSeparator PPL.nl a
 
-@[pFormat Lean.Parser.Module.header]
-def formatHeader : FormatPPL := pfCombine
 
-@[pFormat Lean.Parser.Module.import]
-def formatImport : FormatPPL
+#coreFmt Lean.Parser.Term.explicitBinder fun
+-- | args => do
+--   -- no spacing between parenthesis and the first and last character in the binder
+--   let first := args.get! 0
+--   let last := args.get! (args.size - 1)
+--   let rest := args.extract 1 (args.size - 2)
+--   return (← pf first) <>(← pfCombineWithSeparator (text " ") rest) <> (← pf last)
+| #[firstParen, vars, typeDecl, unknown1, lastParen] => do
+  let _ ← assumeMissing unknown1
+  return (← pf firstParen)
+    <> (← pfCombineWithSeparator (text " ") vars.getArgs)
+    <> text " "
+    <> (← pfCombineWithSeparator (text " ") typeDecl.getArgs)
+    <>(← pf lastParen)
+| _ => failure
+
+
+#coreFmt Lean.Parser.Module.header fun
+| s => pfCombine s
+
+
+#coreFmt Lean.Parser.Module.import fun
 | args => do
   return (← pfCombineWithSeparator (text " ") args) <> PPL.nl
 
-@[pFormat Lean.Parser.Command.declModifiers]
-def formatDeclModifiers : FormatPPL
+
+#coreFmt Lean.Parser.Command.declModifiers fun
 | args => do
-  return (← pfCombineWithSeparator (text " ") args) <> text " "
+  let mut modifiers ← pfCombineWithSeparator (text " ") args
+  if !isEmpty [] modifiers then
+    modifiers := modifiers <> text " "
+  return modifiers
 
 /-
 let operator
 -/
-@[pFormat Lean.Parser.Term.let]
-def formatLet : FormatPPL
+
+#coreFmt Lean.Parser.Term.let fun
 | #[letSymbol, declaration, unknown1, after] => do
+  let _ := (← assumeMissing unknown1)
   return (← pf letSymbol) <> text " " <> (← pf declaration) <> (← pf unknown1) <> PPL.nl <> (← pf after)
 | _ => failure
 
-@[pFormat Lean.Parser.Term.letIdDecl]
-def formatLetDecl : FormatPPL
+
+#coreFmt Lean.Parser.Term.letIdDecl fun
 | #[var, unknown1, typeInfo, assignOperator, content] => do
+  let _ := (← assumeMissing unknown1)
   -- return (← pf var) <> text " " <> (← pf unknown1) <> (← pf typeInfo) <> (← pf assignOperator) <> (← nest 2 (do (text " " <^> PPL.nl)<>(← pf content)))
   return (← pf var) <> text " " <> (← pf unknown1) <> (followWithSpaceIfNonEmpty (← pf typeInfo)) <> (← pf assignOperator) <> (← nest 2 (addSpaceOrNewLine content))
 | a => do
   failure
 
+-- TODO: figure out what the suffix is used for.
+
+#coreFmt Lean.Parser.Termination.suffix fun
+| #[unknown1, unknown2] => do
+  let _ := (← assumeMissing unknown1)
+  let _ := (← assumeMissing unknown2)
+  return text ""
+| a => do
+  failure
+
+
+#coreFmt Lean.Parser.Term.app fun
+| #[functionName, arguments]  => do
+  return (← pf functionName) <> text " " <> (← pfCombineWithSeparator (text " ") arguments.getArgs)
+| _ => failure
+
+-- initialize registerCoreFormatter `Lean.Parser.Term.app fun
+--   | #[a] => do return text "app?"
+--   | _ => failure
+
+#coreFmt Lean.Parser.Term.app fun
+  | #[a] => do return text "app?"
+  | _ => failure
 
 -- @[pFormat Lean.Parser.Term.letIdDecl]
 -- def formatLetIdDecl : FormatPPL

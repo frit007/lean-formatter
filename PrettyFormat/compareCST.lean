@@ -1,9 +1,9 @@
-import annotations
--- TODO: Support automaticalopen Lean Elab PrettyPrinter PrettyFormat
+
+
 -- TODO: add debug information about where the difference in the CST is
 
 
-open Lean Elab PrettyPrinter PrettyFormat
+open Lean Elab PrettyPrinter
 
 open Lean.Meta
 open Lean.Elab
@@ -21,5 +21,5 @@ mutual
   partial def compareCstArr (left right : Array Syntax) : Bool :=
     left.size == right.size
     && ((left.zip right) |>.foldl (fun acc x => acc && compareCst x.fst x.snd) true)
-    
+
 end

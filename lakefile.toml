@@ -12,13 +12,9 @@ root = "PrettyFormat"
 srcDir = "PrettyFormat"
 
 [[lean_lib]]
-name = "Formatter"
-root = "Formatter"
+name = "FormatterExtension"
+root = "FormatterExtension"
 srcDir = "PrettyFormat"
-
-[[lean_lib]]
-name = "temporary_imported"
-root = "temporary_imported"
 
 [[lean_lib]]
 name = "BaseFormatter"
@@ -37,5 +33,10 @@ srcDir = "PrettyFormat"
 
 
 [[lean_lib]]
+name = "simple_imported"
+root = "simple_imported"
+
+[[lean_exe]]
 name = "runner"
 root = "runner"
+srcDir = "PrettyFormat"

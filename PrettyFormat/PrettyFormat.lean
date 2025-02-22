@@ -321,36 +321,35 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
     options: Options
     -- myEnv: Environment -- The env from the file
     -- otherEnv: Environment -- The env from the formatted file
-    stx : List Syntax -- note that syntax is in reverse order for performance reasons
 
-  inductive FormattingError where
+  inductive FormatError where
   | FlattenedComment
   | NotHandled (name : Name) (stx : List Syntax)
   | NoFormatter (stx : Syntax)
   | Unknown
   deriving Inhabited, Repr
 
-  instance : ToString FormattingError where
+  instance : ToString FormatError where
     toString b :=
       match b with
-      | FormattingError.FlattenedComment => "FlattenedComment"
-      | FormattingError.NotHandled name stx =>
+      | .FlattenedComment => "FlattenedComment"
+      | .NotHandled name stx =>
         let parentChain := stx.map (fun s => s.getKind) |>.filter (fun s => s != `missing && s != `ident) |>.map toString |>.reverse |> String.intercalate " → "
 
         s!"Not handled {name} {stx.length} chain: {parentChain}"
-      | FormattingError.NoFormatter stx => s!"NoFormatter {stx.getKind}"
-      | FormattingError.Unknown => "unknown"
+      | .NoFormatter stx => s!"NoFormatter {stx.getKind}"
+      | .Unknown => "unknown"
 
-  instance : Repr FormattingError where
+  instance : Repr FormatError where
     reprPrec b n :=
       match b with
-      | FormattingError.FlattenedComment => "FlattenedComment"
-      | FormattingError.NotHandled name stx => s!"Not handled {name} {repr stx}"
-      | FormattingError.NoFormatter stx => s!"NoFormatter {repr stx}"
-      | FormattingError.Unknown => "unknown"
+      | .FlattenedComment => "FlattenedComment"
+      | .NotHandled name stx => s!"Not handled {name} {repr stx}"
+      | .NoFormatter stx => s!"NoFormatter {repr stx}"
+      | .Unknown => "unknown"
 
   structure FormattingDiagnostic where
-    failures : List (FormattingError × Nat) := []
+    failures : List (FormatError × List Syntax) := []
     -- to make it faster to debug write down the first instance the the formatter is missing
     missingFormatters : Std.HashMap Name Syntax := Std.HashMap.empty
   deriving Inhabited
@@ -380,52 +379,51 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
     startOfLine: Bool := true -- whether we are at the start of a line
     unknown: Bool := false -- whether we are in an unknown state (If we are in an unkown state we will try to keep the value the same as it was)
     diagnostic: FormattingDiagnostic := {}
+    stx : List Syntax := [] -- note that syntax is in reverse order for performance reasons
   deriving Repr
 
 
-  abbrev FormatPPLMOld := ReaderT FormatContext (StateRefT FormatState MetaM)
+  abbrev FormatM a := ReaderT FormatContext (StateM FormatState) a
+  abbrev RuleM a := ExceptT FormatError FormatM a
+  abbrev Rule := Array Syntax → (RuleM PPL)
 
-
-  abbrev FormatPPLM := ReaderT FormatContext (StateRefT FormatState (ExceptT FormattingError IO))
-  abbrev FormatPPL := Array Syntax → FormatPPLM PrettyFormat.PPL
-
-  unsafe def mkPFormatAttr : IO (KeyedDeclsAttribute FormatPPL) :=
+  unsafe def mkPFormatAttr : IO (KeyedDeclsAttribute Rule) :=
     KeyedDeclsAttribute.init {
       builtinName := `builtin_pFormat,
       name := `pFormat,
       descr    := "Register a formatter.
 
-    [pFormat k]"
-      valueTypeName := `PrettyFormat.FormatPPL
+      [pFormat k]"
+      valueTypeName := `PrettyFormat.Rule
       evalKey := fun _ stx => do
         let stx ← Attribute.Builtin.getIdent stx
         let kind := stx.getId
         pure kind
     } `pFormat
-  @[init mkPFormatAttr] opaque pFormatAttr : KeyedDeclsAttribute FormatPPL
+  @[init mkPFormatAttr] opaque pFormatAttr : KeyedDeclsAttribute Rule
 
 
 
-@[always_inline]
-instance : Monad FormatPPLM := let i := inferInstanceAs (Monad FormatPPLM); { pure := i.pure, bind := i.bind }
+-- @[always_inline]
+-- instance : Monad FormatPPLM := let i := inferInstanceAs (Monad FormatPPLM); { pure := i.pure, bind := i.bind }
 
-instance : Inhabited (FormatPPLM α) where
-  default := fun _ _ => default
+-- instance : Inhabited (FormatPPLM α) where
+--   default := fun _ _ => default
 
-instance : MonadBacktrack FormatState FormatPPLM where
+instance : MonadBacktrack FormatState RuleM where
   saveState      := get
   restoreState s := set s
 
 
-@[inline] protected def orElse (x : FormatPPLM α) (y : Unit → FormatPPLM α) : FormatPPLM α := do
+@[inline] protected def orElse (x : RuleM α) (y : Unit → RuleM α) : RuleM α := do
   let s ← saveState
   try x catch _ => do set s; y ()
 
-instance : OrElse (FormatPPLM α) := ⟨PrettyFormat.orElse⟩
+instance : OrElse (RuleM α) := ⟨PrettyFormat.orElse⟩
 
-instance : MonadRef FormatPPLM where
-  getRef := return (← read).stx.get! 0
-  withRef ref x := withReader (fun ctx => { ctx with stx := [ref] }) x
+-- instance : MonadRef FormatPPLM where
+--   getRef := return (← read).stx.get! 0
+--   withRef ref x := withReader (fun ctx => { ctx with stx := [ref] }) x
 
 
 set_option diagnostics true
@@ -434,9 +432,10 @@ set_option diagnostics true
 --   throw {α : Type v} : ε → m α
 --   tryCatch {α : Type v} : m α → (ε → m α) → m α
 
-instance : Alternative FormatPPLM where
+instance : Alternative RuleM where
   failure := fun {_} => do
-    throw (FormattingError.NotHandled (← getRef).getKind (← read).stx)
+
+    throw (FormatError.NotHandled (← get).stx.head!.getKind (← get).stx)
   orElse  := PrettyFormat.orElse
 
 
@@ -475,15 +474,22 @@ register_option pf.debugPPL : Nat := {
 register_option pf.debugPPLGroups : Nat := {
     defValue := 0
     group    := "pf"
-    descr    := "(pretty format) Add grouping around every PPL formatter, "
+    descr    := "(pretty format) Add grouping around every PPL formatter"
+}
+register_option pf.warnCSTmismatch : Nat := {
+    defValue := 1
+    group    := "pf"
+    descr    := "(pretty format) When the formatted syntax does not match the original syntax, output a warning"
 }
 
 def getPFLineLength (o : Options) : Nat := o.get pf.lineLength.name pf.lineLength.defValue
 
 def getDebugSyntax (o : Options) : Bool := (o.get pf.debugSyntax.name pf.debugSyntax.defValue) != 0
-def getDebugSyntaxAfter (o : Options) : Bool := (o.get pf.debugSyntax.name pf.debugSyntax.defValue) != 0
+def getDebugSyntaxAfter (o : Options) : Bool := (o.get pf.debugSyntaxAfter.name pf.debugSyntaxAfter.defValue) != 0
 def getDebugErrors (o : Options) : Bool := (o.get pf.debugErrors.name pf.debugErrors.defValue) != 0
 def getDebugMissingFormatters (o : Options) : Bool := (o.get pf.debugMissingFormatters.name pf.debugMissingFormatters.defValue) != 0
 def getDebugPPL (o : Options) : Bool := (o.get pf.debugPPL.name pf.debugPPL.defValue) != 0
+def getWarnCSTmismatch (o : Options) : Bool := (o.get pf.warnCSTmismatch.name pf.warnCSTmismatch.defValue) != 0
+
 
 end PrettyFormat

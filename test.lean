@@ -32,3 +32,7 @@ private def b(y:Nat):Nat:=
 --def a (x:Nat): Nat :=
   -- before declaration
   --b x * 2 +1 -- after declaration
+
+
+
+
