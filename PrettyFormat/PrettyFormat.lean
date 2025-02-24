@@ -317,7 +317,8 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
 
   structure FormatContext where
     -- prefer the first environment
-    envs: List Environment
+    -- envs: List Environment
+    envs : List Environment
     options: Options
     -- myEnv: Environment -- The env from the file
     -- otherEnv: Environment -- The env from the formatted file
@@ -373,6 +374,17 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
   --   s!"failures:\n{failureCount}\n missingFormatters:\n{missingFormattersRepr}"
 
 
+  structure FormatReport where
+    missingFormatters : Std.HashMap Name Nat := Std.HashMap.empty
+    totalCommands: Nat := 0
+    formattedCommands: Nat := 0
+
+  def FormatReport.combineReports (a : FormatReport) (b : FormatReport) : FormatReport :=
+    { missingFormatters := a.missingFormatters.fold (fun acc name p => acc.insert name (acc.getD name 0 + p)) b.missingFormatters,
+      totalCommands := a.totalCommands + b.totalCommands,
+      formattedCommands := a.formattedCommands + b.formattedCommands
+    }
+
   structure FormatState where
     nextId : Nat := 0 -- used to generate ids
     nesting: Nat := 0 -- how many times we have nested
@@ -382,6 +394,11 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
     stx : List Syntax := [] -- note that syntax is in reverse order for performance reasons
   deriving Repr
 
+  def FormatState.toReport (s : FormatState) : FormatReport :=
+    { missingFormatters := s.diagnostic.missingFormatters.fold (fun acc name _ => acc.insert name (acc.getD name 0 + 1)) Std.HashMap.empty,
+      totalCommands := 1,
+      formattedCommands := 0
+    }
 
   abbrev FormatM a := ReaderT FormatContext (StateM FormatState) a
   abbrev RuleM a := ExceptT FormatError FormatM a
@@ -426,7 +443,6 @@ instance : OrElse (RuleM α) := ⟨PrettyFormat.orElse⟩
 --   withRef ref x := withReader (fun ctx => { ctx with stx := [ref] }) x
 
 
-set_option diagnostics true
 
 -- instance : MonadExcept FormatPPLM where
 --   throw {α : Type v} : ε → m α

@@ -65,19 +65,39 @@ partial def prettyPrintSyntax : Syntax → String
 -- source reformat.lean
 def parseModule (input : String) (fileName : String) (opts : Options := {}) (trustLevel : UInt32 := 1024) :
     IO <| (Array CommandSyntax × Environment) := do
-  let mainModuleName := Name.anonymous -- FIXME
+  -- let mainModuleName := Name.anonymous -- FIXME
   let inputCtx := Parser.mkInputContext input fileName
   let (header, parserState, messages) ← Parser.parseHeader inputCtx
-  let (env, messages) ← processHeader header opts messages inputCtx trustLevel
-  let env := env.setMainModule mainModuleName
 
+
+  IO.println s!"{prettyPrintSyntax header}"
+  -- printall error messages and exit
+  if messages.hasErrors then
+    for msg in messages.toList do
+      IO.println s!"{← msg.toString}"
+    failWith "error in header"
+  else
+    IO.println "no errors in header"
+  let (env, messages) ← processHeader header opts messages inputCtx trustLevel
+  -- let env := env.setMainModule mainModuleName
+
+  if messages.hasErrors then
+    for msg in messages.toList do
+      IO.println s!"{← msg.toString}"
+    failWith "error in process header"
+  else
+    IO.println "no errors in process header"
   -- let env0 := env
   let s ← IO.processCommands inputCtx parserState -- TODO: learn about this line
     { Command.mkState env messages opts with infoState := { enabled := true } }
 
   let topLevelCmds : Array CommandSyntax ← extractTopLevelCommands s
 
-  return (#[{ env := s.commandState.env, options:= opts, stx := header : CommandSyntax }] ++ topLevelCmds, env)
+  return (#[{ env := s.commandState.env, options:= opts, stx := header : CommandSyntax }] ++ topLevelCmds, s.commandState.env)
+
+def parseModule' (fileName : String) (opts : Options) : IO (Array CommandSyntax × Environment):= do
+  let input ← IO.FS.readFile fileName
+  parseModule input fileName opts
 
 partial def interpretFormat' (inputCtx : Parser.InputContext) (parserState : Parser.ModuleParserState) (commandState : Command.State) (old : Option IncrementalState) (n:Nat): IO Unit := do
   if n == 0 then
@@ -242,7 +262,7 @@ partial def followWithSpaceIfNonEmpty (ppl : PPL) : PPL :=
 function declaration
 -/
 
-#coreFmt Lean.Parser.Command.declaration fun
+#fmt Lean.Parser.Command.declaration fun
 | s =>
   pfCombine s
 
@@ -257,10 +277,10 @@ partial def pfDeclId :Rule
   return text " " <> PPL.letExpr var2 rest (PPL.letExpr var1 first ((v var1 <> v var2) <^> ((v var1 <$> v var2)))) <> text " "
 
 
-#coreFmt Lean.Parser.Command.declId pfDeclId
+#fmt Lean.Parser.Command.declId pfDeclId
 
 
-#coreFmt Lean.Parser.Command.optDeclSig fun
+#fmt Lean.Parser.Command.optDeclSig fun
 | #[arguments, returnVal] => do
   let returnVal ← (pf returnVal)
   let args ← (pfCombineWithSeparator (text " " <^> PPL.nl) arguments.getArgs)
@@ -271,7 +291,7 @@ partial def pfDeclId :Rule
 | _ => failure
 
 
-#coreFmt Lean.Parser.Command.declVal fun
+#fmt Lean.Parser.Command.declVal fun
 | args => do
   if args.size == 0 then
     return text ""
@@ -279,20 +299,20 @@ partial def pfDeclId :Rule
     return (← pfCombineWithSeparator (text " ") args)
 
 
-#coreFmt Lean.Parser.Term.typeSpec fun
+#fmt Lean.Parser.Term.typeSpec fun
 |a => pfCombineWithSeparator (text " ") a
 
 
-#coreFmt Lean.Parser.Command.definition fun
+#fmt Lean.Parser.Command.definition fun
 | args => do
   return PPL.nest 2 (← (pfCombineWithSeparator ((text "") <^> PPL.nl) args))
 
 
-#coreFmt Lean.Parser.Command.declValSimple fun
+#fmt Lean.Parser.Command.declValSimple fun
 | a => pfCombineWithSeparator PPL.nl a
 
 
-#coreFmt Lean.Parser.Term.explicitBinder fun
+#fmt Lean.Parser.Term.explicitBinder fun
 -- | args => do
 --   -- no spacing between parenthesis and the first and last character in the binder
 --   let first := args.get! 0
@@ -309,16 +329,16 @@ partial def pfDeclId :Rule
 | _ => failure
 
 
-#coreFmt Lean.Parser.Module.header fun
+#fmt Lean.Parser.Module.header fun
 | s => pfCombine s
 
 
-#coreFmt Lean.Parser.Module.import fun
+#fmt Lean.Parser.Module.import fun
 | args => do
   return (← pfCombineWithSeparator (text " ") args) <> PPL.nl
 
 
-#coreFmt Lean.Parser.Command.declModifiers fun
+#fmt Lean.Parser.Command.declModifiers fun
 | args => do
   let mut modifiers ← pfCombineWithSeparator (text " ") args
   if !isEmpty [] modifiers then
@@ -329,14 +349,14 @@ partial def pfDeclId :Rule
 let operator
 -/
 
-#coreFmt Lean.Parser.Term.let fun
+#fmt Lean.Parser.Term.let fun
 | #[letSymbol, declaration, unknown1, after] => do
   let _ := (← assumeMissing unknown1)
   return (← pf letSymbol) <> text " " <> (← pf declaration) <> (← pf unknown1) <> PPL.nl <> (← pf after)
 | _ => failure
 
 
-#coreFmt Lean.Parser.Term.letIdDecl fun
+#fmt Lean.Parser.Term.letIdDecl fun
 | #[var, unknown1, typeInfo, assignOperator, content] => do
   let _ := (← assumeMissing unknown1)
   -- return (← pf var) <> text " " <> (← pf unknown1) <> (← pf typeInfo) <> (← pf assignOperator) <> (← nest 2 (do (text " " <^> PPL.nl)<>(← pf content)))
@@ -346,7 +366,7 @@ let operator
 
 -- TODO: figure out what the suffix is used for.
 
-#coreFmt Lean.Parser.Termination.suffix fun
+#fmt Lean.Parser.Termination.suffix fun
 | #[unknown1, unknown2] => do
   let _ := (← assumeMissing unknown1)
   let _ := (← assumeMissing unknown2)
@@ -355,7 +375,7 @@ let operator
   failure
 
 
-#coreFmt Lean.Parser.Term.app fun
+#fmt Lean.Parser.Term.app fun
 | #[functionName, arguments]  => do
   return (← pf functionName) <> text " " <> (← pfCombineWithSeparator (text " ") arguments.getArgs)
 | _ => failure
@@ -364,21 +384,15 @@ let operator
 --   | #[a] => do return text "app?"
 --   | _ => failure
 
-#coreFmt Lean.Parser.Term.app fun
-  | #[a] => do return text "app?"
-  | _ => failure
-
--- @[pFormat Lean.Parser.Term.letIdDecl]
--- def formatLetIdDecl : FormatPPL
---   | #[varName, probablyDecl, probablyDecl2, assignAtom, value] => do
---     if (probablyDecl == nullNode) && probablyDecl2 == nullNode then
---       -- return ((← (pf varName)) <> text " " <> (← pf assignAtom) <> (← nest 2 do
---       --     let formattedValue ← pf value
---       --     return (text " " <^> nl) <> formattedValue)
---       --     )
---       return text ""
---     else
---       failure
+-- #fmt Lean.Parser.Term.app fun
+--   | #[a] => do return text "app?"
 --   | _ => failure
 
+@[pFormat Lean.Parser.Command.declId]
+def formatLetIdDecl : Rule
+  | a => return text "hello"
+
+
+
+#eval IO.println "hello"
 -- #eval isEmpty [] (text ""<>text "")

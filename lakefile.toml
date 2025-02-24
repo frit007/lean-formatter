@@ -1,6 +1,6 @@
 name = "simple_meta"
 version = "0.1.0"
-defaultTargets = ["runner", "PrettyFormat"]
+defaultTargets = ["runner"]
 
 
 [[lean_lib]]
@@ -22,8 +22,8 @@ root = "BaseFormatter"
 srcDir = "PrettyFormat"
 
 [[lean_lib]]
-name = "annotations"
-root = "annotations"
+name = "CoreFormatters"
+root = "CoreFormatters"
 srcDir = "PrettyFormat"
 
 [[lean_lib]]
@@ -39,4 +39,4 @@ root = "simple_imported"
 [[lean_exe]]
 name = "runner"
 root = "runner"
-srcDir = "PrettyFormat"
+supportInterpreter = true

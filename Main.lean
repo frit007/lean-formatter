@@ -194,4 +194,7 @@ def hello2 (x:Nat)  (y:Nat) : Nat:=
 --   let s ← getFunctionSyntax `hello2
 --   IO.println s!"Syntax for List.map: {s}"
 
+def main : IO Unit :=
+  IO.println s!"Hello, {hello2}!"
+
 open Lean.Parser

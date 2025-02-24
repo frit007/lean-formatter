@@ -1,3 +1,13 @@
+# run
+
+## Standalone
+### build
+lake build
+### run
+.lake/build/bin/runner.exe 
+
+## Files
+
 # Overview
 
 ## PrettyFormat

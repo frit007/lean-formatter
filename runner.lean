@@ -1,5 +1,5 @@
 import PrettyFormat
-import annotations
+import CoreFormatters
 
 open Lean Elab PrettyPrinter PrettyFormat
 open Lean Elab Parser Command
@@ -81,7 +81,7 @@ def parseArguments (args:List String) : Except String InputArguments := do
     match length.toNat? with
     | some l => return { res with  opts := (res.opts).setInt `pf.lineLength l }
     | none => throw "lineLength must be a number"
-  | "-fileName"::fileName::xs =>
+  | "-file"::fileName::xs =>
     return { (←  parseArguments xs) with  fileName := fileName }
   | "-folder"::folderName::xs =>
     return { (←  parseArguments xs) with  folder := folderName }
@@ -135,32 +135,66 @@ def parseArguments (args:List String) : Except String InputArguments := do
 
   -- return leadingUpdated
 
-def formatASingleFile (fileName : String) (args : InputArguments) : MetaM Unit := do
+def formatASingleFile (fileName : String) (args : InputArguments) (coreEnv : Environment) (outputFile:Option String): IO (String × FormatReport) := do
   initSearchPath (← findSysroot)
-  IO.println "loading file ???"
-  let input ← IO.FS.readFile (fileName++".lean")
-  IO.println "loading file !!!"
+  let input ← IO.FS.readFile (fileName)
 
   let (moduleStx, env) ← parseModule input fileName
   let options := args.opts
-  IO.println (getPFLineLength options)
-  let values := pFormatAttr.getValues env `«arith_+_»
 
-  IO.println s!"lengths? {values.length}"
+  -- IO.println (getPFLineLength options)
+  -- let values := pFormatAttr.getValues env `«arith_+_»
+  -- IO.println s!"lengths? {values.length}"
 
   -- leadUpdated update trailing and leading. And the characters the content is assigned to atoms and ident
   let leadingUpdated := mkNullNode (moduleStx.map (·.stx)) |>.updateLeading |>.getArgs
   -- let withComments := introduceCommentsToTheCST leadingUpdated
 
   -- The Env of the program that reformats the other program. In case that the formatted code does not include the standard annotations
-  let currentEnv := ← getEnv
   -- let _ ← modify fun s => {s with nextId := 0, MyState.otherEnv}
-  let initialState : FormatState := {nextId := 0, diagnostic:= {failures := [], missingFormatters := Std.HashMap.empty}}
-  let introduceContext := ((pfCombineWithSeparator (PPL.nl<>PPL.nl) leadingUpdated).run { envs:= [currentEnv, env], options:= options})
+  let mut formatted := ""
+  let mut report : FormatReport := {}
 
-  let introduceState := introduceContext.run initialState
-  let (ppl, state) := introduceState.run
-  IO.FS.writeFile (fileName++".lean.syntax") (s!"{leadingUpdated}")
+  -- IO.println s!"{leadingUpdated}"
+  for a in leadingUpdated do
+    let (ppl, state) := pfTopLevel a [env, coreEnv] options
+    -- IO.println s!"{state.diagnostic.missingFormatters.keys.length}"
+    let result ← pfTopLevelWithDebug a [env, coreEnv] options fileName
+
+    formatted := formatted ++ "\n\n" ++ result.formattedPPL
+    report := report.combineReports ({result.state.toReport with formattedCommands := if result.cstDifferenceError.isNone then 1 else 0, totalCommands := 1})
+
+
+  -- outputFile.forM (fun fileName => do
+  --   let _ ← IO.FS.writeFile (fileName) (s!"{formatted}"))
+
+  return ("", report)
+
+-- def formatFolder (folderName : String) (args : InputArguments) (coreEnv : Environment) : IO (List (FormatReport)) := do
+--   let files ← findAllLeanFilesInProject folderName
+--   -- let mut reports := []
+--   let mut report' : FormatReport := {}
+--   for file in files do
+--     let (_, report) ← formatASingleFile file args coreEnv (file ++ ".formatted")
+--     report' := report'.combineReports report
+--     -- reports := report::reports
+--   return [report']
+
+def formatFolder (folderName : String) (args : InputArguments) (coreEnv : Environment) : IO (List (FormatReport)) := do
+  let files ← findAllLeanFilesInProject folderName
+  -- let report ← files.foldlM (fun (accFormatReport:FormatReport) file => do
+  --   let (_, report) ← formatASingleFile file args coreEnv (file ++ ".formatted")
+  --   return report.combineReports accFormatReport
+  -- ) {}
+  -- return [report]
+
+  let mut report' : FormatReport := {}
+  for file in files do
+    IO.println s!"before {file}"
+    let (_, report) ← formatASingleFile file args coreEnv (file ++ ".formatted")
+    report' := report'.combineReports report
+    -- reports := report::reports
+  return [report']
 
 -- def main (args : List String) : IO (Unit):= do
 --   let inputArgs := parseArguments args
@@ -184,26 +218,70 @@ def formatASingleFile (fileName : String) (args : InputArguments) : MetaM Unit :
 --       | none => IO.println "No file or folder specified"
 --   return ()
 
+def printReport (report : FormatReport) : IO Unit := do
+  IO.println s!"Managed to format {report.formattedCommands} out of commands {report.totalCommands}"
+
+  IO.println s!"Missing Formatters ({report.missingFormatters.keys.length}):"
+  let sortedList := report.missingFormatters.toArray |>.insertionSort (fun (_,a) (_,b) => a < b) |>.reverse
+  for (formatter, count) in sortedList do
+    IO.println s!"missing formatter for: {formatter} ({count})"
+
+def printUsage : IO Unit := do
+  IO.println "Usage: reformat -file <file> -folder <folder> -o <outputFileName> -noWarnCST -debugSyntax -debugSyntaxAfter -debugErrors -debugMissingFormatters -debugPPL -warnMissingFormatters -lineLength <length>"
 
 def main (args : List String) : IO (Unit):= do
-  let env ← importModules #[{module := `Init}] {}  -- Load Lean’s core environment
+  initSearchPath (← findSysroot)
+  -- let (_,coreEnv) ← parseModule (← IO.FS.readFile "PrettyFormat/CoreFormatters.lean") "PrettyFormat/CoreFormatters.lean"
+  -- let _ ← coreEnv.displayStats
+  -- let a := pFormatAttr.getValues coreEnv `Lean.Parser.Command.declId
+  -- IO.println s!"found formatters: {a.length}"
 
-  -- Get all declarations with `myAttr`
-  let a ← coreFormatters.get
-  let formatter ← getCoreFormatter `Lean.Parser.Term.app
-  let _ ← IO.println s!"{a.size}"
+  let inputArgs := parseArguments args
+  match inputArgs with
+  | Except.error e =>
+    IO.println e
+    printUsage
+  | Except.ok args => do
+    -- let coreEnv ← importModules #[{module := `CoreFormatters}] {}  -- Load Lean’s core environment
+    let (_,coreEnv) ← parseModule (← IO.FS.readFile "PrettyFormat/ImportCoreFormatters.lean") "PrettyFormat/ImportCoreFormatters.lean"
 
-  let decls := (pFormatAttr.getValues env `Lean.Parser.Term.letIdDecl)
-  let _ ← IO.println s!"{decls.length}"
+    let a := pFormatAttr.getValues coreEnv `Lean.Parser.Command.declId
+    IO.println s!"found it?{a.length}"
 
-#eval main ["hello"]
+    match args.fileName with
+    | some fileName => do
+      let (_,report) ← (formatASingleFile fileName args coreEnv args.outputFileName)
+      printReport report
+    | none => match args.folder with
+      | some folder => do
+        let reports ← formatFolder folder args coreEnv
+        let combined := reports.foldl (fun acc report => report.combineReports acc) {}
+        -- for report in reports do
+        printReport combined
+      | none =>
+        IO.println "No file or folder specified"
+        printUsage
 
-def main2 (args : List String) : MetaM (Unit):= do
-  -- Get all declarations with `myAttr`
-  let decls := (pFormatAttr.getValues (← getEnv) `Lean.Parser.Term.letIdDecl)
-  let _ ← IO.println s!"{decls.length}"
+-- set_option maxRecDepth 10000000
 
-#eval main2 ["hello"]
+-- def deepRec (n : Nat) : Nat :=
+--   if n = 0 then 0 else deepRec (n - 1) + 1
+
+-- #eval deepRec 10000  -- Might fail without increasing recursion depth
+
+-- set_option trace.profiler true
+-- #eval main []
+-- #eval main ["-file", "../../lean4/src/Init/Tactics.lean"]
+-- #eval main ["-file", "../../lean4/src/Std/Time.lean"]
+-- #eval main ["-file", "../../lean4/src/Lean/Attributes.lean"]
+-- #eval main ["-folder", "../../lean4/src/Std"]
+
+-- def main2 (args : List String) : MetaM (Unit):= do
+--   -- Get all declarations with `myAttr`
+--   let decls := (pFormatAttr.getValues (← getEnv) `Lean.Parser.Term.letIdDecl)
+--   let _ ← IO.println s!"{decls.length}"
+
+-- #eval main2 ["hello"]
 
 unsafe def mainInterpret (args : List String) : MetaM (Array Syntax) := do
   let [fileName] := args | failWith "Usage: reformat file"
@@ -237,34 +315,6 @@ partial def tellMeAbout (kind: SyntaxNodeKind) (args: Array Syntax): MetaM (Arra
   match ← res with
   | some p => return p
   | none => failure
-
-
-
-    -- IO.println s!"{arg}"
-
-
--- unsafe def mainWithInfo (kind: SyntaxNodeKind) (args : List String) : MetaM (Array Syntax) := do
---   let x ← mainOutputPPL args
---   let info ← tellMeAbout kind x
---   IO.println s!"parts {info.size}"
---   return info
-
-
--- #eval mainWithInfo `Lean.Parser.Term.letIdDecl ["./test"]
-
--- #eval mainOutputPPL ["./test"]
---
--- #eval mainOutputPPL ["./../tmp/greeting-lean/Main"]
-
--- #eval mainOutputPPL ["../../lean4/src/Init/Coe"]
-
--- #eval findAllLeanFilesInProject "../../lean4/src"
-
--- #eval mainOutputPPL ["./test"]
-
--- #eval mainInterpret ["./test"]
-
--- #eval mainOutputPPL ["./test_with_custom_syntax"]
 
 
 syntax (name := formatCmd)
@@ -345,15 +395,17 @@ where
 open CodeAction Server RequestM in
 -- @[command_code_action]
 @[command_code_action Lean.Parser.Command.declaration]
-def formatCmdCodeAction : CommandCodeAction := fun p sn info node => do
+def formatCmdCodeAction : CommandCodeAction := fun p _ info node => do
   let .node i ts := node | return #[]
 
-  let res := ts.findSome? fun
-    | .node (.ofCustomInfo { stx, value }) _ => return stx
+  let _ := ts.findSome? fun
+    | .node (.ofCustomInfo { stx, .. }) _ => return stx
     | _ => none
 
   -- let fileName ← getFileName
   -- p.textDocument.uri
+
+
 
   let opts := info.options
   let stx :Syntax := i.stx
@@ -378,6 +430,8 @@ def formatCmdCodeAction : CommandCodeAction := fun p sn info node => do
       let result ← pfTopLevelWithDebug (stx) [info.env] opts p.textDocument.uri
 
       let newText := result.reportAsComment ++ result.formattedPPL
+
+
 
       -- let newText := toDoc ppl |>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := 100)
       -- let newText := "newText"

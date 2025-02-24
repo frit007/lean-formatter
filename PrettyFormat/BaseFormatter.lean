@@ -64,10 +64,12 @@ namespace PrettyFormat
     let _ ← modify (fun s => {s with stx := s.stx.tail})
     return v
 
+  -- let x := (← pf (2 + 2))
+
   mutual
     partial def pf (stx: Syntax): FormatM PPL := updateSyntaxTrail stx do
       -- can we assume that the other environment has all of the attributes? for now we do not
-      let context ← read
+      -- let context ← read
       let state ← get
 
       match stx with
@@ -346,7 +348,9 @@ namespace PrettyFormat
     let formattedPPL := toDoc ppl |>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
 
     -- parse the syntax
-    let generatedSyntax ← reparseSyntax formattedPPL fileName environments opts
+    -- let generatedSyntax ← reparseSyntax formattedPPL fileName environments opts
+
+    let generatedSyntax := Except.error "Not implemented"
     let cstDifferenceError := match generatedSyntax with
       | Except.error _ => compareCst stx Syntax.missing
       | Except.ok generatedStx => compareCst stx generatedStx
@@ -360,17 +364,18 @@ namespace PrettyFormat
       match envs.get? 0 with
       | none => .error "Could not parse syntax again: no environment"
       | some env => do
-        let s ← IO.processCommands inputCtx {}
-          { Command.mkState env {} opts with infoState := { enabled := true } }
-          let topLevelCmds ← extractTopLevelCommands s
-          if topLevelCmds.size == 2 then
-            match topLevelCmds.get? 0 with
-            | some command => return .ok command.stx
-            | none => return .error "Could not parse syntax again: no command"
-          else
-            let combinedCommands := topLevelCmds.map (fun c => toString (repr c)) |>.toList |> "\n".intercalate
+        return .error s!"the ppl:={formattedPPL}"
+        -- let s ← IO.processCommands inputCtx {}
+        --   { Command.mkState env {} opts with infoState := { enabled := true } }
+        -- let topLevelCmds ← extractTopLevelCommands s
+        -- if topLevelCmds.size == 2 then
+        --   match topLevelCmds.get? 0 with
+        --   | some command => return .ok command.stx
+        --   | none => return .error "Could not parse syntax again: no command"
+        -- else
+        --   let combinedCommands := topLevelCmds.map (fun c => toString (repr c)) |>.toList |> "\n".intercalate
 
-            return .error s!"Could not parse syntax again: Expected 2 commands to be generated, your top level command and end of file\n But generated {topLevelCmds.size} commands {combinedCommands}"
+        --   return .error s!"Could not parse syntax again: Expected 2 commands to be generated, your top level command and end of file\n But generated {topLevelCmds.size} commands {combinedCommands}"
 
 
   def assumeMissing (stx : Syntax): RuleM Unit := do
