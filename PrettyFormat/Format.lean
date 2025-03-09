@@ -44,17 +44,29 @@ partial def findAllLeanFilesInProject (projectFolder:String) : IO (List String) 
         return acc
   ) []
 
+inductive Output
+  | replace
+  -- copy with extension
+  | copy : String → Output
+  | none
+
 structure InputArguments where
   fileName : Option String := none
   folder : Option String := none
-  outputFileName : Option String := none
+  -- outputFileName : Option String := none
+  output : Output := Output.copy ".formatted" -- TODO: This must change to replace, when the formatter is reliable
+  includeFolders : List String := []
   opts : Options := {}
 
 def parseArguments (args:List String) : Except String InputArguments := do
   match args with
   | [] => return {}
-  | "-o"::outputFileName::xs =>
-    return { (← parseArguments xs) with outputFileName := outputFileName }
+  | "-oCopy"::outputFileExtension::xs =>
+    return { (← parseArguments xs) with output := Output.copy outputFileExtension }
+  | "-oNone":: xs =>
+    return { (← parseArguments xs) with output := Output.none }
+  | "-oReplace"::xs =>
+    return { (← parseArguments xs) with output := Output.replace }
   | "-noWarnCST"::xs =>
     let res ← parseArguments xs
     return { res with  opts := (res.opts).setInt `pf.warnCSTmismatch 0 }
@@ -81,6 +93,9 @@ def parseArguments (args:List String) : Except String InputArguments := do
     match length.toNat? with
     | some l => return { res with  opts := (res.opts).setInt `pf.lineLength l }
     | none => throw "lineLength must be a number"
+  | "-include"::dir::xs =>
+    let res ← parseArguments xs
+    return { res with includeFolders := dir::res.includeFolders }
   | "-file"::fileName::xs =>
     return { (←  parseArguments xs) with  fileName := fileName }
   | "-folder"::folderName::xs =>
@@ -135,16 +150,11 @@ def parseArguments (args:List String) : Except String InputArguments := do
 
   -- return leadingUpdated
 
-def formatASingleFile (fileName : String) (args : InputArguments) (coreEnv : Environment) (outputFile:Option String): IO (String × FormatReport) := do
-  initSearchPath (← findSysroot)
-  let input ← IO.FS.readFile (fileName)
-
-  let (moduleStx, env) ← parseModule input fileName
+unsafe def formatASingleFile (fileName : String) (args : InputArguments): IO (String × FormatReport) := do
+  let ((moduleStx, env), timeReadAndParse) ← measureTime do
+    let input ← IO.FS.readFile (fileName)
+    parseModule input fileName
   let options := args.opts
-
-  -- IO.println (getPFLineLength options)
-  -- let values := pFormatAttr.getValues env `«arith_+_»
-  -- IO.println s!"lengths? {values.length}"
 
   -- leadUpdated update trailing and leading. And the characters the content is assigned to atoms and ident
   let leadingUpdated := mkNullNode (moduleStx.map (·.stx)) |>.updateLeading |>.getArgs
@@ -155,43 +165,32 @@ def formatASingleFile (fileName : String) (args : InputArguments) (coreEnv : Env
   let mut formatted := ""
   let mut report : FormatReport := {}
 
-  -- IO.println s!"{leadingUpdated}"
   for a in leadingUpdated do
-    let (ppl, state) := pfTopLevel a [env, coreEnv] options
-    -- IO.println s!"{state.diagnostic.missingFormatters.keys.length}"
-    let result ← pfTopLevelWithDebug a [env, coreEnv] options fileName
+    let formatters ← getFormatters env
+    let result ← pfTopLevelWithDebug a env formatters options fileName
 
     formatted := formatted ++ "\n\n" ++ result.formattedPPL
-    report := report.combineReports ({result.state.toReport with formattedCommands := if result.cstDifferenceError.isNone then 1 else 0, totalCommands := 1})
+    report := report.combineReports ({result.toReport with formattedCommands := if result.cstDifferenceError.isNone then 1 else 0, totalCommands := 1})
 
 
-  -- outputFile.forM (fun fileName => do
-  --   let _ ← IO.FS.writeFile (fileName) (s!"{formatted}"))
+  let fileName := match args.output with
+  | .copy ext => some (fileName ++ ext)
+  | .replace => some fileName
+  | .none => none
 
-  return ("", report)
+  if let some f := fileName then
+    IO.FS.writeFile (f) (s!"{formatted}")
 
--- def formatFolder (folderName : String) (args : InputArguments) (coreEnv : Environment) : IO (List (FormatReport)) := do
---   let files ← findAllLeanFilesInProject folderName
---   -- let mut reports := []
---   let mut report' : FormatReport := {}
---   for file in files do
---     let (_, report) ← formatASingleFile file args coreEnv (file ++ ".formatted")
---     report' := report'.combineReports report
---     -- reports := report::reports
---   return [report']
+  return ("", {report with timeReadAndParse})
 
-def formatFolder (folderName : String) (args : InputArguments) (coreEnv : Environment) : IO (List (FormatReport)) := do
+
+unsafe def formatFolder (folderName : String) (args : InputArguments)  : IO (List (FormatReport)) := do
   let files ← findAllLeanFilesInProject folderName
-  -- let report ← files.foldlM (fun (accFormatReport:FormatReport) file => do
-  --   let (_, report) ← formatASingleFile file args coreEnv (file ++ ".formatted")
-  --   return report.combineReports accFormatReport
-  -- ) {}
-  -- return [report]
 
   let mut report' : FormatReport := {}
   for file in files do
     IO.println s!"before {file}"
-    let (_, report) ← formatASingleFile file args coreEnv (file ++ ".formatted")
+    let (_, report) ← formatASingleFile file args
     report' := report'.combineReports report
     -- reports := report::reports
   return [report']
@@ -221,6 +220,7 @@ def formatFolder (folderName : String) (args : InputArguments) (coreEnv : Enviro
 def printReport (report : FormatReport) : IO Unit := do
   IO.println s!"Managed to format {report.formattedCommands} out of commands {report.totalCommands}"
 
+  IO.println s!"Time readAndParse: {report.timeReadAndParse} pf: {report.timePF} doc: {report.timeDoc} reparse: {report.timeReparse}"
   IO.println s!"Missing Formatters ({report.missingFormatters.keys.length}):"
   let sortedList := report.missingFormatters.toArray |>.insertionSort (fun (_,a) (_,b) => a < b) |>.reverse
   for (formatter, count) in sortedList do
@@ -229,19 +229,22 @@ def printReport (report : FormatReport) : IO Unit := do
 def printUsage : IO Unit := do
   IO.println "Usage: reformat -file <file> -folder <folder> -o <outputFileName> -noWarnCST -debugSyntax -debugSyntaxAfter -debugErrors -debugMissingFormatters -debugPPL -warnMissingFormatters -lineLength <length>"
 
-def main (args : List String) : IO (Unit):= do
-  initSearchPath (← findSysroot)
+unsafe def main (args : List String) : IO (Unit) := do
   -- let (_,coreEnv) ← parseModule (← IO.FS.readFile "PrettyFormat/CoreFormatters.lean") "PrettyFormat/CoreFormatters.lean"
   -- let _ ← coreEnv.displayStats
   -- let a := pFormatAttr.getValues coreEnv `Lean.Parser.Command.declId
   -- IO.println s!"found formatters: {a.length}"
 
   let inputArgs := parseArguments args
+
+  -- initSearchPath (← findSysroot)
   match inputArgs with
   | Except.error e =>
     IO.println e
     printUsage
   | Except.ok args => do
+
+    initSearchPath (← findSysroot) (args.includeFolders.map (fun c => FilePath.mk c))
     -- let coreEnv ← importModules #[{module := `CoreFormatters}] {}  -- Load Lean’s core environment
     let (_,coreEnv) ← parseModule (← IO.FS.readFile "PrettyFormat/ImportCoreFormatters.lean") "PrettyFormat/ImportCoreFormatters.lean"
 
@@ -250,17 +253,23 @@ def main (args : List String) : IO (Unit):= do
 
     match args.fileName with
     | some fileName => do
-      let (_,report) ← (formatASingleFile fileName args coreEnv args.outputFileName)
+      let (_,report) ← (formatASingleFile fileName args)
       printReport report
     | none => match args.folder with
       | some folder => do
-        let reports ← formatFolder folder args coreEnv
+        let reports ← formatFolder folder args
         let combined := reports.foldl (fun acc report => report.combineReports acc) {}
         -- for report in reports do
         printReport combined
       | none =>
         IO.println "No file or folder specified"
         printUsage
+
+unsafe def mainLog (args : List String) : IO (Unit) := do
+  try
+    main args
+  catch e =>
+    IO.println e
 
 -- set_option maxRecDepth 10000000
 
@@ -270,6 +279,8 @@ def main (args : List String) : IO (Unit):= do
 -- #eval deepRec 10000  -- Might fail without increasing recursion depth
 
 -- set_option trace.profiler true
+-- #eval mainLog ["-file", "../../batteries/Batteries/Logic.lean", "-include", "../../batteries/.lake/build/lib"]
+-- #eval mainLog ["-file", "../../batteries/Batteries/Logic.lean",]
 -- #eval main []
 -- #eval main ["-file", "../../lean4/src/Init/Tactics.lean"]
 -- #eval main ["-file", "../../lean4/src/Std/Time.lean"]
@@ -283,15 +294,24 @@ def main (args : List String) : IO (Unit):= do
 
 -- #eval main2 ["hello"]
 
-unsafe def mainInterpret (args : List String) : MetaM (Array Syntax) := do
-  let [fileName] := args | failWith "Usage: reformat file"
-  initSearchPath (← findSysroot)
-  let input ← IO.FS.readFile (fileName++".lean")
+-- unsafe def mainInterpret (args : List String) : MetaM (Array Syntax) := do
+--   let [fileName] := args | failWith "Usage: reformat file"
+--   initSearchPath (← findSysroot)
+--   let input ← IO.FS.readFile (fileName++".lean")
 
-  let template ← IO.FS.readFile "template.ml"
-  let (env) ← interpretFormat input fileName
+--   let template ← IO.FS.readFile "template.ml"
+--   let (env) ← interpretFormat input fileName
 
-  return #[]
+--   return #[]
+
+def main3 : IO Unit := do
+  let mut a : Std.HashMap Nat String := {}
+  for i in [1:50001] do
+    a := a.insert (i) (toString i)
+
+
+#eval measureTime main3
+
 
 partial def tellMeAbout (kind: SyntaxNodeKind) (args: Array Syntax): MetaM (Array Syntax) := do
   let o ← getOptions
@@ -317,173 +337,36 @@ partial def tellMeAbout (kind: SyntaxNodeKind) (args: Array Syntax): MetaM (Arra
   | none => failure
 
 
-syntax (name := formatCmd)
-  "#format" ppLine command : command
-
-@[command_elab formatCmd]
-unsafe def elabFormatCmd : CommandElab
-  | `(command|#format $cmd) => liftTermElabM do
-    let env ← getEnv
-    let opts ← getOptions
-    let stx := cmd.raw
-    let leadingUpdated := stx|>.getArgs
-    let introduceContext := ((pfCombineWithSeparator PPL.nl leadingUpdated).run { envs:= [env], options := ← getOptions})
-    let introduceState := introduceContext.run' {nextId := 0}
-    let ppl := introduceState.run
-
-    let doc := toDoc ppl
-    let result := doc.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := 100)
-
-    logInfo s!"{result}"
-  | stx => logError m!"Syntax tree?: {stx.getKind}"
+declare_syntax_cat fmtCase
+syntax num : fmtCase
+syntax "| " term " => " term: fmtCase
+syntax "| " term " => " term fmtCase: fmtCase
 
 
-def findLineEnd (source:String) (pos:String.Pos) : String.Pos:= Id.run do
-  let mut currentPos := pos
-  while (source.get? currentPos).isSome do
-    if (source.get! currentPos) == '\n' then
-      return currentPos
-    currentPos := source.next currentPos
-  return currentPos
-
-def extractLine (source:String) (pos:String.Pos) : String:= Id.run do
-  let startOfLine := source.findLineStart pos
-  let mut endOfLine := findLineEnd source pos
-  let line := source.extract startOfLine endOfLine
-  return line
-
-partial def findStartOfDebugComment (source:String) (pos:String.Pos) : Option (String.Pos):= do
-  let endPos ← findEndOfComment source (pos |> source.prev |> source.prev)
-  let startPos ← findStartOfComment source (endPos |> source.prev)
-  -- endPos
-  -- match (← findStrPosRev source pos "DEBUG" (fun _ => true)) with
-  -- | some c => some pos
-  -- | _ => none
-  -- findStrPosRev source pos "DEBUG" (fun _ => true)
-  match strMatch source startPos "/-FORMAT DEBUG:" with
-  | true => some startPos
-  | _ => none
-  -- startPos
-where
-  strMatch (source:String) (pos:String.Pos) (str:String) : Bool := Id.run do
-    let mut currPos := pos
-    let mut strPos := String.Pos.mk 0
-    for _ in [0:str.length] do
-      match source.get? (currPos) with
-      | none => return false
-      | some c => if c != str.get! strPos then return false
-      currPos := source.next currPos
-      strPos := str.next strPos
-    return true
-
-  findStrPosRev (source:String) (pos:String.Pos) (pattern:String) (allowed : Char → Bool) : Option (String.Pos) := do
-    let p ← source.get? pos
-    if allowed p then
-      if strMatch source pos pattern then
-        return pos
-      else
-        findStrPosRev source (source.prev pos) pattern allowed
-    else
-      none
-
-  findEndOfComment (s:String) (pos:String.Pos) :Option (String.Pos):= do
-    findStrPosRev s pos "-/" (fun c => c == '\n' || c == '\r' || c == ' ' || c == '-' || c == '/')
-
-  findStartOfComment (s:String) (pos:String.Pos) :Option (String.Pos):= do
-    findStrPosRev s pos "/-" (fun _ => true)
-
-open CodeAction Server RequestM in
--- @[command_code_action]
-@[command_code_action Lean.Parser.Command.declaration]
-def formatCmdCodeAction : CommandCodeAction := fun p _ info node => do
-  let .node i ts := node | return #[]
-
-  let _ := ts.findSome? fun
-    | .node (.ofCustomInfo { stx, .. }) _ => return stx
-    | _ => none
-
-  -- let fileName ← getFileName
-  -- p.textDocument.uri
+syntax (name:=coreFmCmd)"#coreFm " ident fmtCase : command
 
 
+initialize IO.println "helllo"
 
-  let opts := info.options
-  let stx :Syntax := i.stx
-  let doc ← readDoc
-  let eager :Lsp.CodeAction := {
-    title := "Format code"
-    kind? := "quickfix"
-    isPreferred? := true
-  }
-  pure #[{
-    eager
-    lazy? := some do
-      let r :String.Range := stx.getRange?.orElse (fun () => String.Range.mk ⟨0⟩  ⟨0⟩ )|>.get!
+macro_rules
+| `(#coreFm $i:ident $a:fmtCase) =>
+  -- `(initialize IO Unit := IO.mkref fun a => 2)
+  -- let ccc := match a with
+  -- | `("| " $a:term " => " $b:term) => 2
+  -- | _ => 3
 
-      let source := info.fileMap.source
-      let start := match findStartOfDebugComment source r.start with
-        | some pos => pos
-        | none => r.start
-      let tail := r.stop
+  `(initialize IO.println "some commend??aarst")
 
 
-      let result ← pfTopLevelWithDebug (stx) [info.env] opts p.textDocument.uri
-
-      let newText := result.reportAsComment ++ result.formattedPPL
-
+#coreFm name
+| `($a + $b) => IO.println "what"
 
 
-      -- let newText := toDoc ppl |>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := 100)
-      -- let newText := "newText"
-      pure { eager with
-        edit? := some <|.ofTextEdit doc.versionedIdentifier {
-          range := doc.meta.text.utf8RangeToLspRange ⟨start, tail⟩
-          newText
-        }
-      }
-  }]
+macro_rules
+| `($a + $b) => `(println! "matched addition!")
 
 
+macro_rules
+| `(command | #coreFmt ppline ($a:term) ) => `("matched repeated addition")
 
-set_option pf.debugErrors 1
-
--- /--
--- info: def test (n :Nat):=
---   fail
---   fail
--- -/
--- #guard_msgs in
--- #format
--- def test (n:Nat) :=
---   add 2 3
-
--- set_option pf.debugSyntax 1
--- set_option pf.debugMissingFormatters 1
--- set_option pf.debugErrors 1
--- set_option pf.debugSyntaxAfter 1
--- set_option pf.debugPPL 1
--- #format
-
--- #fmt Lean.Parser.Term.app fun
--- | #[functionName, arguments]  => do
---   return (← pf functionName) <> text " " <> (← pfCombineWithSeparator (text " ") arguments.getArgs)
--- | _ => failure
--- @[pFormat Lean.Parser.Term.app]
--- def formatApp : Rule
--- | #[functionName, arguments]  => do
---   return (← pf functionName) <> text " " <> (← pfCombineWithSeparator (text " ") arguments.getArgs)
--- | _ => failure
-
-def add (x y:Nat):Nat:=
-  x + y
-
-
-def test2 : Nat :=
-  add 2 3
-where
-  add (x y:Nat):Nat:=
-    x + y
-
-
-private def b(y:Nat):Nat:=
-  3 * y
+#eval 1 + 2

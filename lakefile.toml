@@ -1,6 +1,6 @@
 name = "simple_meta"
 version = "0.1.0"
-defaultTargets = ["runner"]
+defaultTargets = ["Format"]
 
 
 [[lean_lib]]
@@ -36,7 +36,19 @@ srcDir = "PrettyFormat"
 name = "simple_imported"
 root = "simple_imported"
 
+
+[[lean_lib]]
+name = "temporary_imported"
+root = "temporary_imported"
+
+[[lean_lib]]
+name = "LSPformat"
+root = "LSPformat"
+srcDir = "PrettyFormat"
+
+
 [[lean_exe]]
-name = "runner"
-root = "runner"
+name = "Format"
+root = "Format"
+srcDir = "PrettyFormat"
 supportInterpreter = true

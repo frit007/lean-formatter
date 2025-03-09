@@ -6,6 +6,16 @@ lake build
 ### run
 .lake/build/bin/runner.exe 
 
+lake exe Format -file ../../batteries/Batteries/Logic.lean -include ../../batteries/.lake/build/lib
+
+lake exe Format -folder ../../batteries/Batteries -include ../../batteries/.lake/build/lib
+
+lake exe Format -file ../../batteries/Batteries/Control/ForInStep/Basic.lean -include ../../batteries/.lake/build/lib
+
+
+lake exe Format
+
+lake exe Format -file ../../batteries/Batteries/Data/NameSet.lean -include ../../batteries/.lake/build/lib
 ## Files
 
 # Overview

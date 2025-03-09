@@ -12,7 +12,6 @@ open Lean
 open Lean.Meta
 open Lean.Elab.Command
 open Lean Elab PrettyPrinter PrettyFormat
-open Lean.Meta
 
 
 open Lean.Meta
@@ -41,18 +40,18 @@ namespace PrettyFormat
   def findPatternStart (s pattern : String) : Option String :=
     findPatternStartAux s pattern
 
-  def stringCommentsStr (s:String) : List String :=
-  s.split (fun c => c == '\n')
-  |>.filterMap (fun s => findPatternStart s "--")
-  |>.filter (fun (s:String) => s.trim.length > 0)
-  |>.map (fun (s:String) => "-- " ++ s.trim)
 
-  def findFirstMatch (envs : List Environment) (kind: SyntaxNodeKind) (args : Array Syntax) :FormatM (List FormatError ⊕ PPL):= do
+  def findFirstMatch (fmts : List (Name → Option Rule)) (kind : SyntaxNodeKind) (r : RuleRec) (stx : Syntax) :FormatM (List FormatError ⊕ PPL):= do
     let mut errors : List FormatError := []
-    for env in envs do
-      let options := pFormatAttr.getValues env kind
-      for opt in options do
-        match ← opt args with
+    for fmt in fmts do
+      -- let options := pFormatAttr.getValues env kind
+      let opt := fmt kind
+      match opt with
+      | none =>
+        errors := errors
+      | some f =>
+
+        match ← (f stx |>.run r) with
         | .ok ppl => return Sum.inr ppl
         | .error e => errors := e::errors
 
@@ -64,110 +63,122 @@ namespace PrettyFormat
     let _ ← modify (fun s => {s with stx := s.stx.tail})
     return v
 
-  -- let x := (← pf (2 + 2))
 
-  mutual
-    partial def pf (stx: Syntax): FormatM PPL := updateSyntaxTrail stx do
-      -- can we assume that the other environment has all of the attributes? for now we do not
-      -- let context ← read
-      let state ← get
+  def stringCommentsStr (s:String) : List String :=
+  -- s.split (fun c => c == '\n')
+  -- |>.filterMap (fun s => findPatternStart s "--")
+  -- |>.filter (fun (s:String) => s.trim.length > 0)
+  -- |>.map (fun (s:String) => "-- " ++ s.trim)
+    s.split (fun c => c == '\n')
+    |>.map (fun s => s.trim)
+    |>.filter (fun s => s.length > 0)
 
-      match stx with
-      | .missing => pure (text "")
-      | .node (info : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
-        match kind with
-        | `null => -- null nodes are combined without whitespaces
-          pfCombine args
-        | _ =>
-          let formatted ← findFirstMatch (← read).envs kind args
-
-          match formatted with
-          | Sum.inr ppl => return PPL.group (toString kind) ppl
-          | Sum.inl errs =>
-            let s ← get
-            let d := s.diagnostic
-            if errs.length == 0 then
-              let v := d.missingFormatters.insertIfNew kind stx
-              let _ ←  set {s with diagnostic := {d with missingFormatters:= v}}
-
-            else
-              let mut v := d.failures
-              for e in errs do
-                v := (e, (← get).stx)::v
-
-            return PPL.group (toString kind) (← pfCombine args)
-      | .atom (info : SourceInfo) (val : String) =>
-        -- return text val
-        if state.unknown then
-          return (unknownSurroundWithComments info (text "")) (fun p => p <> text val)
-        else
-          return (surroundWithComments info (text "")) (fun p => p <> text val)
-
-      | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) =>
-        -- return text rawVal.toString
-          -- return (unknownSurroundWithComments info (text "")) (fun p => p <> text rawVal.toString)
-        if state.unknown then
-          return (unknownSurroundWithComments info (text "")) (fun p => p <> text rawVal.toString)
-        else
-          return (surroundWithComments info (text "")) (fun p => p <> text rawVal.toString)
-
-
-    partial def unknownStringCommentsStr (s:String) : List String :=
-    if s.contains '\n' then
-      s.split (fun c => c == '\n')
-      |>.filterMap (fun s => findPatternStart s "--")
-      |>.filter (fun (s:String) => s.trim.length > 0)
-      |>.map (fun (s:String) => "-- " ++ s.trim)
+  partial def unknownStringCommentsStr (s:String) : List String :=
+  if s.contains '\n' then
+    s.split (fun c => c == '\n')
+    |>.filterMap (fun s => findPatternStart s "--")
+    -- |>.filter (fun (s:String) => s.trim.length > 0)
+    |>.map (fun (s:String) => "-- " ++ s.trim)
+  else
+    if s.length > 0 then
+      []
     else
-      if s.length > 0 then
-        []
+      []
+
+  partial def knownStringToPPL (s:String) (p: PPL) : PPL :=
+    stringCommentsStr s |>.foldl (fun p' c => p' <> commentText c <> PPL.nl) p
+
+  partial def surroundWithComments (info : SourceInfo) (p:PPL) (f : PPL → PPL): PPL:=
+    match info with
+    | .original (leading : Substring) (pos : String.Pos) (trailing : Substring) (endPos : String.Pos) =>
+      knownStringToPPL leading.toString p
+      |> f
+      |> knownStringToPPL trailing.toString
+    | _ => f p
+
+  partial def unknownStringToPPL (s:String) (p: PPL) : PPL :=
+    -- let comments := s.split (fun c => c == '\n')
+    -- |>.map (fun s => s.trim)
+    -- |>.filter (fun s => s.length > 0)
+    -- |>.map (fun s => text s)
+    -- if comments.length == 0 then
+    --   text ""
+    -- else
+    --   comments.foldl (fun acc p => acc <> PPL.nl <>p ) (text "") <> PPL.nl
+    unknownStringCommentsStr s |>.foldl (fun p' c => p' <> commentText c <> PPL.nl) p
+
+  -- if the value is unknown then we will try to keep the value the same as it was
+  partial def unknownSurroundWithComments (info : SourceInfo) (p:PPL) (f : PPL → PPL): PPL:=
+    match info with
+    | .original (leading : Substring) (pos : String.Pos) (trailing : Substring) (endPos : String.Pos) =>
+      unknownStringToPPL leading.toString p
+      |> f
+      |> unknownStringToPPL trailing.toString
+    | _ => f p
+
+  partial def pfCombineWithSeparator (sep: PPL) (r: RuleRec) (stxArr : Array Syntax) : FormatM PPL := do
+    let mut combined := text ""
+    for p in stxArr do
+      let p' ← r p
+      if isEmpty p' then
+        combined := combined -- no change
+      else if isEmpty combined then
+        combined := p' --
       else
-        []
+        combined := combined <> sep <> p'
+    return combined
 
+  partial def pfCombine (r: RuleRec) (stxArr : Array Syntax) : FormatM PPL := do
+    let mut res := text ""
+    for p in stxArr do
+      res := res <> (← r p)
+    return res
 
-    partial def knownStringToPPL (s:String) (p: PPL) : PPL :=
-      stringCommentsStr s |>.foldl (fun p' c => p' <> commentText c <> PPL.nl) p
+  partial def pf (formatters : Formatters) (stx: Syntax): FormatM PPL := updateSyntaxTrail stx do
+    -- can we assume that the other environment has all of the attributes? for now we do not
+    -- let context ← read
+    let r : RuleRec := fun (stx) => pf formatters stx
+    -- let rr : RuleCtx :=
+    let state ← get
 
-    partial def surroundWithComments (info : SourceInfo) (p:PPL) (f : PPL → PPL): PPL:=
-      match info with
-      | .original (leading : Substring) (pos : String.Pos) (trailing : Substring) (endPos : String.Pos) =>
-        knownStringToPPL leading.toString p
-        |> f
-        |> knownStringToPPL trailing.toString
-      | _ => f p
+    match stx with
+    | .missing => pure (text "")
+    | .node (info : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
+      match kind with
+      | `null => -- null nodes are combined without whitespaces
+        pfCombine r args
+      | _ =>
+        let formatted ← findFirstMatch formatters kind r stx
 
-    partial def unknownStringToPPL (s:String) (p: PPL) : PPL :=
-      unknownStringCommentsStr s |>.foldl (fun p' c => p' <> commentText c <> PPL.nl) p
+        match formatted with
+        | Sum.inr ppl => return PPL.group (toString kind) ppl
+        | Sum.inl errs =>
+          let s ← get
+          let d := s.diagnostic
+          if errs.length == 0 then
+            let v := d.missingFormatters.insertIfNew kind stx
+            let _ ←  set {s with diagnostic := {d with missingFormatters:= v}}
 
-    -- if the value is unknown then we will try to keep the value the same as it was
-    partial def unknownSurroundWithComments (info : SourceInfo) (p:PPL) (f : PPL → PPL): PPL:=
-      match info with
-      | .original (leading : Substring) (pos : String.Pos) (trailing : Substring) (endPos : String.Pos) =>
-        unknownStringToPPL leading.toString p
-        |> f
-        |> unknownStringToPPL trailing.toString
-      | _ => f p
+          else
+            let mut v := d.failures
+            for e in errs do
+              v := (e, (← get).stx)::v
 
-    -- combine the formatters without separators
-    partial def pfCombine (stxArr : Array Syntax) : FormatM PPL := do
-      let mut res := text ""
-      for p in stxArr do
-        res := res <> (← pf p)
-      return res
+          return PPL.group (toString kind) (← pfCombine r args)
+    | .atom (info : SourceInfo) (val : String) =>
+      -- return text val
+      if state.unknown then
+        return (unknownSurroundWithComments info (text "")) (fun p => p <> text val)
+      else
+        return (surroundWithComments info (text "")) (fun p => p <> text val)
 
-    partial def pfCombineWithSeparator (sep: PPL) (stxArr : Array Syntax) : FormatM PPL := do
-      let mut combined := text ""
-      for p in stxArr do
-        let p' ← pf p
-        if isEmpty [] p' then
-          combined := combined -- no change
-        else if isEmpty [] combined then
-          combined := p' --
-        else
-          combined := combined <> sep <> p'
-      return combined
-
-  end
+    | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) =>
+      -- return text rawVal.toString
+        -- return (unknownSurroundWithComments info (text "")) (fun p => p <> text rawVal.toString)
+      if state.unknown then
+        return (unknownSurroundWithComments info (text "")) (fun p => p <> text rawVal.toString)
+      else
+        return (surroundWithComments info (text "")) (fun p => p <> text rawVal.toString)
 
   structure CommandSyntax where
     env : Environment
@@ -184,6 +195,7 @@ namespace PrettyFormat
     for infoTree in s.commandState.infoState.trees.toArray do
       match infoTree with
       | InfoTree.context i (InfoTree.node (Info.ofCommandInfo {stx, ..}) _) =>
+
         match i with
         | .commandCtx { env, currNamespace, openDecls, options,.. } =>
           topLevelCmds := topLevelCmds.push {env, options, currNamespace, openDecls, stx}
@@ -274,12 +286,9 @@ namespace PrettyFormat
         | (none, some r) => return some {before := "missing", after := toString r.getKind , trace := (toString i)::trace}
         | _ => return none
       return none
-      -- left.size == right.size
-      -- && ((left.zip right) |>.foldl (fun acc x => acc && ) true)
 
   def stringToPPL (s:String) : PPL:=
     s.split (fun c => c == '\n') |>.map (fun s => text s) |>.foldl (fun acc p => acc <> p <> PPL.nl) (text "")
-
 
   structure FormatResult where
     stx : Syntax
@@ -289,13 +298,23 @@ namespace PrettyFormat
     generatedSyntax : Except String Syntax
     state : FormatState
     cstDifferenceError : Option CSTCompareError
+    timePF : Nat
+    timeDoc : Nat
+    timeReparse : Nat
+
+  def FormatResult.toReport (res: FormatResult) : FormatReport :=
+    {
+      res.state.toReport
+      with
+      timePF:=res.timePF
+      timeDoc:=res.timeDoc
+      timeReparse:=res.timeReparse
+    }
 
   def FormatResult.preservesCst (res : FormatResult) : Bool :=
     match res.cstDifferenceError with
       | .none => true
       | .some _ => false
-
-
 
   def debugReportAsPPL (res : FormatResult): PPL := Id.run do
     let stx := res.stx
@@ -305,7 +324,6 @@ namespace PrettyFormat
     let state := res.state
 
     let mut errString := ""
-
 
     match generatedSyntax with
     | Except.error e => errString := errString ++ "---- Could not parse syntax again ----\n" ++ e
@@ -337,45 +355,78 @@ namespace PrettyFormat
     let formattedReport := toDoc debugReport |>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := PrettyFormat.getPFLineLength res.opts)
     formattedReport
 
-  def pfTopLevel (stx : Syntax) (environments : List Environment) (options : Options) : (PPL × FormatState) :=
-    let introduceContext := ((pf stx).run { envs:= environments, options:= options})
+  def pfTopLevel (stx : Syntax) (formatters : List (Name → Option Rule)) (options : Options) : (PPL × FormatState) :=
+    let introduceContext := pf formatters stx
     let introduceState := introduceContext.run {nextId := 0, diagnostic:= {failures := [], missingFormatters := Std.HashMap.empty}}
     introduceState.run
 
+  partial def measureTime (f : IO α) : IO (α × Nat):= do
+    let before ← IO.monoNanosNow
+    let res ← f
+    let after ← IO.monoNanosNow
+    return (res, after - before)
   -- Also fallback to standard syntax if formatting fails
-  partial def pfTopLevelWithDebug (stx : Syntax) (environments : List Environment) (opts : Options) (fileName:String): IO FormatResult := do
-    let (ppl, state) := pfTopLevel stx environments opts
-    let formattedPPL := toDoc ppl |>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
+  partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters : List (Name → Option Rule)) (opts : Options) (fileName:String): IO FormatResult := do
+    let ((ppl, state), timePF) ← measureTime do
+      return pfTopLevel stx formatters opts
 
-    -- parse the syntax
-    -- let generatedSyntax ← reparseSyntax formattedPPL fileName environments opts
+    let (formattedPPL, timeDoc) ← measureTime do
+      return toDoc ppl |>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
 
-    let generatedSyntax := Except.error "Not implemented"
+
+    let (generatedSyntax, timeReparse) ← measureTime do
+      try
+        return ← reparseSyntax formattedPPL fileName env opts
+      catch e =>
+        return Except.error e.toString
+
     let cstDifferenceError := match generatedSyntax with
       | Except.error _ => compareCst stx Syntax.missing
       | Except.ok generatedStx => compareCst stx generatedStx
 
-    return {stx, ppl, opts, formattedPPL, generatedSyntax, state, cstDifferenceError}
+    return {stx, ppl, opts, formattedPPL, generatedSyntax, state, cstDifferenceError, timePF, timeReparse, timeDoc}
   where
-    reparseSyntax (formattedPPL fileName: String) (envs : List Environment) (opts : Options): IO (Except String Syntax) :=
+    reparseSyntax (formattedPPL fileName: String) (env : Environment) (opts : Options): IO (Except String Syntax) := do
       let inputCtx := Parser.mkInputContext formattedPPL fileName
       -- assume that the user environment is the first one in the list
       -- because the this allows the user to override formatting options that are set by the formatter
-      match envs.get? 0 with
-      | none => .error "Could not parse syntax again: no environment"
-      | some env => do
-        return .error s!"the ppl:={formattedPPL}"
-        -- let s ← IO.processCommands inputCtx {}
-        --   { Command.mkState env {} opts with infoState := { enabled := true } }
-        -- let topLevelCmds ← extractTopLevelCommands s
-        -- if topLevelCmds.size == 2 then
-        --   match topLevelCmds.get? 0 with
-        --   | some command => return .ok command.stx
-        --   | none => return .error "Could not parse syntax again: no command"
-        -- else
-        --   let combinedCommands := topLevelCmds.map (fun c => toString (repr c)) |>.toList |> "\n".intercalate
+      -- match envs.get? 0 with
+      -- | none => .error "Could not parse syntax again: no environment"
+      -- | some env => do
+      --   return .error s!"the ppl:={formattedPPL}"
 
-        --   return .error s!"Could not parse syntax again: Expected 2 commands to be generated, your top level command and end of file\n But generated {topLevelCmds.size} commands {combinedCommands}"
+      let s ← IO.processCommands inputCtx {}
+        { Command.mkState env {} opts with infoState := { enabled := true } }
+      let topLevelCmds ← extractTopLevelCommands s
+      if topLevelCmds.size == 2 then
+        match topLevelCmds.get? 0 with
+        | some command => return .ok command.stx
+        | none => return .error "Could not parse syntax again: no command"
+      else
+        let combinedCommands := topLevelCmds.map (fun c => toString (repr c)) |>.toList |> "\n".intercalate
+
+        return .error s!"Could not parse syntax again: Expected 2 commands to be generated, your top level command and end of file\n But generated {topLevelCmds.size} commands {combinedCommands}"
+
+  def formatterFromEnvironment (env : Environment) (name : Name) : Option Rule := do
+    let fmts := pFormatAttr.getValues env name
+
+    for fmt in fmts do
+      return fmt
+
+    none
+
+  def getCoreFormatters : IO (Formatter) := do
+    let fmts ← coreFormatters.get
+
+    return fun name => do
+      match fmts[name]? with
+      | some f => return f
+      | none => none
+
+  def getFormatters (env : Environment): IO Formatters := do
+    let coreFormatters : Name → (Option Rule) ← getCoreFormatters
+    let envFormatters := formatterFromEnvironment env
+    return [coreFormatters, envFormatters]
 
 
   def assumeMissing (stx : Syntax): RuleM Unit := do
@@ -392,8 +443,50 @@ end PrettyFormat
 initialize formattedCode : IO.Ref String ← IO.mkRef "initialString"
 
 
+def format (stx : Syntax) : (RuleCtx) := do
+  (← read) stx
 
-initialize coreFormatters : IO.Ref (Std.HashMap Name (Rule)) ← IO.mkRef {}
+def formatThen (sep : PPL) (stx : Syntax) : (RuleCtx) := do
+    let formatted := (← read) stx
+    let ppl ← formatted
+    if isEmpty ppl then
+      return text ""
+    else
+      return ppl <> sep
+
+def formatThen' (sep : PPL) (ppl : PPL) : PPL :=
+    if isEmpty ppl then
+      text ""
+    else
+      ppl <> sep
+
+
+
+def combine (sep : PPL) (arr : Array Syntax) : (RuleCtx) := do
+    let r ← read
+    pfCombineWithSeparator sep r arr
+
+def combineArgs (sep : PPL) (stx:Syntax) : (RuleCtx) := do
+    let r ← read
+    pfCombineWithSeparator sep r stx.getArgs
+
+infixr:45 " ?> " => fun l r => formatThen' r l
+
+def monadicBindFormat (l : Syntax) (r : PPL) : RuleCtx :=
+  do return (← format l) ?> r
+
+
+
+
+def combineArgs' (sep : PPL) (stxs:List Syntax) : RuleCtx :=
+  stxs.foldlM (fun acc s => do return acc <> (← formatThen sep s)) (text "")
+  -- stxs.foldlM (fun acc s => do return acc <> (← s ??> sep)) (text "")
+
+instance : Alternative RuleM where
+  failure := fun {_} => do
+
+    throw (FormatError.NotHandled (← get).stx.head!.getKind (← get).stx)
+  orElse  := PrettyFormat.orElse
 
 --- CORE FORMATTER ---
 -- Core formatters are used to format
@@ -401,7 +494,6 @@ def registerCoreFormatter (name : Name) (f: Rule) : IO Unit := do
   let fmts ← coreFormatters.get
   let fmts := fmts.insert name f
   coreFormatters.set fmts
-  return ()
 
 def getCoreFormatter (name : Name) : IO (Option Rule) := do
   let fmts ← coreFormatters.get
@@ -488,6 +580,13 @@ macro_rules
       -- let a := typeExpr.getId
       `(initialize registerCoreFormatter $(quote typeExpr.getId) $fnExpr)
 
+def mmm(stx : Syntax) : IO Unit :=
+  match stx with
+  | `(#coreFmt $typeExpr:ident $fnExpr:term) =>
+    IO.println "hi"
+  | _ => IO.println "other"
+
+
 syntax (name:=fmtCmd) "#fmt " ident term : command
 macro_rules
   | `(#fmt $typeExpr $fnExpr) =>
@@ -512,3 +611,92 @@ macro_rules
 --   let f ← evalExpr Rule `($3)
 --   registerCoreFormatter name f
 --   return ()
+
+partial def getCommands (cmds : Syntax) : StateT (Array Syntax) Id Unit := do
+  if cmds.getKind == nullKind || cmds.getKind == ``Parser.Module.header then
+    for cmd in cmds.getArgs do
+      getCommands cmd
+  else
+    modify (·.push cmds)
+
+partial def reprintCore : Syntax → Option Format
+  | Syntax.missing => none
+  | Syntax.atom _ val => val.trim
+  | Syntax.ident _ rawVal _ _ => rawVal.toString
+  | Syntax.node _ _ args =>
+    match args.toList.filterMap reprintCore with
+    | [] => none
+    | [arg] => arg
+    | args => Format.group <| Format.nest 2 <| Format.line.joinSep args
+
+def reprint (stx : Syntax) : Format :=
+  reprintCore stx |>.getD ""
+
+def printCommands (cmds : Syntax) : CoreM Unit := do
+  for cmd in getCommands cmds |>.run #[] |>.2 do
+    try
+      IO.println (← ppCommand ⟨cmd⟩).pretty
+    catch e =>
+      IO.println f!"/-\ncannot print: {← e.toMessageData.format}\n{reprint cmd}\n-/"
+
+def failWith (msg : String) (exitCode : UInt8 := 1) : IO α := do
+  (← IO.getStderr).putStrLn msg
+  IO.Process.exit exitCode
+
+
+
+def prettyPrintSourceInfo : SourceInfo → String
+  | .original (leading : Substring) (pos : String.Pos) (trailing : Substring) (endPos : String.Pos) => s!"leading:{leading} pos: {pos} trailing: {trailing} endPos: {endPos}"
+  | .synthetic (pos : String.Pos) (endPos : String.Pos) (canonical) => s!"synthetic: pos:{pos} endPos: {endPos}: cannonical: {canonical}"
+  | .none => "nosource"
+
+
+partial def prettyPrintSyntax : Syntax → String
+  | .missing => "missing"
+  | .node (info : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
+    (args.map prettyPrintSyntax |>.toList |> " ".intercalate)
+  | .atom (info : SourceInfo) (val : String) => s!"{val}"
+  | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) => s!"{val}"
+
+
+
+-- source reformat.lean
+unsafe def parseModule (input : String) (fileName : String) (opts : Options := {}) (trustLevel : UInt32 := 1024) :
+    IO <| (Array CommandSyntax × Environment) := do
+  let mainModuleName := Name.anonymous -- FIXME
+  let inputCtx := Parser.mkInputContext input fileName
+  let (header, parserState, messages) ← Parser.parseHeader inputCtx
+
+  let _ ← Lean.enableInitializersExecution
+
+  -- IO.println s!"{prettyPrintSyntax header}"
+  -- printall error messages and exit
+  if messages.hasErrors then
+    for msg in messages.toList do
+      IO.println s!"{← msg.toString}"
+    failWith "error in header"
+  else
+    IO.println "no errors in header"
+  let (env, messages) ← processHeader header opts messages inputCtx trustLevel
+  -- We return this version of env because it has executed initializers.
+  let env := env.setMainModule mainModuleName
+
+  if messages.hasErrors then
+    for msg in messages.toList do
+      IO.println s!"{← msg.toString}"
+    failWith "error in process header"
+  else
+    IO.println "no errors in process header"
+  -- let env0 := env
+  IO.println "can we process?"
+  let s ← IO.processCommands inputCtx parserState -- TODO: learn about this line
+    { Command.mkState env messages opts with infoState := { enabled := true } }
+
+  IO.println "can we process!"
+  let topLevelCmds : Array CommandSyntax ← extractTopLevelCommands s
+
+  return (#[{ env := s.commandState.env, options:= opts, stx := header : CommandSyntax }] ++ topLevelCmds, env)
+
+unsafe def parseModule' (fileName : String) (opts : Options) : IO (Array CommandSyntax × Environment):= do
+  let input ← IO.FS.readFile fileName
+  parseModule input fileName opts
