@@ -179,10 +179,10 @@ set_option pf.debugErrors 1
 --   add 2 3
 
 -- set_option pf.debugSyntax 1
--- set_option pf.debugMissingFormatters 1
--- set_option pf.debugErrors 1
+set_option pf.debugMissingFormatters 1
+set_option pf.debugErrors 1
 -- set_option pf.debugSyntaxAfter 1
--- set_option pf.debugPPL 1
+set_option pf.debugPPL 1
 -- #format
 
 -- #fmt Lean.Parser.Term.app fun
@@ -195,8 +195,10 @@ set_option pf.debugErrors 1
 --   return (← pf functionName) <> text " " <> (← pfCombineWithSeparator (text " ") arguments.getArgs)
 -- | _ => failure
 
-def add (x y:Nat):Nat:=
-  x + y
+
+def add (x y:Nat): Nat:=
+  x + -- some important comment, which is stored(and lost) in the ⟪+⟫ atom
+    y
 
 
 def test2 : Nat :=
@@ -206,5 +208,39 @@ where
     x + y
 
 
-private def b(y:Nat):Nat:=
-  3 * y
+/-FORMAT DEBUG:
+---- Could not parse syntax again ----
+Could not parse syntax again: Expected 2 commands to be generated, your top level command and end of file
+ But generated 1 commands Lean.Syntax.node
+  (Lean.SourceInfo.none)
+  `Lean.Parser.Command.eoi
+  #[Lean.Syntax.atom (Lean.SourceInfo.original "".toSubstring { byteIdx := 0 } "".toSubstring { byteIdx := 0 }) ""]
+
+-/
+
+/-
+Lean.Syntax.node
+              (Lean.SourceInfo.none)
+              `«term_+_»
+              #[Lean.Syntax.ident
+                  (Lean.SourceInfo.original "".toSubstring { byteIdx := 5638 } " ".toSubstring { byteIdx := 5639 })
+                  "x".toSubstring
+                  `x
+                  [],
+                Lean.Syntax.atom
+                  (Lean.SourceInfo.original "".toSubstring { byteIdx := 5640 } " ".toSubstring { byteIdx := 5641 })
+                  "+",
+                Lean.Syntax.ident
+                  (Lean.SourceInfo.original "".toSubstring { byteIdx := 5642 } "\n\n\n".toSubstring { byteIdx := 5643 })
+                  "y".toSubstring
+                  `y
+                  []]
+-/
+def testSyntax : IO Bool := do
+  let a := mkNode `plus #[mkIdent `x, mkAtom "+", mkIdent `y]
+
+  let _ ← IO.println s!"{repr (a)}"
+
+  return isEmpty (toPPL a)
+
+#eval testSyntax

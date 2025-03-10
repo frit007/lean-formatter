@@ -18,15 +18,15 @@ open Lean.Meta
 open System
 
 namespace PrettyFormat
-  partial def nest (n:Nat) (s: RuleM PPL): RuleM PPL :=
-    do
-    let state ← get
-    set {state with nesting := state.nesting + n}
-    let result ← s
-    let o:PPL := PPL.nest n (result)
-    let state' ← get
-    set {state' with nesting := state.nesting}
-    return o
+  -- partial def nest (n:Nat) (s: RuleM PPL): RuleM PPL :=
+  --   do
+  --   let state ← get
+  --   set {state with nesting := state.nesting + n}
+  --   let result ← s
+  --   let o:PPL := PPL.nest n (result)
+  --   let state' ← get
+  --   set {state' with nesting := state.nesting}
+  --   return o
 
   partial def nl : RuleM PPL := do
     modify fun s => {s with startOfLine := true}
@@ -41,6 +41,7 @@ namespace PrettyFormat
     findPatternStartAux s pattern
 
 
+
   def findFirstMatch (fmts : List (Name → Option Rule)) (kind : SyntaxNodeKind) (r : RuleRec) (stx : Syntax) :FormatM (List FormatError ⊕ PPL):= do
     let mut errors : List FormatError := []
     for fmt in fmts do
@@ -50,12 +51,32 @@ namespace PrettyFormat
       | none =>
         errors := errors
       | some f =>
-
-        match ← (f stx |>.run r) with
-        | .ok ppl => return Sum.inr ppl
+        match ← f stx with
+        | .ok ppl => return Sum.inr (← expandSyntax r ppl)
         | .error e => errors := e::errors
 
     return Sum.inl errors
+  where
+    -- since the result might contain Syntax we expand it now
+    expandSyntax (r : RuleRec) : PPL → FormatM PPL
+      | .var v =>
+        return PPL.var v
+      | .optionalSpace spacing =>
+        return PPL.optionalSpace spacing
+      | .commentText s => return PPL.commentText s
+      | .error s => return PPL.error s
+      | .text s => return PPL.text s
+      | .nl => return PPL.nl
+      | .choice left right => return PPL.choice (← expandSyntax r left) (← expandSyntax r right)
+      | .flatten inner => return PPL.flatten (← expandSyntax r inner)
+      | .align inner => return PPL.align (← expandSyntax r inner)
+      | .nest n inner => return PPL.nest n (← expandSyntax r inner)
+      | .unallignedConcat left right => return PPL.unallignedConcat (← expandSyntax r left) (← expandSyntax r right)
+      | .letExpr var expr body => return PPL.letExpr var (← expandSyntax r expr) (← expandSyntax r body)
+      -- for performance reasons stop when seing another group, to avoid re-evaluating the entire tree
+      -- this is safe because another group has already been
+      | .group name ppl => return PPL.group name ppl
+      | .stx stx => return ← r stx
 
   def updateSyntaxTrail (stx : Syntax) (f:FormatM PPL) : FormatM PPL := do
     let _ ← modify (fun s => {s with stx := stx::s.stx})
@@ -116,18 +137,6 @@ namespace PrettyFormat
       |> unknownStringToPPL trailing.toString
     | _ => f p
 
-  partial def pfCombineWithSeparator (sep: PPL) (r: RuleRec) (stxArr : Array Syntax) : FormatM PPL := do
-    let mut combined := text ""
-    for p in stxArr do
-      let p' ← r p
-      if isEmpty p' then
-        combined := combined -- no change
-      else if isEmpty combined then
-        combined := p' --
-      else
-        combined := combined <> sep <> p'
-    return combined
-
   partial def pfCombine (r: RuleRec) (stxArr : Array Syntax) : FormatM PPL := do
     let mut res := text ""
     for p in stxArr do
@@ -179,6 +188,26 @@ namespace PrettyFormat
         return (unknownSurroundWithComments info (text "")) (fun p => p <> text rawVal.toString)
       else
         return (surroundWithComments info (text "")) (fun p => p <> text rawVal.toString)
+
+
+  def combine [ToPPL a] [ToPPL b] (sep: a) (stxArr : Array b) : PPL := Id.run do
+    let mut combined := text ""
+    for p in stxArr do
+      let p' ← toPPL p
+      if isEmpty p' then
+        combined := combined -- no change
+      else if isEmpty combined then
+        combined := p' --
+      else
+        combined := combined <> sep <> p'
+    return combined
+
+  def combineArgs [ToPPL a] (sep : a) (stx : Syntax) : PPL :=
+    combine sep stx.getArgs
+
+  def combineArgs' [ToPPL a] (sep : a) (stx : Syntax) : RuleM PPL :=
+    return combine sep stx.getArgs
+
 
   structure CommandSyntax where
     env : Environment
@@ -443,44 +472,26 @@ end PrettyFormat
 initialize formattedCode : IO.Ref String ← IO.mkRef "initialString"
 
 
-def format (stx : Syntax) : (RuleCtx) := do
-  (← read) stx
+-- def format (stx : Syntax) : (RuleCtx) := do
+--   (← read) stx
 
-def formatThen (sep : PPL) (stx : Syntax) : (RuleCtx) := do
-    let formatted := (← read) stx
-    let ppl ← formatted
-    if isEmpty ppl then
-      return text ""
-    else
-      return ppl <> sep
+-- def formatThen (sep : PPL) (stx : Syntax) : (RuleCtx) := do
+--     let formatted := (← read) stx
+--     let ppl ← formatted
+--     if isEmpty ppl then
+--       return text ""
+--     else
+--       return ppl <> sep
 
-def formatThen' (sep : PPL) (ppl : PPL) : PPL :=
-    if isEmpty ppl then
-      text ""
-    else
-      ppl <> sep
+def formatThen [ToPPL a] [ToPPL b] (sep : a) (ppl : b) : PPL :=
+  let pplPPL := toPPL ppl
+  if isEmpty pplPPL then
+    text ""
+  else
+    pplPPL <> sep
 
+infixr:45 " ?> " => fun l r => formatThen r l
 
-
-def combine (sep : PPL) (arr : Array Syntax) : (RuleCtx) := do
-    let r ← read
-    pfCombineWithSeparator sep r arr
-
-def combineArgs (sep : PPL) (stx:Syntax) : (RuleCtx) := do
-    let r ← read
-    pfCombineWithSeparator sep r stx.getArgs
-
-infixr:45 " ?> " => fun l r => formatThen' r l
-
-def monadicBindFormat (l : Syntax) (r : PPL) : RuleCtx :=
-  do return (← format l) ?> r
-
-
-
-
-def combineArgs' (sep : PPL) (stxs:List Syntax) : RuleCtx :=
-  stxs.foldlM (fun acc s => do return acc <> (← formatThen sep s)) (text "")
-  -- stxs.foldlM (fun acc s => do return acc <> (← s ??> sep)) (text "")
 
 instance : Alternative RuleM where
   failure := fun {_} => do
@@ -580,11 +591,6 @@ macro_rules
       -- let a := typeExpr.getId
       `(initialize registerCoreFormatter $(quote typeExpr.getId) $fnExpr)
 
-def mmm(stx : Syntax) : IO Unit :=
-  match stx with
-  | `(#coreFmt $typeExpr:ident $fnExpr:term) =>
-    IO.println "hi"
-  | _ => IO.println "other"
 
 
 syntax (name:=fmtCmd) "#fmt " ident term : command

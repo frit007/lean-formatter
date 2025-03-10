@@ -43,17 +43,37 @@ inductive PPL where
   | nest : Nat → PPL → PPL
   | var : String → PPL
   | letExpr : String → PPL → PPL → PPL
+  -- group is only intended to be used internally by the library
+  -- group must satisfy the invariant: group cannot contain PPL.stx. Because the formatting rules will never be applied
+  -- group does not affect the way the code is formatted
+  -- group helps us debug the output by keeping track of which formatting rule produced the output
   | group : String → PPL → PPL
-  | escape : Array Syntax → (Array PPL → PPL)
+  | stx : (Syntax → PPL)
   deriving Repr
 
-infixl:40 " <^> " => fun l r => PPL.choice l r
-infixl:40 " <> " => fun l r => PPL.unallignedConcat l r
-macro "let " x:ident " = " s:term " in " body:term : term =>
-  `(PPL.letExpr $(Lean.quote x.getId.toString) $s $body)
 
-infixl:40 " <$> " => fun l r => l <> PPL.nl <> r
-infixl:40 " <+> " => fun l r => l <> PPL.align r
+class ToPPL (α : Type u) where
+  toPPL : α → PPL
+
+export ToPPL (toPPL)
+
+instance : ToPPL PPL where
+  toPPL ppl:= ppl
+instance : ToPPL Syntax where
+  toPPL stx:= PPL.stx stx
+instance : ToPPL String where
+  toPPL text:= PPL.text text
+instance : ToPPL (TSyntax a) where
+  toPPL tstx:= PPL.stx tstx.raw
+
+infixl:40 " <^> " => fun l r => PPL.choice (toPPL l) (toPPL r)
+infixl:40 " <> " => fun l r => PPL.unallignedConcat (toPPL l) (toPPL r)
+macro "let " x:ident " = " s:term " in " body:term : term =>
+  `(PPL.letExpr $(Lean.quote x.getId.toString) $s (toPPL $body))
+
+infixl:40 " <$> " => fun l r => l <> PPL.nl <> (toPPL r)
+infixl:40 " <+> " => fun l r => l <> PPL.align (toPPL r)
+
 
 -- abstractions
 -- a choice between flattening or not
@@ -135,7 +155,7 @@ where
     let vars := (var, expr) :: vars
     prettyPrintWithVars' vars indent body
   | .group _ ppl => prettyPrintWithVars' vars indent ppl
-  | .escape stxs _ => s!"escape {stxs.size}"
+  | .stx stx => s!"stx {stx}"
 
 
 partial def output (ppl:PPL) : String :=
@@ -159,7 +179,7 @@ where
   | .unallignedConcat left right => s!"({output' indent left}) <> ({output' indent right})"
   | .letExpr var expr body => s!"let {var} = ({output' indent expr}) in ({output' indent body})"
   | .group s inner => s!"\n {repeatString " " indent} ({s}: {output' (indent + 2) inner})"
-  | .escape stxs a => "escape\n"
+  | .stx stx => "stx\n"
 
 def escapeQuotes (s : String) : String :=
   s.replace "\"" "\\\""
@@ -190,32 +210,43 @@ where
   | .unallignedConcat l r => Doc.concat (toDoc' vars l) (toDoc' vars r)
   | .letExpr var expr body => toDoc' ((var, toDoc' vars expr)::vars) body
   | .group _ inner => toDoc' vars inner
-  | .escape _ _ => Doc.text ""
+  | .stx _ => Doc.text "unformated syntax"
 
 
 
 partial def toOcaml : PPL → String
-  | PPL.var v => "exit_"++v
-  | PPL.commentText s => s!"text \"{escapeQuotes s}\"\n"
-  | PPL.optionalSpace spacing =>
+  | .var v => "exit_"++v
+  | .commentText s => s!"text \"{escapeQuotes s}\"\n"
+  | .optionalSpace spacing =>
     match spacing with
     | PPLSpacing.space => s!"text \" \"\n"
     | PPLSpacing.newline => "nl\n"
     | PPLSpacing.either => s!"text \" \"\n"
-  | PPL.error s => s!"error {escapeQuotes s}\n"
-  | PPL.text s => s!"text \"{escapeQuotes s}\""
-  | PPL.nl => "nl\n"
-  | PPL.choice left right => s!"({toOcaml left})\n<|>({toOcaml right})"
-  | PPL.flatten inner => s!"flatten ({toOcaml inner})\n"
-  | PPL.align inner => s!"align ({toOcaml inner})"
-  | PPL.nest n inner => s!"nest {n} ({toOcaml inner})"
-  | PPL.unallignedConcat left right => s!"({toOcaml left}) ^^ ({toOcaml right})"
-  | PPL.letExpr var expr body => s!"let exit_{var} = ({toOcaml expr}) in ({toOcaml body})\n"
-  | PPL.group _ inner => toOcaml inner
-  | .escape _ _ => "text \"\""
+  | .error s => s!"error {escapeQuotes s}\n"
+  | .text s => s!"text \"{escapeQuotes s}\""
+  | .nl => "nl\n"
+  | .choice left right => s!"({toOcaml left})\n<|>({toOcaml right})"
+  | .flatten inner => s!"flatten ({toOcaml inner})\n"
+  | .align inner => s!"align ({toOcaml inner})"
+  | .nest n inner => s!"nest {n} ({toOcaml inner})"
+  | .unallignedConcat left right => s!"({toOcaml left}) ^^ ({toOcaml right})"
+  | .letExpr var expr body => s!"let exit_{var} = ({toOcaml expr}) in ({toOcaml body})\n"
+  | .group _ inner => toOcaml inner
+  | .stx _ => "text \"\""
 
-partial def isEmpty (ppl : PPL) : Bool :=
-  isEmpty' [] ppl
+partial def isSyntaxEmpty (stx : Syntax) : Bool :=
+  match stx with
+  | .missing => false
+  | .node _ _ args =>
+    args.all (fun s => isSyntaxEmpty s)
+  | .atom (info : SourceInfo) (val : String) =>
+    val.trim.length == 0 -- TODO: there might be a comment attached to this node
+  | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) =>
+    (toString rawVal).trim.length == 0
+
+
+partial def isEmpty [ToPPL a] (ppl : a) : Bool :=
+  isEmpty' [] (toPPL ppl)
 where
   isEmpty' (vars : List (String × PPL)) : (ppl : PPL) → Bool
   | PPL.var v =>
@@ -237,7 +268,7 @@ where
     let vars := (var, expr) :: vars
     isEmpty' vars body
   | PPL.group _ inner => isEmpty' vars inner
-  | .escape _ _ => false
+  | .stx s => isSyntaxEmpty s
 
 
 
@@ -314,7 +345,7 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
   | .unallignedConcat left right => (left, state) -- TODO
   | .letExpr var expr body => (body, state) -- TODO
   | .group _ inner => (inner, state)
-  | .escape stxs funs => (PPL.escape stxs funs, state)
+  | .stx stx => (PPL.stx stx, state)
 
 
   inductive newlineState where
@@ -414,8 +445,8 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
   abbrev RuleRec := (Syntax → FormatM PPL)
   -- abbrev Rule := RuleRec → Array Syntax → (RuleM PPL)
 
-  abbrev RuleCtx := ReaderT RuleRec RuleM PPL
-  abbrev Rule := Syntax → RuleCtx
+  -- abbrev RuleCtx := ReaderT RuleRec RuleM PPL
+  abbrev Rule := Syntax → RuleM PPL
 
   abbrev Formatter := (Name → Option Rule)
   abbrev Formatters := List (Formatter)
