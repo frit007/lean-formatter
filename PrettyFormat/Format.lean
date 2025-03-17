@@ -19,17 +19,17 @@ def runPrettyExpressive (fileName : String) : IO Unit := do
   else
     IO.println "failure"
 
-unsafe def prettifyPPL (filename:String) (ppl: PPL) : IO String := do
-  let template ← IO.FS.readFile "template.ml"
-  let ocamlOutput := toOcaml ppl
-  let templateWithConttent := template.replace "$$$FORMAT$$$" (ocamlOutput)
-  let ocamlFile := filename++".lean.ml"
-  IO.FS.writeFile ocamlFile templateWithConttent
-  IO.println "done"
-  let _ ← runPrettyExpressive filename
-  let result ← IO.FS.readFile (filename++".out.lean")
+-- unsafe def prettifyPPL (filename:String) (ppl: PPL) : IO String := do
+--   let template ← IO.FS.readFile "template.ml"
+--   let ocamlOutput := toOcaml ppl
+--   let templateWithConttent := template.replace "$$$FORMAT$$$" (ocamlOutput)
+--   let ocamlFile := filename++".lean.ml"
+--   IO.FS.writeFile ocamlFile templateWithConttent
+--   IO.println "done"
+--   let _ ← runPrettyExpressive filename
+--   let result ← IO.FS.readFile (filename++".out.lean")
 
-  return result
+--   return result
 
 partial def findAllLeanFilesInProject (projectFolder:String) : IO (List String) := do
   IO.println projectFolder
@@ -150,7 +150,7 @@ def parseArguments (args:List String) : Except String InputArguments := do
 
   -- return leadingUpdated
 
-unsafe def formatASingleFile (fileName : String) (args : InputArguments): IO (String × FormatReport) := do
+unsafe def formatFile (fileName : String) (args : InputArguments): IO (String × FormatReport) := do
   let ((moduleStx, env), timeReadAndParse) ← measureTime do
     let input ← IO.FS.readFile (fileName)
     parseModule input fileName
@@ -165,6 +165,7 @@ unsafe def formatASingleFile (fileName : String) (args : InputArguments): IO (St
   let mut formatted := ""
   let mut report : FormatReport := {}
 
+
   for a in leadingUpdated do
     let formatters ← getFormatters env
     let result ← pfTopLevelWithDebug a env formatters options fileName
@@ -178,6 +179,9 @@ unsafe def formatASingleFile (fileName : String) (args : InputArguments): IO (St
   | .replace => some fileName
   | .none => none
 
+  if report.totalCommands - report.formattedCommands ≠ 0 then
+    IO.println s!"{fileName} failed {report.formattedCommands} / {report.totalCommands}"
+
   if let some f := fileName then
     IO.FS.writeFile (f) (s!"{formatted}")
 
@@ -190,7 +194,7 @@ unsafe def formatFolder (folderName : String) (args : InputArguments)  : IO (Lis
   let mut report' : FormatReport := {}
   for file in files do
     IO.println s!"before {file}"
-    let (_, report) ← formatASingleFile file args
+    let (_, report) ← formatFile file args
     report' := report'.combineReports report
     -- reports := report::reports
   return [report']
@@ -245,15 +249,10 @@ unsafe def main (args : List String) : IO (Unit) := do
   | Except.ok args => do
 
     initSearchPath (← findSysroot) (args.includeFolders.map (fun c => FilePath.mk c))
-    -- let coreEnv ← importModules #[{module := `CoreFormatters}] {}  -- Load Lean’s core environment
-    let (_,coreEnv) ← parseModule (← IO.FS.readFile "PrettyFormat/ImportCoreFormatters.lean") "PrettyFormat/ImportCoreFormatters.lean"
-
-    let a := pFormatAttr.getValues coreEnv `Lean.Parser.Command.declId
-    IO.println s!"found it?{a.length}"
 
     match args.fileName with
     | some fileName => do
-      let (_,report) ← (formatASingleFile fileName args)
+      let (_,report) ← (formatFile fileName args)
       printReport report
     | none => match args.folder with
       | some folder => do
@@ -337,36 +336,36 @@ partial def tellMeAbout (kind: SyntaxNodeKind) (args: Array Syntax): MetaM (Arra
   | none => failure
 
 
-declare_syntax_cat fmtCase
-syntax num : fmtCase
-syntax "| " term " => " term: fmtCase
-syntax "| " term " => " term fmtCase: fmtCase
+-- declare_syntax_cat fmtCase
+-- syntax num : fmtCase
+-- syntax "| " term " => " term: fmtCase
+-- syntax "| " term " => " term fmtCase: fmtCase
 
 
-syntax (name:=coreFmCmd)"#coreFm " ident fmtCase : command
+-- syntax (name:=coreFmCmd)"#coreFm " ident fmtCase : command
 
 
-initialize IO.println "helllo"
+-- initialize IO.println "helllo"
 
-macro_rules
-| `(#coreFm $i:ident $a:fmtCase) =>
-  -- `(initialize IO Unit := IO.mkref fun a => 2)
-  -- let ccc := match a with
-  -- | `("| " $a:term " => " $b:term) => 2
-  -- | _ => 3
+-- macro_rules
+-- | `(#coreFm $i:ident $a:fmtCase) =>
+--   -- `(initialize IO Unit := IO.mkref fun a => 2)
+--   -- let ccc := match a with
+--   -- | `("| " $a:term " => " $b:term) => 2
+--   -- | _ => 3
 
-  `(initialize IO.println "some commend??aarst")
-
-
-#coreFm name
-| `($a + $b) => IO.println "what"
+--   `(initialize IO.println "some commend??aarst")
 
 
-macro_rules
-| `($a + $b) => `(println! "matched addition!")
+-- #coreFm name
+-- | `($a + $b) => IO.println "what"
 
 
-macro_rules
-| `(command | #coreFmt ppline ($a:term) ) => `("matched repeated addition")
+-- macro_rules
+-- | `($a + $b) => `(println! "matched addition!")
 
-#eval 1 + 2
+
+-- macro_rules
+-- | `(command | #coreFmt ppline ($a:term) ) => `("matched repeated addition")
+
+-- #eval 1 + 2

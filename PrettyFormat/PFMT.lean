@@ -1,8 +1,9 @@
+import Std.Data.HashSet
+open Std
 /-
-A lean implementation of Pretty Expressive (https://arxiv.org/abs/2310.01530)
-Author: Henrik Böving
+Originally created by Henrik Böving(https://github.com/hargoniX/pfmt) based on pretty expressive (https://arxiv.org/abs/2310.01530),
+Frithjof added fail, endOfLineComment, and bubbleComment
 -/
-import Lean
 namespace Pfmt
 
 /-
@@ -35,7 +36,6 @@ lllllrrrrrrrr
 rrrrrr
 ```
 -/
-| hardNewline
 | concat (lhs rhs : Doc)
 /--
 Render `doc` width the indentation level increased by `nesting`.
@@ -47,12 +47,32 @@ Render `doc` with the indentation level set to the column position.
 | align (doc : Doc)
 /--
 Make a choice between rendering either `lhs` or `rhs` by picking the prettier variant.
+If one of the sides `fail`, then other side is chosen. If both sides `fail`, then the result is also `fail`
 -/
 | choice (lhs rhs : Doc)
+
 /--
 Reset the indentation level to 0.
 -/
 | reset (doc : Doc)
+/--
+The comment will be placed after the last newline before this line
+-/
+| bubbleComment (comment : String)
+/--
+These comments have been placed at the end of the line
+This is enforced by failing any document, where the next character is not a newLine
+
+Technically we know that these comments are legal syntax, because we were able to parse the document
+But to follow the style of the library author we will only allow the comment if a newline is possible
+The main reason for this is to respect the decision made by flatten. The intended use is to combine both comments (bubbleComment c <^> endOfLineComment c)
+-/
+| endOfLineComment (comment : String)
+/--
+Fail will never be rendered.
+This error will propagate until the next choice, where branches containing errors are eliminated.
+-/
+| fail
 -- TODO: Think about adding the cost constructor. It does however make type inference much harder
 -- TODO: Think about adding fail.
 deriving Inhabited, Repr
@@ -94,6 +114,17 @@ structure Measure (χ : Type) where
   -/
   -- TODO: Maybe Array?
   layout : List String → List String
+  /--
+  Force the next character to be newline. If it is not then fail
+  -/
+  forcedNewLine : Bool
+  /--
+
+  -/
+  startsWithNewLine : Bool
+  /--
+  -/
+  fail: Bool
 deriving Inhabited
 
 instance [Cost χ] : LE (Measure χ) where
@@ -102,13 +133,19 @@ instance [Cost χ] : LE (Measure χ) where
 instance [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : Measure χ) : Decidable (lhs ≤ rhs) :=
   inferInstanceAs (Decidable (lhs.last ≤ rhs.last ∧ lhs.cost ≤ rhs.cost))
 
+
+def Measure.mkFail [Cost χ] (cost : χ ) : Measure χ := {last := 0, cost:=cost, layout := fun _ => panic! "We never want to print fail", forcedNewLine := false, startsWithNewLine := false, fail := true}
+
 /--
 Lifting `Doc.concat` to `Measure`.
 -/
-def Measure.concat [Cost χ] (lhs rhs : Measure χ) : Measure χ :=
-  { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => lhs.layout (rhs.layout ss) }
+def Measure.concat [Cost χ] (lhs rhs : Measure χ) :Measure χ :=
+  match lhs.fail || rhs.fail || (lhs.forcedNewLine && !rhs.startsWithNewLine) with
+  | true => Measure.mkFail lhs.cost
+  | _ => { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), forcedNewLine := rhs.forcedNewLine, startsWithNewLine := lhs.startsWithNewLine, fail := false }
 
-instance [Cost χ] : Append (Measure χ) where
+
+instance [Cost χ] : Append ((Measure χ)) where
   append := Measure.concat
 
 /--
@@ -132,7 +169,7 @@ deriving Inhabited
 If `MeasureSet.merge` receives two `MeasureSet.set` we use this operation to combine them
 into a new Pareto front with correct ordering.
 -/
-private partial def mergeSet [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : List (Measure χ)) (acc : List (Measure χ) := []) : List (Measure χ) :=
+private partial def mergeSet [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : List ((Measure χ))) (acc : List (Measure χ) := []) : List (Measure χ) :=
   match h1:lhs, h2:rhs with
   | [], _ => acc ++ rhs
   | _, [] => acc ++ lhs
@@ -145,6 +182,8 @@ private partial def mergeSet [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rh
       mergeSet ls rhs (l :: acc)
     else
       mergeSet lhs rs (r :: acc)
+
+
 /--
 Combine the results from two `MeasureSet`s.
 -/
@@ -152,7 +191,42 @@ def MeasureSet.merge [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : Meas
   match lhs, rhs with
   | _, .tainted .. => lhs
   | .tainted .., _ => rhs
-  | .set lhs, .set rhs => .set (mergeSet lhs rhs)
+  | .set lhs, .set rhs =>
+    let lhs' := lhs.filter (fun s => !s.fail)
+    let rhs' := rhs.filter (fun s => !s.fail)
+    .set (mergeSet lhs' rhs')
+
+
+
+def placeCommentReverse (indent : Nat) (comment : String) : List String → List String
+| []        => [comment, "\n", "".pushn ' ' indent]
+| "\n" :: xs => "\n" :: comment :: "".pushn ' ' indent :: "\n" :: xs
+| s :: xs    =>
+  -- [toString (s :: xs)]
+  -- reconstruct the indentation level
+  let remainingCharacters := s.trimLeft.length
+  let whiteSpaceCharacters := s.length - remainingCharacters
+  let newIndentationLevel :=
+    if remainingCharacters > 0 then
+      whiteSpaceCharacters
+    else
+      whiteSpaceCharacters + indent
+  s :: (placeCommentReverse newIndentationLevel comment xs)
+
+def placeComment (indent : Nat) (comment : String) : List String → List String
+-- | a => (placeCommentReverse indent comment a.reverse).reverse
+| []        => ["\n", comment, "".pushn ' ' indent]
+| "\n" :: xs => "\n" :: comment :: "".pushn ' ' indent :: "\n" :: xs
+| s :: xs    =>
+  -- reconstruct the indentation level
+  let remainingCharacters := s.trimLeft.length
+  let whiteSpaceCharacters := s.length - remainingCharacters
+  let newIndentationLevel :=
+    if remainingCharacters > 0 then
+      whiteSpaceCharacters
+    else
+      whiteSpaceCharacters + indent
+  s :: (placeComment newIndentationLevel comment xs)
 
 /--
 This function efficiently computes a Pareto front for the problem of rendering
@@ -189,24 +263,49 @@ where
         last := col + s.length,
         cost := Cost.text widthLimit col s.length
         layout := fun ss => s :: ss
+        startsWithNewLine := s.startsWith "\n"
+        forcedNewLine := false
+        fail := false
       }]
     | .newline _ =>
       .set [{
         last := indent,
         cost := Cost.nl indent,
-        layout := fun ss => "\n" :: "".pushn ' ' indent :: ss
+        layout := fun ss =>  "".pushn ' ' indent :: "\n" :: ss
+        startsWithNewLine := true
+        forcedNewLine := false
+        fail := false
       }]
-    | .hardNewline =>
-        .set [{
-          last := indent,
-          cost := Cost.nl indent,
-          layout := fun ss => "\n" :: "".pushn ' ' indent :: ss
-        }]
     | .concat lhs rhs => processConcat (fun l => core rhs l.last indent) (core lhs col indent)
     | .choice lhs rhs => MeasureSet.merge (core lhs col indent) (core rhs col indent)
     | .nest indentOffset doc => core doc col (indent + indentOffset)
     | .align doc => core doc col col
     | .reset doc => core doc col 0
+    | .bubbleComment comment => .set [{
+      last := col
+      -- prioritize placing comments where they were placed by the user
+      cost := (Cost.text widthLimit (indent + widthLimit) comment.length) + Cost.nl indent
+      layout := placeComment 0 comment
+      forcedNewLine := false
+      startsWithNewLine := false
+      fail := false
+    }]
+    | .endOfLineComment comment => .set [{
+      last := col + comment.length
+      cost := Cost.nl indent
+      layout := (fun ss => comment :: ss)
+      forcedNewLine := true
+      startsWithNewLine := false
+      fail := false
+    }]
+    | .fail => .set [{
+      last := 0
+      cost := Cost.nl indent
+      layout := (fun ss => ss)
+      forcedNewLine := false
+      startsWithNewLine := false
+      fail := true
+    }]
 
   /--
   Compute the set that contains the concatenations of all possible lhs measures
@@ -258,36 +357,78 @@ deriving Inhabited
 /--
 Render a choice less `Doc`. For choiceful documents use `Doc.prettyPrint`.
 -/
+-- def Doc.render (doc : Doc) (col : Nat) : String :=
+--   String.intercalate "\n" (go doc col 0).toList
+-- where
+--   /--
+--   A straight forward implementation of the choice less document semantics from Fig 8.
+--   -/
+--   go (doc : Doc) (col indent : Nat) : Array String := Id.run do
+--     match doc with
+--     | .text str => #[str]
+--     | .newline _ => #["", "".pushn ' ' indent]
+--     | .align doc => go doc col col
+--     | .nest indentOffset doc => go doc col (indent + indentOffset)
+--     | .concat lhs rhs =>
+--       let mut lrender := go lhs col indent
+--       if lrender.size == 1 then
+--         let lfirst := lrender[0]!
+--         let mut rrender := go rhs (col + lfirst.length) indent
+--         let rfirst := rrender[0]!
+--         rrender := rrender.set! 0 (lfirst ++ rfirst)
+--         rrender
+--       else
+--         let llast := lrender[lrender.size - 1]!
+--         let rrender := go rhs (llast.length) indent
+--         let rfirst := rrender[0]!
+--         lrender := lrender.set! (lrender.size - 1) (llast ++ rfirst)
+--         lrender := lrender ++ rrender[0:(rrender.size - 1)]
+--         lrender
+--     | .reset doc => go doc col 0
+--     | .choice .. => panic! "Not a choice less document"
+--     | .endOfLineComment comment => #[comment]
+--     | .bubbleComment comment => #[comment]
+--     | .fail => panic! "A choice less document does not allow fail"
 def Doc.render (doc : Doc) (col : Nat) : String :=
-  String.intercalate "\n" (go doc col 0).toList
+  String.join (go doc col 0 []).reverse
 where
   /--
   A straight forward implementation of the choice less document semantics from Fig 8.
   -/
-  go (doc : Doc) (col indent : Nat) : Array String := Id.run do
+  go (doc : Doc) (col indent : Nat) (prev : List String): List String := Id.run do
     match doc with
-    | .text str => #[str]
-    | .newline _ => #["", "".pushn ' ' indent]
-    | .hardNewline => #["", "".pushn ' ' indent]
-    | .align doc => go doc col col
-    | .nest indentOffset doc => go doc col (indent + indentOffset)
+    | .text str =>
+      str :: prev
+    | .newline _ => "".pushn ' ' indent :: "\n" :: prev
+    | .align doc => go doc col col prev
+    | .nest indentOffset doc => go doc col (indent + indentOffset) @ prev
     | .concat lhs rhs =>
-      let mut lrender := go lhs col indent
-      if lrender.size == 1 then
-        let lfirst := lrender[0]!
-        let mut rrender := go rhs (col + lfirst.length) indent
-        let rfirst := rrender[0]!
-        rrender := rrender.set! 0 (lfirst ++ rfirst)
-        rrender
-      else
-        let llast := lrender[lrender.size - 1]!
-        let rrender := go rhs (llast.length) indent
-        let rfirst := rrender[0]!
-        lrender := lrender.set! (lrender.size - 1) (llast ++ rfirst)
-        lrender := lrender ++ rrender[0:(rrender.size - 1)]
-        lrender
-    | .reset doc => go doc col 0
+      let mut lrender := go lhs col indent prev
+      go rhs (lineLength lrender) indent lrender
+      -- if lrender.length == 1 then
+      --   let lfirst := lrender[0]!
+      --   let mut rrender := go rhs (col + lfirst.length) indent
+      --   let rfirst := rrender[0]!
+      --   rrender := rrender.set! 0 (lfirst ++ rfirst)
+      --   rrender
+      -- else
+      --   let llast := lrender[lrender.size - 1]!
+      --   let rrender := go rhs (llast.length) indent
+      --   let rfirst := rrender[0]!
+      --   lrender := lrender.set! (lrender.size - 1) (llast ++ rfirst)
+      --   lrender := lrender ++ rrender[0:(rrender.size - 1)]
+      --   lrender
+    | .reset doc => go doc col 0 prev
     | .choice .. => panic! "Not a choice less document"
+    | .endOfLineComment comment => comment :: prev
+    | .bubbleComment comment => placeComment 0 comment prev
+    | .fail => panic! "A choice less document does not allow fail"
+
+  lineLength : List String → Nat
+    | [] => 0
+    | "\n"::_ => 0
+    | x :: xs => x.length + lineLength xs
+
 
 /--
 Find an optimal layout for a document and render it.
@@ -300,7 +441,7 @@ def Doc.print (χ : Type) [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := �
     | .set (measure :: _) => (measure, false)
     | .set [] => panic! "Empty measure sets are impossible"
   {
-    layout := String.join (measure.layout []),
+    layout := String.join (measure.layout []).reverse,
     isTainted := isTainted,
     cost := measure.cost
   }
@@ -332,10 +473,16 @@ def Doc.flatten (doc : Doc) : Doc :=
   match doc with
   | .text str => .text str
   | .newline s => .text s
-  | .hardNewline => panic! "Cannot flatten hard new line"
   | .align doc | .reset doc | .nest _ doc => doc.flatten
   | .concat lhs rhs => .concat lhs.flatten rhs.flatten
   | .choice lhs rhs => .choice lhs.flatten rhs.flatten
+  | .bubbleComment comment => .bubbleComment comment
+  /-
+  This does not instantly fail, because the following document allows a endOfLineComment embedded in a flatten section
+  `flatten (text "content" <> endOfLineComment comment) <> nl`
+  -/
+  | .endOfLineComment comment => .endOfLineComment comment
+  | .fail => .fail
 
 /--
 Lay out a `Doc` or its `Doc.flatten`ed version.

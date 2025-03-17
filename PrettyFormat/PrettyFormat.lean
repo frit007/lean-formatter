@@ -1,9 +1,3 @@
-
--- inductive Value where
---   | newline : Value
---   | text : String → Value
---   | choice : List Value → Value
---   deriving Repr
 import Std.Data.HashMap
 import Lean
 import PFMT
@@ -20,35 +14,67 @@ open Lean.Elab.Command
 
 namespace PrettyFormat
 
-inductive PPLSpacing where
-  | space : PPLSpacing
-  | newline : PPLSpacing
-  | either : PPLSpacing
+structure PPLSpacing where
+  space : Bool := true
+  -- will be flattened to a space
+  newline : Bool := true
+  -- will not be flattened to a space, and instead fails (if there are no alternative spacing options)
+  hardNewline : Bool := true
+  none : Bool := true
+  /--
+  used to counter the following scenario:
+  flatten (text "-- comment" <> optionalSpace hardNewline) <> optionalSpace hardNewline
+  -/
+  flattened := false
   deriving Repr, BEq
 
 inductive PPL where
   | nl : PPL
   | text : String → PPL
-  -- This will be turned into text, but is used to detect
-  -- whether we accidentally flatten code to be part of a comment
-  | commentText : String → PPL
+  -- -- This will be turned into text, but is used to detect
+  -- -- whether we accidentally flatten code to be part of a comment
+  -- | commentText : String → PPL
   -- If we get into a scenario where we cannot parse the
   | error : String → PPL
   -- optional space, that will be reduced to a single space or a newline
-  | optionalSpace : PPLSpacing → PPL
+  /--
+  Spacing is intended to fix a few issues.
+  We want to place a newline or a space between two elements.
+  But we also want to tell child rules which choice we made.
+  The motivation for this is do-notation, because it
+
+  -/
+  -- | spacing : PPLSpacing → PPL
   | choice : PPL → PPL → PPL
   | unallignedConcat : PPL → PPL → PPL
+  -- Part of the hierarchy because we delay the evaluation
   | flatten : PPL → PPL
   | align : PPL → PPL
   | nest : Nat → PPL → PPL
-  | var : String → PPL
-  | letExpr : String → PPL → PPL → PPL
-  -- group is only intended to be used internally by the library
-  -- group must satisfy the invariant: group cannot contain PPL.stx. Because the formatting rules will never be applied
-  -- group does not affect the way the code is formatted
-  -- group helps us debug the output by keeping track of which formatting rule produced the output
-  | group : String → PPL → PPL
+  -- rule is only intended to be used internally by the library
+  -- rule must satisfy the invariant: rule cannot contain PPL.stx. Because the formatting rules will never be applied
+  -- rule does not affect the way the code is formatted
+  -- rule helps us debug the output by keeping track of which formatting rule produced the output
+  | rule : String → PPL → PPL
+  /--
+  To make the syntax generation cleaner we delay
+  -/
   | stx : (Syntax → PPL)
+  -- Used for potentially handling multiline strings
+  | reset : (PPL → PPL)
+  /--
+  bubbleComment will be placed before the current line with the same indentation
+  -/
+  | bubbleComment (comment : String)
+  /--
+  These comments have been placed at the end of the line
+  This is enforced by failing any document, where the next character is not a newLine
+
+  Technically we know that these comments are legal syntax, because we were able to parse the document
+  But to follow the style of the library author we will only allow the comment if a newline is possible
+  The main reason for this is to respect the decision made by flatten. The intended use is to combine both comments (bubbleUpComment c <^> endOfLineComment c)
+  -/
+  | endOfLineComment (comment : String)
   deriving Repr
 
 
@@ -66,12 +92,47 @@ instance : ToPPL String where
 instance : ToPPL (TSyntax a) where
   toPPL tstx:= PPL.stx tstx.raw
 
-infixl:40 " <^> " => fun l r => PPL.choice (toPPL l) (toPPL r)
-infixl:40 " <> " => fun l r => PPL.unallignedConcat (toPPL l) (toPPL r)
-macro "let " x:ident " = " s:term " in " body:term : term =>
-  `(PPL.letExpr $(Lean.quote x.getId.toString) $s (toPPL $body))
+partial def isSyntaxEmpty (stx : Syntax) : Bool :=
+  match stx with
+  | .missing => false
+  | .node _ _ args =>
+    args.all (fun s => isSyntaxEmpty s)
+  | .atom (info : SourceInfo) (val : String) =>
+    val.trim.length == 0 -- TODO: there might be a comment attached to this node
+  | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) =>
+    (toString rawVal).trim.length == 0
 
-infixl:40 " <$> " => fun l r => l <> PPL.nl <> (toPPL r)
+partial def isEmpty [ToPPL a] (ppl : a) : Bool :=
+  isEmpty' (toPPL ppl)
+where
+  isEmpty' : (ppl : PPL) → Bool
+  -- | .spacing s =>
+  --   false
+  | .error s => true
+  | .text s => s.length == 0
+  | .nl => false
+  | .choice left right => isEmpty' left && isEmpty' right
+  | .flatten inner => isEmpty' inner
+  | .align inner => isEmpty' inner
+  | .nest n inner => isEmpty' inner
+  | .unallignedConcat left right => isEmpty' left && isEmpty' right
+  | .stx s => isSyntaxEmpty s
+  | .bubbleComment s => s.length == 0
+  | .endOfLineComment s => false
+  | .reset inner => isEmpty' inner
+  | .rule _ inner => isEmpty' inner
+
+infixl:40 " <^> " => fun l r => PPL.choice (toPPL l) (toPPL r)
+infixl:40 " <> " => fun l r =>
+  match (isEmpty l, isEmpty r) with
+  | (true, _) => (toPPL r)
+  | (_, true) => (toPPL l)
+  | _ => PPL.unallignedConcat (toPPL l) (toPPL r)
+
+-- macro "let " x:ident " = " s:term " in " body:term : term =>
+--   `(PPL.letExpr $(Lean.quote x.getId.toString) $s (toPPL $body))
+
+-- infixl:40 " <$> " => fun l r => l <> PPL.nl <> (toPPL r)
 infixl:40 " <+> " => fun l r => l <> PPL.align (toPPL r)
 
 
@@ -87,8 +148,8 @@ infixl:40 " <+> " => fun l r => l <> PPL.align (toPPL r)
 def text (s: String): PPL:=
   PPL.text s
 
-def commentText (s: String): PPL:=
-  PPL.commentText s
+def nl : PPL:=
+  PPL.nl
 
 def flatten (s: PPL): PPL:=
   PPL.flatten s
@@ -96,15 +157,13 @@ def flatten (s: PPL): PPL:=
 def align (s: PPL): PPL:=
   PPL.align s
 
-
 def group (s: PPL): PPL:=
   s <^> flatten s
 
 def empty := -- used when starting a new node
   text ""
 
-def v (s: String): PPL:=
-  PPL.var s
+
 
 
 -- def genTest2: PPL :=
@@ -129,147 +188,80 @@ def repeatString (s : String) (n : Nat) : String :=
 
 
 
-partial def prettyPrintWithVars  (ppl : PPL) : String :=
-  prettyPrintWithVars' [] 0 ppl
+partial def prettyPrint  (ppl : PPL) : String :=
+  prettyPrint' 0 ppl
 where
-  prettyPrintWithVars' (vars : List (String × PPL)) (indent:Nat): (ppl : PPL) → String
-  | .var v =>
-    match vars.find? (fun (name, _) => name = v) with
-    | some (_, value) => prettyPrintWithVars' vars indent value
-    | none => v
-  | .optionalSpace spacing =>
-    match spacing with
-    | PPLSpacing.space => " "
-    | PPLSpacing.newline => "\n"
-    | PPLSpacing.either => "\n"
-  | .commentText s => s
+  prettyPrint' (indent:Nat): (ppl : PPL) → String
+  -- | spacing spacing =>
+  --   match spacing with
+  --   | PPLSpacing.space => " "
+  --   | PPLSpacing.newline => "\n"
+  --   | PPLSpacing.either => "\n"
   | .error s => "\n" ++ s ++ " "
   | .text s => s
   | .nl => "\n" ++ repeatString " " indent
-  | .choice left right => prettyPrintWithVars' vars indent left ++ " | " ++ prettyPrintWithVars' vars indent right
-  | .flatten inner => prettyPrintWithVars' vars indent inner
-  | .align inner => prettyPrintWithVars' vars indent inner
-  | .nest n inner => prettyPrintWithVars' vars (indent + n) inner
-  | .unallignedConcat left right => prettyPrintWithVars' vars indent left ++ prettyPrintWithVars' vars indent right
-  | .letExpr var expr body =>
-    let vars := (var, expr) :: vars
-    prettyPrintWithVars' vars indent body
-  | .group _ ppl => prettyPrintWithVars' vars indent ppl
+  | .choice left right => prettyPrint' indent left ++ " | " ++ prettyPrint' indent right
+  | .flatten inner => prettyPrint' indent inner
+  | .align inner => prettyPrint' indent inner
+  | .nest n inner => prettyPrint' (indent + n) inner
+  | .unallignedConcat left right => prettyPrint' indent left ++ prettyPrint' indent right
   | .stx stx => s!"stx {stx}"
+  | .bubbleComment s => s!"bubbleComment {s}"
+  | .endOfLineComment s => s!"endOfLineComment {s}"
+  | .reset s => s!"reset {prettyPrint' 0 s}"
+  | .rule name s => s!"rule {name} {prettyPrint' indent s}"
 
 
 partial def output (ppl:PPL) : String :=
   output' 0 ppl
 where
   output' (indent : Nat) : PPL → String
-  | .var v => v
-  | .optionalSpace spacing =>
-    match spacing with
-    | PPLSpacing.space => s!"text \" \""
-    | PPLSpacing.newline => "nl"
-    | PPLSpacing.either => s!"text \" \""
-  | .commentText s => s!"text \"{s}\""
+  -- | .optionalSpace spacing =>
+  --   match spacing with
+  --   | PPLSpacing.space => s!"text \" \""
+  --   | PPLSpacing.newline => "nl"
+  --   | PPLSpacing.either => s!"text \" \""
   | .error s => s!"error {s}"
   | .text s => s!"text \"{s}\""
   | .nl => "nl"
-  | .choice left right => s!"({output' indent left})<|>({output' indent right})\n"
+  | .choice left right => s!"({output' indent left})<|>({output' indent right}){newline indent}"
   | .flatten inner => s!"flatten ({output' indent inner})"
   | .align inner => s!"align ({output' indent inner})"
   | .nest n inner => s!"nest {n} ({output' indent inner})"
   | .unallignedConcat left right => s!"({output' indent left}) <> ({output' indent right})"
-  | .letExpr var expr body => s!"let {var} = ({output' indent expr}) in ({output' indent body})"
-  | .group s inner => s!"\n {repeatString " " indent} ({s}: {output' (indent + 2) inner})"
   | .stx stx => "stx\n"
+  | .bubbleComment s => s!"bubbleComment \"{s}\""
+  | .endOfLineComment s => s!"endOfLine \"{s}\""
+  | .rule name s => s!"rule {name} {newline indent} ({output' (indent + 2) s}) {newline indent}"
+  | .reset s => s!"reset ({output' indent s})"
+  newline indent := "\n" ++ repeatString " " indent
 
 def escapeQuotes (s : String) : String :=
   s.replace "\"" "\\\""
 
 open Pfmt
 
-partial def toDoc (ppl:PPL): Doc :=
-  toDoc' [] ppl
-where
- toDoc' (vars : List (String × Doc)) : PPL → Doc
-  | .var v =>
-    match vars.find? (fun (name, _) => name = v) with
-    | some (_, value) => value
-    | none => Doc.text s!"missing variable {v}"
-  | .commentText s => Doc.text s
-  | .optionalSpace spacing =>
-    match spacing with
-    | PPLSpacing.space => Doc.text s!" "
-    | PPLSpacing.newline => Doc.newline ""
-    | PPLSpacing.either => Doc.text s!" " <|||> Doc.newline ""
+partial def toDoc : PPL → Doc
+  -- | spacing spacing =>
+  --   match spacing with
+  --   | PPLSpacing.space => Doc.text s!" "
+  --   | PPLSpacing.newline => Doc.newline ""
+  --   | PPLSpacing.either => Doc.text s!" " <|||> Doc.newline ""
   | .error s => Doc.text s
   | .text s => Doc.text s
-  | .nl => Doc.newline ""
-  | .choice l r => (toDoc' vars l) <|||> (toDoc' vars r)
-  | .flatten inner => toDoc' vars inner -- for now nothing
-  | .align inner => Doc.align (toDoc' vars inner)
-  | .nest n inner => Doc.nest n (toDoc' vars inner)
-  | .unallignedConcat l r => Doc.concat (toDoc' vars l) (toDoc' vars r)
-  | .letExpr var expr body => toDoc' ((var, toDoc' vars expr)::vars) body
-  | .group _ inner => toDoc' vars inner
+  | .nl => Doc.newline " "
+  | .choice l r => (toDoc l) <|||> (toDoc r)
+  | .flatten inner => Doc.flatten (toDoc inner)
+  | .align inner => Doc.align (toDoc inner)
+  | .nest n inner => Doc.nest n (toDoc inner)
+  | .unallignedConcat l r => Doc.concat (toDoc l) (toDoc r)
   | .stx _ => Doc.text "unformated syntax"
-
-
-
-partial def toOcaml : PPL → String
-  | .var v => "exit_"++v
-  | .commentText s => s!"text \"{escapeQuotes s}\"\n"
-  | .optionalSpace spacing =>
-    match spacing with
-    | PPLSpacing.space => s!"text \" \"\n"
-    | PPLSpacing.newline => "nl\n"
-    | PPLSpacing.either => s!"text \" \"\n"
-  | .error s => s!"error {escapeQuotes s}\n"
-  | .text s => s!"text \"{escapeQuotes s}\""
-  | .nl => "nl\n"
-  | .choice left right => s!"({toOcaml left})\n<|>({toOcaml right})"
-  | .flatten inner => s!"flatten ({toOcaml inner})\n"
-  | .align inner => s!"align ({toOcaml inner})"
-  | .nest n inner => s!"nest {n} ({toOcaml inner})"
-  | .unallignedConcat left right => s!"({toOcaml left}) ^^ ({toOcaml right})"
-  | .letExpr var expr body => s!"let exit_{var} = ({toOcaml expr}) in ({toOcaml body})\n"
-  | .group _ inner => toOcaml inner
-  | .stx _ => "text \"\""
-
-partial def isSyntaxEmpty (stx : Syntax) : Bool :=
-  match stx with
-  | .missing => false
-  | .node _ _ args =>
-    args.all (fun s => isSyntaxEmpty s)
-  | .atom (info : SourceInfo) (val : String) =>
-    val.trim.length == 0 -- TODO: there might be a comment attached to this node
-  | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) =>
-    (toString rawVal).trim.length == 0
-
-
-partial def isEmpty [ToPPL a] (ppl : a) : Bool :=
-  isEmpty' [] (toPPL ppl)
-where
-  isEmpty' (vars : List (String × PPL)) : (ppl : PPL) → Bool
-  | PPL.var v =>
-    match vars.find? (fun (name, _) => name = v) with
-    | some (_, value) => isEmpty' vars value
-    | none => true
-  | PPL.commentText s => s.trim.length == 0
-  | PPL.optionalSpace _ =>
-    true
-  | PPL.error s => true
-  | PPL.text s => s.trim.length == 0
-  | PPL.nl => false
-  | PPL.choice left right => isEmpty' vars left && isEmpty' vars right
-  | PPL.flatten inner => isEmpty' vars inner
-  | PPL.align inner => isEmpty' vars inner
-  | PPL.nest n inner => isEmpty' vars inner
-  | PPL.unallignedConcat left right => isEmpty' vars left && isEmpty' vars right
-  | PPL.letExpr var expr body =>
-    let vars := (var, expr) :: vars
-    isEmpty' vars body
-  | PPL.group _ inner => isEmpty' vars inner
-  | .stx s => isSyntaxEmpty s
-
+  | .bubbleComment s => Doc.bubbleComment (s)
+  | .endOfLineComment s => Doc.endOfLineComment s
+  | .reset s => Doc.reset (toDoc s)
+  /- rule does not affect the way the code is formatted
+  -/
+  | .rule name s => (toDoc s)
 
 
 structure CommentFix where
@@ -281,72 +273,82 @@ structure CommentFix where
 instance : Inhabited PPL where
   default := PPL.error "default error"
 
-instance : Inhabited CommentFix where
-  default := { flatten := false, startedComment := false, vars := {} }
+-- instance : Inhabited CommentFix where
+--   default := { flatten := false, startedComment := false, vars := {} }
 
-instance : Inhabited (PPL × CommentFix) where
-  default := (default, default)
+-- instance : Inhabited (PPL × CommentFix) where
+--   default := (default, default)
 
--- propagate errors up the tree
--- detect whether comments accidentally are flattened, and if they are eliminate choices where that happens
--- this will probably be moved to creation of the object
-partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
-  | .var v =>
-    if state.flatten then
-      match state.vars[v]? with
-    | some (value) =>
-      match eliminateErrors state value with
-      | (PPL.error e, s') => (PPL.error e, s')
-      | _ => (PPL.var v, state)
-    | none => (PPL.error s!"Using undefined variable {v}", state)
-   else (PPL.var v, state)
-  | .commentText s => (PPL.commentText s, {state with startedComment := true })
-  | .optionalSpace spacing =>
-    if state.flatten && spacing == PPLSpacing.newline then
-      (PPL.optionalSpace spacing, state)
-    else
-      (PPL.optionalSpace spacing, {state with startedComment := state.startedComment && spacing != PPLSpacing.newline})
-  | .error s => (PPL.error s, state)
-  | .text s =>
-    if state.flatten && state.startedComment && s.trim.length > 0 then
-      (PPL.error "cannot write text after an inline comment", state)
-    else
-      (PPL.text s, state)
-  | .nl =>
-    if state.flatten then
-      (text " ", state)
-    else
-      (PPL.nl, {state with startedComment := false})
-  | .choice left right => --s!"({output left})<|>({output right})"
-    match (eliminateErrors state left, eliminateErrors state right) with
-    | ((PPL.error l, _), (PPL.error r, _)) => (PPL.error s!"{l}<|>{r}", state)
-    | ((PPL.error l, _), (v, s)) => (v,s)
-    | ((v,s), (PPL.error r, _)) => (v,s)
-    | ((vl,sl), (vr,sr)) => (vl<^>vr, {sl with startedComment:= sl.startedComment && sr.startedComment})
-  | .flatten inner =>
-    let (inner', state') := (eliminateErrors {state with flatten:=true} inner)
-    match inner' with
-    | .error x => (PPL.error x, {state with startedComment:= state'.startedComment})
-    | _ => (PPL.flatten inner', {state with startedComment:= state'.startedComment})
-  | .align inner =>
-    let (inner', state') := (eliminateErrors state inner)
-    match inner' with
-    | .error x => (PPL.error x, {state with startedComment:= state'.startedComment})
-    | _ => (PPL.align inner', {state with startedComment:= state'.startedComment})
-  | .nest n inner =>
-    let (inner', state') := (eliminateErrors state inner)
-    match inner' with
-    | .error x => (PPL.error x, state)
-    | _ =>
-      if state.flatten then
-        (PPL.nest n inner', state)
-      else
-        (PPL.nest n inner', {state with startedComment:= state'.startedComment})
-  | .unallignedConcat left right => (left, state) -- TODO
-  | .letExpr var expr body => (body, state) -- TODO
-  | .group _ inner => (inner, state)
-  | .stx stx => (PPL.stx stx, state)
+-- -- propagate errors up the tree
+-- -- detect whether comments accidentally are flattened, and if they are eliminate choices where that happens
+-- -- this will probably be moved to creation of the object
+-- partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
+--   | .var v =>
+--     if state.flatten then
+--       match state.vars[v]? with
+--     | some (value) =>
+--       match eliminateErrors state value with
+--       | (PPL.error e, s') => (PPL.error e, s')
+--       | _ => (PPL.var v, state)
+--     | none => (PPL.error s!"Using undefined variable {v}", state)
+--    else (PPL.var v, state)
+--   | .commentText s => (PPL.commentText s, {state with startedComment := true })
+--   | .optionalSpace spacing =>
+--     if state.flatten && spacing == PPLSpacing.newline then
+--       (PPL.optionalSpace spacing, state)
+--     else
+--       (PPL.optionalSpace spacing, {state with startedComment := state.startedComment && spacing != PPLSpacing.newline})
+--   | .error s => (PPL.error s, state)
+--   | .text s =>
+--     if state.flatten && state.startedComment && s.trim.length > 0 then
+--       (PPL.error "cannot write text after an inline comment", state)
+--     else
+--       (PPL.text s, state)
+--   | .nl =>
+--     if state.flatten then
+--       (text " ", state)
+--     else
+--       (PPL.nl, {state with startedComment := false})
+--   | .choice left right => --s!"({output left})<|>({output right})"
+--     match (eliminateErrors state left, eliminateErrors state right) with
+--     | ((PPL.error l, _), (PPL.error r, _)) => (PPL.error s!"{l}<|>{r}", state)
+--     | ((PPL.error l, _), (v, s)) => (v,s)
+--     | ((v,s), (PPL.error r, _)) => (v,s)
+--     | ((vl,sl), (vr,sr)) => (vl<^>vr, {sl with startedComment:= sl.startedComment && sr.startedComment})
+--   | .flatten inner =>
+--     let (inner', state') := (eliminateErrors {state with flatten:=true} inner)
+--     match inner' with
+--     | .error x => (PPL.error x, {state with startedComment:= state'.startedComment})
+--     | _ => (PPL.flatten inner', {state with startedComment:= state'.startedComment})
+--   | .align inner =>
+--     let (inner', state') := (eliminateErrors state inner)
+--     match inner' with
+--     | .error x => (PPL.error x, {state with startedComment:= state'.startedComment})
+--     | _ => (PPL.align inner', {state with startedComment:= state'.startedComment})
+--   | .nest n inner =>
+--     let (inner', state') := (eliminateErrors state inner)
+--     match inner' with
+--     | .error x => (PPL.error x, state)
+--     | _ =>
+--       if state.flatten then
+--         (PPL.nest n inner', state)
+--       else
+--         (PPL.nest n inner', {state with startedComment:= state'.startedComment})
+--   | .unallignedConcat left right => (left, state) -- TODO
+--   | .letExpr var expr body => (body, state) -- TODO
+--   | .group _ inner => (inner, state)
+--   | .stx stx => (PPL.stx stx, state)
 
+  -- before this step we must flatten and
+  -- the problem with bubbling comments is that if we have bunch of unknown newlines in a row (" " <^> PPL.nl), then we must make a choice for the 2 scenarios.
+  -- This means we need 2^n space to store the tree, where n is the number of optional newlines(" " <^> PPL.nl)
+  -- can we use variables to improve this?
+  -- I think it would at least cut down on the space requirement
+  -- let us take the (" " <^> PPL.nl) <> longStatement ==> let v1 = longStatement in ((" " <> v1) <^> (PPL.nl <> v1))
+  -- this is preferable to
+  -- let v1 = longStatement in ((" " <> v1) <^> (PPL.nl <> v1))
+
+  -- The problem is: if I want to modify an existing variable (this is also the flatten problem)
 
   inductive newlineState where
     | none
@@ -428,7 +430,7 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
     options: Options := {}
     nextId : Nat := 0 -- used to generate ids
     nesting: Nat := 0 -- how many times we have nested
-    startOfLine: Bool := true -- whether we are at the start of a line
+    -- startOfLine: Bool := true -- whether we are at the start of a line
     unknown: Bool := false -- whether we are in an unknown state (If we are in an unkown state we will try to keep the value the same as it was)
     diagnostic: FormattingDiagnostic := {}
     stx : List Syntax := [] -- note that syntax is in reverse order for performance reasons
@@ -446,7 +448,7 @@ partial def eliminateErrors (state: CommentFix) : PPL → (PPL × CommentFix)
   -- abbrev Rule := RuleRec → Array Syntax → (RuleM PPL)
 
   -- abbrev RuleCtx := ReaderT RuleRec RuleM PPL
-  abbrev Rule := Syntax → RuleM PPL
+  abbrev Rule := Array Syntax → RuleM PPL
 
   abbrev Formatter := (Name → Option Rule)
   abbrev Formatters := List (Formatter)
@@ -547,6 +549,11 @@ register_option pf.debugPPLGroups : Nat := {
     group    := "pf"
     descr    := "(pretty format) Add grouping around every PPL formatter"
 }
+register_option pf.debugDoc : Nat := {
+    defValue := 0
+    group    := "pf"
+    descr    := "(pretty format) debug the generated Doc"
+}
 register_option pf.warnCSTmismatch : Nat := {
     defValue := 1
     group    := "pf"
@@ -560,6 +567,7 @@ def getDebugSyntaxAfter (o : Options) : Bool := (o.get pf.debugSyntaxAfter.name 
 def getDebugErrors (o : Options) : Bool := (o.get pf.debugErrors.name pf.debugErrors.defValue) != 0
 def getDebugMissingFormatters (o : Options) : Bool := (o.get pf.debugMissingFormatters.name pf.debugMissingFormatters.defValue) != 0
 def getDebugPPL (o : Options) : Bool := (o.get pf.debugPPL.name pf.debugPPL.defValue) != 0
+def getDebugDoc (o : Options) : Bool := (o.get pf.debugDoc.name pf.debugDoc.defValue) != 0
 def getWarnCSTmismatch (o : Options) : Bool := (o.get pf.warnCSTmismatch.name pf.warnCSTmismatch.defValue) != 0
 
 initialize coreFormatters : IO.Ref (Std.HashMap Name (Rule)) ← IO.mkRef {}

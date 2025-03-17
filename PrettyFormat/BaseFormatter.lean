@@ -28,10 +28,6 @@ namespace PrettyFormat
   --   set {state' with nesting := state.nesting}
   --   return o
 
-  partial def nl : RuleM PPL := do
-    modify fun s => {s with startOfLine := true}
-    return PPL.nl
-
   partial def findPatternStartAux (s pattern : String) : Option String :=
     if s.length < pattern.length then none
     else if s.take pattern.length == pattern then some (s.drop pattern.length)
@@ -51,7 +47,7 @@ namespace PrettyFormat
       | none =>
         errors := errors
       | some f =>
-        match ← f stx with
+        match ← f stx.getArgs with
         | .ok ppl => return Sum.inr (← expandSyntax r ppl)
         | .error e => errors := e::errors
 
@@ -59,24 +55,21 @@ namespace PrettyFormat
   where
     -- since the result might contain Syntax we expand it now
     expandSyntax (r : RuleRec) : PPL → FormatM PPL
-      | .var v =>
-        return PPL.var v
-      | .optionalSpace spacing =>
-        return PPL.optionalSpace spacing
-      | .commentText s => return PPL.commentText s
-      | .error s => return PPL.error s
-      | .text s => return PPL.text s
-      | .nl => return PPL.nl
-      | .choice left right => return PPL.choice (← expandSyntax r left) (← expandSyntax r right)
-      | .flatten inner => return PPL.flatten (← expandSyntax r inner)
-      | .align inner => return PPL.align (← expandSyntax r inner)
-      | .nest n inner => return PPL.nest n (← expandSyntax r inner)
-      | .unallignedConcat left right => return PPL.unallignedConcat (← expandSyntax r left) (← expandSyntax r right)
-      | .letExpr var expr body => return PPL.letExpr var (← expandSyntax r expr) (← expandSyntax r body)
+      | .error s => return .error s
+      | .text s => return .text s
+      | .nl => return .nl
+      | .choice left right => return .choice (← expandSyntax r left) (← expandSyntax r right)
+      | .flatten inner => return .flatten (← expandSyntax r inner)
+      | .align inner => return .align (← expandSyntax r inner)
+      | .nest n inner => return .nest n (← expandSyntax r inner)
+      | .unallignedConcat left right => return .unallignedConcat (← expandSyntax r left) (← expandSyntax r right)
       -- for performance reasons stop when seing another group, to avoid re-evaluating the entire tree
       -- this is safe because another group has already been
-      | .group name ppl => return PPL.group name ppl
+      | .rule name ppl => return .rule name ppl
+      | .bubbleComment s => return .bubbleComment s
+      | .endOfLineComment s => return .endOfLineComment s
       | .stx stx => return ← r stx
+      | .reset s => return .reset (← expandSyntax r s)
 
   def updateSyntaxTrail (stx : Syntax) (f:FormatM PPL) : FormatM PPL := do
     let _ ← modify (fun s => {s with stx := stx::s.stx})
@@ -107,7 +100,7 @@ namespace PrettyFormat
       []
 
   partial def knownStringToPPL (s:String) (p: PPL) : PPL :=
-    stringCommentsStr s |>.foldl (fun p' c => p' <> commentText c <> PPL.nl) p
+    stringCommentsStr s |>.foldl (fun p' c => p' <> ((PPL.endOfLineComment (" " ++ c)) <^> PPL.bubbleComment c)) p
 
   partial def surroundWithComments (info : SourceInfo) (p:PPL) (f : PPL → PPL): PPL:=
     match info with
@@ -126,7 +119,7 @@ namespace PrettyFormat
     --   text ""
     -- else
     --   comments.foldl (fun acc p => acc <> PPL.nl <>p ) (text "") <> PPL.nl
-    unknownStringCommentsStr s |>.foldl (fun p' c => p' <> commentText c <> PPL.nl) p
+    unknownStringCommentsStr s |>.foldl (fun p' c => p' <> ((PPL.endOfLineComment c) <^> PPL.bubbleComment c)) p
 
   -- if the value is unknown then we will try to keep the value the same as it was
   partial def unknownSurroundWithComments (info : SourceInfo) (p:PPL) (f : PPL → PPL): PPL:=
@@ -160,7 +153,7 @@ namespace PrettyFormat
         let formatted ← findFirstMatch formatters kind r stx
 
         match formatted with
-        | Sum.inr ppl => return PPL.group (toString kind) ppl
+        | Sum.inr ppl => return PPL.rule (toString kind) ppl
         | Sum.inl errs =>
           let s ← get
           let d := s.diagnostic
@@ -173,7 +166,7 @@ namespace PrettyFormat
             for e in errs do
               v := (e, (← get).stx)::v
 
-          return PPL.group (toString kind) (← pfCombine r args)
+          return PPL.rule (toString kind) (← pfCombine r args)
     | .atom (info : SourceInfo) (val : String) =>
       -- return text val
       if state.unknown then
@@ -202,11 +195,10 @@ namespace PrettyFormat
         combined := combined <> sep <> p'
     return combined
 
-  def combineArgs [ToPPL a] (sep : a) (stx : Syntax) : PPL :=
-    combine sep stx.getArgs
-
-  def combineArgs' [ToPPL a] (sep : a) (stx : Syntax) : RuleM PPL :=
-    return combine sep stx.getArgs
+  def combine' [ToPPL a] (sep : a) (stx : Array Syntax) : RuleM PPL :=
+    return combine sep stx
+  -- def combineArgs' [ToPPL a] (sep : a) (stx : Syntax) : RuleM PPL :=
+  --   return combine sep stx.getArgs
 
 
   structure CommandSyntax where
@@ -323,6 +315,7 @@ namespace PrettyFormat
     stx : Syntax
     ppl : PPL
     opts : Options
+    doc : Pfmt.Doc
     formattedPPL : String
     generatedSyntax : Except String Syntax
     state : FormatState
@@ -363,13 +356,16 @@ namespace PrettyFormat
       if PrettyFormat.getDebugSyntaxAfter opts then
         errString := errString ++ "\n---- Syntax after format ----\n" ++ toString (repr generatedStx)
 
+    if PrettyFormat.getDebugDoc opts then
+      errString := errString ++ "\n---- Generated Doc ----\n" ++ toString (repr res.doc)
+
     if PrettyFormat.getDebugSyntax opts then
       errString := errString ++ "\n---- Syntax before format ----\n" ++ toString (repr stx)
 
     if (PrettyFormat.getDebugMissingFormatters opts) && state.diagnostic.missingFormatters.size > 0 then
       errString := errString ++ "\n---- Missing formatters ----\n"
       for (kind,stx) in state.diagnostic.missingFormatters do
-        errString := errString ++ s!"{kind}: {stx}\n"
+        errString := errString ++ s!"{kind}:({stx.getArgs.size}) {stx}\n"
     if (PrettyFormat.getDebugPPL opts) then
       errString := errString ++ "\n---- Generated PPL ----\n" ++ (output ppl)
 
@@ -399,8 +395,9 @@ namespace PrettyFormat
     let ((ppl, state), timePF) ← measureTime do
       return pfTopLevel stx formatters opts
 
-    let (formattedPPL, timeDoc) ← measureTime do
-      return toDoc ppl |>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
+    let ((doc, formattedPPL), timeDoc) ← measureTime do
+      let d := toDoc ppl
+      return (d, d|>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts))
 
 
     let (generatedSyntax, timeReparse) ← measureTime do
@@ -413,7 +410,7 @@ namespace PrettyFormat
       | Except.error _ => compareCst stx Syntax.missing
       | Except.ok generatedStx => compareCst stx generatedStx
 
-    return {stx, ppl, opts, formattedPPL, generatedSyntax, state, cstDifferenceError, timePF, timeReparse, timeDoc}
+    return {stx, ppl, opts, doc, formattedPPL, generatedSyntax, state, cstDifferenceError, timePF, timeReparse, timeDoc}
   where
     reparseSyntax (formattedPPL fileName: String) (env : Environment) (opts : Options): IO (Except String Syntax) := do
       let inputCtx := Parser.mkInputContext formattedPPL fileName
@@ -465,8 +462,6 @@ namespace PrettyFormat
       failure
 
 
-end PrettyFormat
-
 
 
 initialize formattedCode : IO.Ref String ← IO.mkRef "initialString"
@@ -484,13 +479,21 @@ initialize formattedCode : IO.Ref String ← IO.mkRef "initialString"
 --       return ppl <> sep
 
 def formatThen [ToPPL a] [ToPPL b] (sep : a) (ppl : b) : PPL :=
-  let pplPPL := toPPL ppl
-  if isEmpty pplPPL then
+  let p := toPPL ppl
+  if isEmpty p then
     text ""
   else
-    pplPPL <> sep
+    p <> sep
+
+def formatBefore [ToPPL a] [ToPPL b] (sep : a) (ppl : b) : PPL :=
+  let p := toPPL ppl
+  if isEmpty p then
+    text ""
+  else
+    sep <> p
 
 infixr:45 " ?> " => fun l r => formatThen r l
+infixr:45 " <? " => fun l r => formatBefore l r
 
 
 instance : Alternative RuleM where
@@ -501,10 +504,12 @@ instance : Alternative RuleM where
 
 --- CORE FORMATTER ---
 -- Core formatters are used to format
-def registerCoreFormatter (name : Name) (f: Rule) : IO Unit := do
+
+def  registerCoreFormatter  (name : Name) (f: Rule) : IO Unit := do
   let fmts ← coreFormatters.get
   let fmts := fmts.insert name f
   coreFormatters.set fmts
+
 
 def getCoreFormatter (name : Name) : IO (Option Rule) := do
   let fmts ← coreFormatters.get
@@ -681,8 +686,6 @@ unsafe def parseModule (input : String) (fileName : String) (opts : Options := {
     for msg in messages.toList do
       IO.println s!"{← msg.toString}"
     failWith "error in header"
-  else
-    IO.println "no errors in header"
   let (env, messages) ← processHeader header opts messages inputCtx trustLevel
   -- We return this version of env because it has executed initializers.
   let env := env.setMainModule mainModuleName
@@ -690,15 +693,11 @@ unsafe def parseModule (input : String) (fileName : String) (opts : Options := {
   if messages.hasErrors then
     for msg in messages.toList do
       IO.println s!"{← msg.toString}"
-    failWith "error in process header"
-  else
-    IO.println "no errors in process header"
+    failWith s!"error in process header{fileName}"
   -- let env0 := env
-  IO.println "can we process?"
   let s ← IO.processCommands inputCtx parserState -- TODO: learn about this line
     { Command.mkState env messages opts with infoState := { enabled := true } }
 
-  IO.println "can we process!"
   let topLevelCmds : Array CommandSyntax ← extractTopLevelCommands s
 
   return (#[{ env := s.commandState.env, options:= opts, stx := header : CommandSyntax }] ++ topLevelCmds, env)
@@ -706,3 +705,6 @@ unsafe def parseModule (input : String) (fileName : String) (opts : Options := {
 unsafe def parseModule' (fileName : String) (opts : Options) : IO (Array CommandSyntax × Environment):= do
   let input ← IO.FS.readFile fileName
   parseModule input fileName opts
+
+
+end PrettyFormat

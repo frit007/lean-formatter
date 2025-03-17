@@ -1,5 +1,5 @@
 {"version": "1.1.0",
  "packagesDir": ".lake/packages",
  "packages": [],
- "name": "simple_meta",
+ "name": "PrettyFormat",
  "lakeDir": ".lake"}

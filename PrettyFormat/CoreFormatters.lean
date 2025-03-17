@@ -184,17 +184,14 @@ function declaration
 
 #coreFmt Lean.Parser.Command.declaration fun
 | s =>
-  return combineArgs "" s
+  return combine "" s
 
 partial def pfDeclId : Rule
 | args => do
   -- optionally insert a new line before the next line
   let first := toPPL args[0]!
-  let var1 ← genId
-  let var2 ← genId
-  let rest := combine "" (args.getArgs.toList|>.drop 1|>.toArray)
-
-  return text " " <> PPL.letExpr var2 rest (PPL.letExpr var1 first ((v var1 <> v var2) <^> ((v var1 <$> v var2)))) <> text " "
+  let rest := combine "" (args.toList|>.drop 1|>.toArray)
+  return first <> ("" <^> PPL.nl ) <> rest
 
 
 #coreFmt Lean.Parser.Command.declId pfDeclId
@@ -202,47 +199,53 @@ partial def pfDeclId : Rule
 
 
 #coreFmt Lean.Parser.Command.optDeclSig fun
-  | `($arguments:term $returnValue:term) => do
-    -- (← read)
-    -- let aaaa := formatThen returnValue.raw (text "aa")
+  | #[arguments, returnValue] => do
     let returnVal := toPPL returnValue
-    let args := (combine (text " " <^> PPL.nl) arguments.raw.getArgs)
+    let args := (combine (text " " <^> PPL.nl) arguments.getArgs)
     if isEmpty returnVal then
       return args
     else
       if isEmpty args then
-        return (followWithSpaceIfNonEmpty returnVal)
+        return returnVal
       else
-        return args <> (text " "<^> PPL.nl) <> (followWithSpaceIfNonEmpty returnVal)
+        return args <> (text " " <^> PPL.nl) <> returnVal
   | _ => failure
 
 
 #coreFmt Lean.Parser.Command.declVal fun
 | stx =>
-  let args := stx.getArgs
+  let args := stx
   if args.size == 0 then
     return text ""
   else
     return combine " " args
 
 
-#coreFmt Lean.Parser.Term.typeSpec fun
-| a =>
-  return combine " " a.getArgs
+#coreFmt Lean.Parser.Term.typeSpec combine' (" " <^> PPL.nl)
 
 
 #coreFmt Lean.Parser.Command.definition fun
 | args => do
-  return PPL.nest 2 (combineArgs ("" <^> PPL.nl) args)
+  return PPL.nest 2 (combine (" " <^> PPL.nl) args)
 
 
-#coreFmt Lean.Parser.Command.declValSimple (combineArgs' PPL.nl)
+
+-- TODO: handle do/by notation
+#coreFmt Lean.Parser.Command.declValSimple fun
+| args => do
+  let symbol := args.get! 0
+  let rest := combine " " (args.toList|>.drop 1|>.toArray)
+  return symbol <> ((" " <> flatten rest) <^> (PPL.nl <> rest))
 
 #coreFmt Lean.Parser.Term.explicitBinder fun
-| `($lparen $var:term $typeDecl:term $binder:term $rparen) => do
-  return lparen
-    <> combine " " #[var, typeDecl, binder]
-    <> rparen
+| #[lparen, var, typeDecl, binder, rparen] => do
+  return flatten (lparen
+    <> combine " " #[
+        (combine " " var.getArgs),
+        (combine " " typeDecl.getArgs),
+        combine " " binder.getArgs
+      ]
+    <> rparen)
 | _ => failure
 
 
@@ -272,15 +275,15 @@ partial def pfDeclId : Rule
 -- | _ => failure
 
 
-#coreFmt Lean.Parser.Module.header combineArgs' (PPL.nl)
+#coreFmt Lean.Parser.Module.header combine' (PPL.nl)
 
 #coreFmt Lean.Parser.Module.import  fun
 | args => do
-  return combineArgs " " args <> PPL.nl
+  return combine " " args <> PPL.nl
 
 
 #coreFmt Lean.Parser.Command.declModifiers fun
-| `($docComment:term $attributes:term $visibility:term $noncomputableS:term $unsafeS:term $partialS:term) => do
+| #[docComment, attributes, visibility, noncomputableS, unsafeS, partialS] => do
   let modifiers := combine " " #[attributes, visibility, noncomputableS, unsafeS, partialS]
   return docComment <> modifiers ?> text " "
 | _ => failure
@@ -290,23 +293,23 @@ partial def pfDeclId : Rule
 -/
 
 #coreFmt Lean.Parser.Term.let fun
-| `($letSymbol $declaration $unknown1 $after) =>
+| #[letSymbol, declaration, unknown1, after] =>
   return (letSymbol <> text " " <> declaration <> unknown1 <> PPL.nl <> after)
 | _ => failure
 
 
 #coreFmt Lean.Parser.Term.letIdDecl fun
-| `($var $unknown1 $typeInfo $assignOperator $content) => do
+| #[var, unknown1, typeInfo, assignOperator, content] => do
   let _ := (← assumeMissing unknown1)
   -- return (← pf var) <> text " " <> (← pf unknown1) <> (← pf typeInfo) <> (← pf assignOperator) <> (← nest 2 (do (text " " <^> PPL.nl)<>(← pf content)))
-  return var <> text " " <> unknown1 <> (typeInfo ?> " ") <> assignOperator <> PPL.nest 2 ((" " <^> PPL.nl) <> content)
+  return var <> text " " <> unknown1 <> (typeInfo) <> assignOperator <> PPL.nest 2 ((" " <^> PPL.nl) <> content)
 | _ => do
   failure
 
 -- TODO: figure out what the suffix is used for.
 
 #coreFmt Lean.Parser.Termination.suffix fun
-| `($unknown1 $unknown2) => do
+| #[unknown1, unknown2] => do
   let _ := (← assumeMissing unknown1)
   let _ := (← assumeMissing unknown2)
   return text ""
@@ -315,33 +318,34 @@ partial def pfDeclId : Rule
 
 
 #coreFmt Lean.Parser.Term.app fun
-| `($functionName $arguments)  => do
-  return functionName <> " " <> (combineArgs " " arguments)
+| #[functionName, arguments]  => do
+  return functionName <> " " <> (combine " " arguments.getArgs)
 | _ => failure
 
 #coreFmt Term.app fun
-| `($functionName $arguments)  => do
-  return functionName <> " " <> combineArgs " " arguments
+| #[functionName, arguments]  => do
+  return functionName <> " " <> combine " " arguments.getArgs
 | _ => failure
 
 def termOperator : Rule := fun
-| `($left + $right) =>
-  return left <> (PPL.nl <^> " ") <> "+ " <> right
+| #[left, operator, right] =>
+  return left <> (PPL.nl <^> " ") <> operator <> " " <> right
 | _ => failure
--- | `($left $operator $right) =>
---   return left <> (PPL.nl <^> " ") <> operator <> " " <> right
--- | _ => failure
 
 #coreFmt «term_*_» termOperator
 #coreFmt «term_/_» termOperator
 #coreFmt «term_-_» termOperator
 #coreFmt «term_+_» termOperator
+#coreFmt «term_=_» termOperator
+#coreFmt «term_<_» termOperator
+#coreFmt «term_>_» termOperator
+#coreFmt «term_∧_» termOperator
 
-#coreFmt «term{}» combineArgs' ""
+#coreFmt «term{}» combine' ""
 
 
 #coreFmt Lean.Parser.Command.instance fun
-| `($kind $instanceAtom $unknown1 $unknown2 $decl $whereStructInst) => do
+| #[kind, instanceAtom, unknown1, unknown2, decl, whereStructInst] => do
   assumeMissing unknown1
   assumeMissing unknown2
   let declaration := PPL.nest 4 (combine " " #[kind, instanceAtom, decl])
@@ -349,49 +353,144 @@ def termOperator : Rule := fun
   return declaration <> text " " <> struct
 | _ => failure
 
-#coreFmt Lean.Parser.Command.whereStructInst combineArgs' PPL.nl
+#coreFmt Lean.Parser.Command.whereStructInst combine' PPL.nl
 
-#coreFmt Lean.Parser.Term.structInstFields combineArgs' PPL.nl
+#coreFmt Lean.Parser.Term.structInstFields combine' PPL.nl
 
 #coreFmt Lean.Parser.Term.structInstFieldDef fun
-| args => return PPL.nest 2 <| combineArgs (" " <^> PPL.nl) args
+| args => return PPL.nest 2 <| combine (" " <^> PPL.nl) args
 
-#coreFmt Lean.Parser.Term.fun fun
-| args => return combineArgs " " args
 
-#coreFmt Lean.Parser.Term.structInstField combineArgs' " "
+#coreFmt Lean.Parser.Term.fun combine' (" " <^> PPL.nl)
 
+#coreFmt Lean.Parser.Term.structInstField combine' " "
+
+-- TODO: Fix double space issue
 #coreFmt Lean.Parser.Term.basicFun fun
-| `($args $unknown1 $arrowAtom $content) => do
-  assumeMissing unknown1
-  let argsFormatted := combineArgs " " args
-  if isEmpty argsFormatted then
-    failure
-  else
-    return argsFormatted <> text " " <> arrowAtom <> text " " <> content
+| #[args, typeDecl, arrowAtom, content] => do
+  -- return toPPL "??????????"
+  -- assumeMissing unknown1
+  let argsFormatted := combine " " args.getArgs
+  return combine " " #[argsFormatted, flatten (toPPL typeDecl), toPPL arrowAtom] <> ((PPL.nest 2 (PPL.nl <> content)) <^> (" " <> (flatten (toPPL content))))
+    -- return argsFormatted <> text " " <> arrowAtom <> ((text " " <> flatten (toPPL content)) <^> (PPL.nl <> content))
 | _ => failure
 
 #coreFmt Lean.Parser.Term.typeAscription fun
-| `($firstParen $vars $atom $type $lastParen) => do
+| #[firstParen, vars, atom, type, lastParen] => do
   return firstParen <> (combine " " #[vars, atom, type]) <> lastParen
 | _ => failure
 
-#coreFmt Lean.Parser.Term.proj combineArgs' ""
+#coreFmt Lean.Parser.Term.proj combine' ""
 
-#coreFmt Lean.Parser.Command.declSig combineArgs' " "
+#coreFmt Lean.Parser.Command.declSig fun
+| #[explicitBinders, typeSpec] =>
+  return combine (" " <^> PPL.nl) #[((combine (" " <^> PPL.nl)) explicitBinders.getArgs), toPPL typeSpec]
+| _ => failure
 
 #coreFmt Lean.Parser.Command.docComment fun
-| args => return (combineArgs (PPL.nl) args) <> PPL.nl
+| args => return (flatten (combine (PPL.nl) args) <^> (combine (PPL.nl) args)) <> PPL.nl
 -- #coreFmt Lean.Parser.Command.declSig fun (r : RuleRec) => fun
 -- | args => pfCombineWithSeparator (text " ") r args
 
 
 -- TODO: think more about choice, at the moment we just take the first option
 #coreFmt choice fun
-| args => return toPPL (args.getArgs.get! 0)
+| args => return toPPL (args.get! 0)
 
-#coreFmt Lean.Parser.Term.paren combineArgs' ""
+#coreFmt Lean.Parser.Term.paren combine' ""
 
-#coreFmt Lean.Parser.Command.namespace combineArgs' " "
+#coreFmt Lean.Parser.Command.namespace combine' " "
 
-#coreFmt Lean.Parser.Command.end combineArgs' " "
+#coreFmt Lean.Parser.Command.end combine' " "
+
+-- @[inherit_doc ite] syntax (name := termIfThenElse)
+--   ppRealGroup(ppRealFill(ppIndent("if " term " then") ppSpace term)
+--     ppDedent(ppSpace) ppRealFill("else " term)) : term
+#coreFmt termIfThenElse fun
+| #[ifAtom, condition, thenAtom, positiveBody, elseAtom, negativeBody] => do
+  let content := ifAtom <> " " <> condition <> " " <> thenAtom <> PPL.nest 2 (PPL.nl <> positiveBody) <> PPL.nl <> elseAtom <> PPL.nest 2 (PPL.nl <> negativeBody)
+  return (PPL.flatten content) <^> content
+| _ => failure
+
+--- Inductive ---
+#coreFmt Lean.Parser.Command.inductive fun
+| #[inductiveAtom, decl, optDeclSig, whereContainer, terms, unknown1, derive] => do
+  assumeMissing unknown1
+  return (combine " " #[toPPL inductiveAtom, toPPL decl, toPPL optDeclSig, combine " " whereContainer.getArgs])
+    <> (PPL.nest 2 (PPL.nl <> combine PPL.nl terms.getArgs)) <> (PPL.nl <? derive)
+| _ => failure
+
+#coreFmt Lean.Parser.Command.ctor fun
+| #[docComment, barAtom, declModifiers, ident, optDeclSig] =>
+  return docComment <> barAtom <> " " <> combine " " #[declModifiers, ident, optDeclSig]
+| _ => failure
+
+#coreFmt Lean.Parser.Command.optDeriving fun
+| #[args] => return combine (" " <^> PPL.nl) args.getArgs
+| _ => failure
+
+--- TACTICS ---
+-- #coreFmt Lean.Parser.Term.byTactic combine' (PPL.nl)
+
+#coreFmt Lean.Parser.Command.theorem fun
+| #[theoremAtom, ident, typeSignature, content] =>
+  return PPL.nest 4 (theoremAtom <> (" " <^> PPL.nl) <> ident <> (" " <^> PPL.nl) <> (typeSignature ?> " ")) <> (PPL.nest 2 (PPL.stx content))
+| _ => failure
+
+#coreFmt Lean.Parser.Tactic.simpLemma combine' " "
+#coreFmt Lean.Parser.Attr.simp combine' " "
+#coreFmt Lean.Parser.Term.attributes combine' ""
+#coreFmt Lean.Parser.Term.attrInstance combine' " "
+
+def addSpaceAfterCommas : Array Syntax → RuleM PPL
+| args =>
+  return args.foldl (fun (acc : PPL) (p : Syntax) =>
+    match p with
+    | .atom _ (val : String) =>
+      if val == "," then
+        (acc <> p <> text " ")
+      else
+        (acc <> p)
+    | _ => acc <> p
+  ) (PPL.text "")
+
+def formatSimpleProof : Array Syntax → RuleM PPL
+| #[] => return text ""
+| #[lparen, proofs, rparen] => do
+  return lparen <> (← addSpaceAfterCommas proofs.getArgs) <> rparen
+| _ => failure
+
+-- TODO: missing
+#coreFmt Lean.Parser.Tactic.simp fun
+| #[simpAtom, config, unknown1, unknown2, proof, unknown3] => do
+  assumeMissing unknown1
+  assumeMissing unknown2
+  assumeMissing unknown3
+  return flatten (combine " " #[toPPL simpAtom, toPPL config, ← formatSimpleProof proof.getArgs])
+| _ => failure
+
+#coreFmt Lean.Parser.Term.have fun
+| #[haveAtom, haveDecl, unknown1, content] => do
+  assumeMissing unknown1
+  return haveAtom <> " " <> haveDecl <> (PPL.nl <> content)
+| _ => failure
+
+#coreFmt Lean.Parser.Term.haveDecl combine' " "
+#coreFmt Lean.Parser.Term.haveIdDecl combine' " "
+#coreFmt Lean.Parser.Term.arrow combine' " "
+
+#coreFmt Lean.Parser.Term.show combine' " "
+#coreFmt Lean.Parser.Term.fromTerm combine' " "
+
+#coreFmt Lean.Parser.Term.haveId combine' " "
+#coreFmt Lean.Parser.Term.prop combine' " "
+
+#coreFmt Lean.Parser.Command.open combine' " "
+#coreFmt Lean.Parser.Command.openSimple fun
+| #[args] => return combine " " args.getArgs
+| _ => failure
+
+
+#coreFmt Tactic.tacticSeq fun
+| #[tactics] => return toPPL "tacticSeq"
+| _ => failure

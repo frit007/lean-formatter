@@ -1,6 +1,6 @@
-name = "simple_meta"
+name = "PrettyFormat"
 version = "0.1.0"
-defaultTargets = ["Format"]
+defaultTargets = ["Format", "BaseFormatter"]
 
 
 [[lean_lib]]
