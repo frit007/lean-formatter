@@ -14,19 +14,19 @@ open Lean.Elab.Command
 
 namespace PrettyFormat
 
-structure PPLSpacing where
-  space : Bool := true
-  -- will be flattened to a space
-  newline : Bool := true
-  -- will not be flattened to a space, and instead fails (if there are no alternative spacing options)
-  hardNewline : Bool := true
-  none : Bool := true
-  /--
-  used to counter the following scenario:
-  flatten (text "-- comment" <> optionalSpace hardNewline) <> optionalSpace hardNewline
-  -/
-  flattened := false
-  deriving Repr, BEq
+-- structure PPLSpacing where
+--   space : Bool := true
+--   -- will be flattened to a space
+--   newline : Bool := true
+--   -- will not be flattened to a space, and instead fails (if there are no alternative spacing options)
+--   hardNewline : Bool := true
+--   none : Bool := true
+--   /--
+--   used to counter the following scenario:
+--   flatten (text "-- comment" <> optionalSpace hardNewline) <> optionalSpace hardNewline
+--   -/
+--   flattened := false
+--   deriving Repr, BEq
 
 inductive PPL where
   | nl : PPL
@@ -75,6 +75,8 @@ inductive PPL where
   The main reason for this is to respect the decision made by flatten. The intended use is to combine both comments (bubbleUpComment c <^> endOfLineComment c)
   -/
   | endOfLineComment (comment : String)
+  | provide (options : List String)
+  | expect (options : List String)
   deriving Repr
 
 
@@ -106,8 +108,6 @@ partial def isEmpty [ToPPL a] (ppl : a) : Bool :=
   isEmpty' (toPPL ppl)
 where
   isEmpty' : (ppl : PPL) → Bool
-  -- | .spacing s =>
-  --   false
   | .error s => true
   | .text s => s.length == 0
   | .nl => false
@@ -121,20 +121,43 @@ where
   | .endOfLineComment s => false
   | .reset inner => isEmpty' inner
   | .rule _ inner => isEmpty' inner
+  | .provide _ => false
+  | .expect _ => false
 
-infixl:40 " <^> " => fun l r => PPL.choice (toPPL l) (toPPL r)
-infixl:40 " <> " => fun l r =>
-  match (isEmpty l, isEmpty r) with
-  | (true, _) => (toPPL r)
-  | (_, true) => (toPPL l)
-  | _ => PPL.unallignedConcat (toPPL l) (toPPL r)
+infixl:38 " <^> " => fun l r => PPL.choice (toPPL l) (toPPL r)
+-- infixl:40 " <> " => fun l r =>
+--   match (isEmpty l, isEmpty r) with
+--   | (true, _) => (toPPL r)
+--   | (_, true) => (toPPL l)
+--   | _ => PPL.unallignedConcat (toPPL l) (toPPL r)
 
--- macro "let " x:ident " = " s:term " in " body:term : term =>
---   `(PPL.letExpr $(Lean.quote x.getId.toString) $s (toPPL $body))
+def concat [ToPPL a] [ToPPL b] (l : a) (r : b) : PPL :=
+  if isEmpty l then toPPL r
+  else if isEmpty r then toPPL l
+  else PPL.unallignedConcat (toPPL l) (toPPL r)
 
--- infixl:40 " <$> " => fun l r => l <> PPL.nl <> (toPPL r)
-infixl:40 " <+> " => fun l r => l <> PPL.align (toPPL r)
+def space := Pfmt.space
+def spaceNl := Pfmt.spaceNl
+def spaceHardNl := Pfmt.spaceHardNl
+def spaceNewline := [spaceNl, spaceHardNl]
+def nospace := Pfmt.nospace
+def immediateValue := "immediateValue"
+def anySpace := [space, spaceNl, spaceHardNl]
 
+infixl:40 " <> " => fun l r => concat l r
+
+infixl:39 " <$$> " => fun l r => (toPPL l) <> PPL.provide [spaceNl, spaceHardNl] <> (toPPL r)
+infixl:38 " <$$$> " => fun l r => (toPPL l) <> PPL.provide [spaceHardNl] <> (toPPL r)
+infixl:37 " <**> " => fun l r => (toPPL l) <> PPL.provide anySpace <> (toPPL r)
+infixl:36 " <_> " => fun l r => (toPPL l) <> PPL.provide [space] <> (toPPL r)
+
+
+infixl:40 " <+> " => fun l r => (toPPL l) <> PPL.align (toPPL r)
+infixl:45 " !> " => fun l r => (PPL.provide l) <> (toPPL r)
+infixl:45 " <! " => fun l r => (PPL.expect l) <> (toPPL r)
+
+
+-- def anySeparator := [space, spaceNl, spaceHardNl, nospace]
 
 -- abstractions
 -- a choice between flattening or not
@@ -151,14 +174,14 @@ def text (s: String): PPL:=
 def nl : PPL:=
   PPL.nl
 
-def flatten (s: PPL): PPL:=
-  PPL.flatten s
+def flattenPPL [ToPPL a] (s: a): PPL:=
+  PPL.flatten (toPPL s)
 
 def align (s: PPL): PPL:=
   PPL.align s
 
 def group (s: PPL): PPL:=
-  s <^> flatten s
+  s <^> flattenPPL s
 
 def empty := -- used when starting a new node
   text ""
@@ -210,6 +233,8 @@ where
   | .endOfLineComment s => s!"endOfLineComment {s}"
   | .reset s => s!"reset {prettyPrint' 0 s}"
   | .rule name s => s!"rule {name} {prettyPrint' indent s}"
+  | .provide s => s!"provide {s}"
+  | .expect s => s!"expect {s}"
 
 
 partial def output (ppl:PPL) : String :=
@@ -234,6 +259,8 @@ where
   | .endOfLineComment s => s!"endOfLine \"{s}\""
   | .rule name s => s!"rule {name} {newline indent} ({output' (indent + 2) s}) {newline indent}"
   | .reset s => s!"reset ({output' indent s})"
+  | .provide s => s!"provide {s}"
+  | .expect s => s!"expect {s}"
   newline indent := "\n" ++ repeatString " " indent
 
 def escapeQuotes (s : String) : String :=
@@ -262,6 +289,8 @@ partial def toDoc : PPL → Doc
   /- rule does not affect the way the code is formatted
   -/
   | .rule name s => (toDoc s)
+  | .provide s => Doc.provide (Std.HashSet.ofList s)
+  | .expect s => Doc.expect (Std.HashSet.ofList s)
 
 
 structure CommentFix where
@@ -357,7 +386,6 @@ instance : Inhabited PPL where
 
 
   inductive FormatError where
-  | FlattenedComment
   | NotHandled (name : Name) (stx : List Syntax)
   | NoFormatter (stx : Syntax)
   | Unknown
@@ -366,7 +394,6 @@ instance : Inhabited PPL where
   instance : ToString FormatError where
     toString b :=
       match b with
-      | .FlattenedComment => "FlattenedComment"
       | .NotHandled name stx =>
         let parentChain := stx.map (fun s => s.getKind) |>.filter (fun s => s != `missing && s != `ident) |>.map toString |>.reverse |> String.intercalate " → "
 
@@ -377,7 +404,6 @@ instance : Inhabited PPL where
   instance : Repr FormatError where
     reprPrec b n :=
       match b with
-      | .FlattenedComment => "FlattenedComment"
       | .NotHandled name stx => s!"Not handled {name} {repr stx}"
       | .NoFormatter stx => s!"NoFormatter {repr stx}"
       | .Unknown => "unknown"
@@ -519,56 +545,62 @@ register_option pf.lineLength : Nat := {
   descr    := "(pretty format) Maximum number of characters in a line"
 }
 
-register_option pf.debugSyntax : Nat := {
-  defValue := 0
+register_option pf.debugSyntax : Bool := {
+  defValue := false
   group    := "pf"
   descr    := "(pretty format) Output the syntax in a comment above each top level command, before being formatted"
 }
-register_option pf.debugSyntaxAfter : Nat := {
-  defValue := 0
+register_option pf.debugSyntaxAfter : Bool := {
+  defValue := false
   group    := "pf"
   descr    := "(pretty format) Output the syntax in a comment above each top level command, after being formatted"
 }
-register_option pf.debugErrors : Nat := {
-  defValue := 0
+register_option pf.debugErrors : Bool := {
+  defValue := false
   group    := "pf"
   descr    := "(pretty format) Output the errors"
 }
-register_option pf.debugMissingFormatters : Nat := {
-  defValue := 0
+register_option pf.debugMissingFormatters : Bool := {
+  defValue := false
   group    := "pf"
   descr    := "(pretty format) Output a list of missing formatters above the function"
 }
-register_option pf.debugPPL : Nat := {
-  defValue := 0
+register_option pf.debugPPL : Bool := {
+  defValue := false
   group    := "pf"
   descr    := "(pretty format) Output the generated PPL above the function"
 }
-register_option pf.debugPPLGroups : Nat := {
-    defValue := 0
+register_option pf.debugPPLGroups : Bool := {
+    defValue := false
     group    := "pf"
     descr    := "(pretty format) Add grouping around every PPL formatter"
 }
-register_option pf.debugDoc : Nat := {
-    defValue := 0
+register_option pf.debugDoc : Bool := {
+    defValue := false
     group    := "pf"
     descr    := "(pretty format) debug the generated Doc"
 }
-register_option pf.warnCSTmismatch : Nat := {
-    defValue := 1
+register_option pf.warnCSTmismatch : Bool := {
+    defValue := true
     group    := "pf"
     descr    := "(pretty format) When the formatted syntax does not match the original syntax, output a warning"
+}
+register_option pf.debugTime : Bool := {
+    defValue := false
+    group    := "pf"
+    descr    := "(pretty format) Debug how time is used"
 }
 
 def getPFLineLength (o : Options) : Nat := o.get pf.lineLength.name pf.lineLength.defValue
 
-def getDebugSyntax (o : Options) : Bool := (o.get pf.debugSyntax.name pf.debugSyntax.defValue) != 0
-def getDebugSyntaxAfter (o : Options) : Bool := (o.get pf.debugSyntaxAfter.name pf.debugSyntaxAfter.defValue) != 0
-def getDebugErrors (o : Options) : Bool := (o.get pf.debugErrors.name pf.debugErrors.defValue) != 0
-def getDebugMissingFormatters (o : Options) : Bool := (o.get pf.debugMissingFormatters.name pf.debugMissingFormatters.defValue) != 0
-def getDebugPPL (o : Options) : Bool := (o.get pf.debugPPL.name pf.debugPPL.defValue) != 0
-def getDebugDoc (o : Options) : Bool := (o.get pf.debugDoc.name pf.debugDoc.defValue) != 0
-def getWarnCSTmismatch (o : Options) : Bool := (o.get pf.warnCSTmismatch.name pf.warnCSTmismatch.defValue) != 0
+def getDebugSyntax (o : Options) : Bool := (o.get pf.debugSyntax.name pf.debugSyntax.defValue)
+def getDebugSyntaxAfter (o : Options) : Bool := (o.get pf.debugSyntaxAfter.name pf.debugSyntaxAfter.defValue)
+def getDebugErrors (o : Options) : Bool := (o.get pf.debugErrors.name pf.debugErrors.defValue)
+def getDebugMissingFormatters (o : Options) : Bool := (o.get pf.debugMissingFormatters.name pf.debugMissingFormatters.defValue)
+def getDebugPPL (o : Options) : Bool := (o.get pf.debugPPL.name pf.debugPPL.defValue)
+def getDebugDoc (o : Options) : Bool := (o.get pf.debugDoc.name pf.debugDoc.defValue)
+def getWarnCSTmismatch (o : Options) : Bool := (o.get pf.warnCSTmismatch.name pf.warnCSTmismatch.defValue)
+def getDebugTime (o : Options) : Bool := (o.get pf.debugTime.name pf.debugTime.defValue)
 
 initialize coreFormatters : IO.Ref (Std.HashMap Name (Rule)) ← IO.mkRef {}
 

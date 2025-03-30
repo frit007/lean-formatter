@@ -146,27 +146,11 @@ open CodeAction Server RequestM in
 def formatCmdCodeAction : CommandCodeAction := fun p _ info node => do
   let .node i ts := node | return #[]
 
-
-  let top := ts.findSome? fun
-    | .node (.ofCustomInfo { stx, .. }) _ => return stx
-    | _ => none
-
-  let name := match top with
-  | .some a => a.getId
-  | .none => `unknown
-
-  let name := `definition
-
-  -- let fileName ← getFileName
-  -- p.textDocument.uri
-
-
-
   let opts := info.options
   let stx :Syntax := i.stx
   let doc ← readDoc
   let eager :Lsp.CodeAction := {
-    title := s!"Format {name}"
+    title := s!"Format {stx.getKind}"
     kind? := "refactor.rewrite"
     isPreferred? := true
   }
@@ -202,7 +186,7 @@ def formatCmdCodeAction : CommandCodeAction := fun p _ info node => do
 
 
 
-set_option pf.debugErrors 1
+set_option pf.debugErrors true
 
 -- /--
 -- info: def test (n : Nat):=
@@ -214,10 +198,10 @@ set_option pf.debugErrors 1
 --   add 2 3
 
 -- set_option pf.debugSyntax 1
-set_option pf.debugMissingFormatters 1
-set_option pf.debugErrors 1
+set_option pf.debugMissingFormatters true
+set_option pf.debugErrors true
 -- set_option pf.debugSyntaxAfter 1
-set_option pf.debugPPL 1
+set_option pf.debugPPL true
 -- #format
 
 -- #fmt Lean.Parser.Term.app fun

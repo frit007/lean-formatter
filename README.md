@@ -10,6 +10,9 @@ lake exe Format -file ../batteries/Batteries/Logic.lean -include ../batteries/.l
 
 lake exe Format -folder ../batteries/Batteries -include ../batteries/.lake/build/lib
 
+
+lake exe Format -file ../batteries/Batteries/Data/Array/Match.lean -include ../batteries/.lake/build/lib
+
 lake exe Format -file ../batteries/Batteries/Logic.lean -include ../batteries/.lake/build/lib
 
 lake exe Format -file ../batteries/Batteries/Control/ForInStep/Basic.lean -include ../batteries/.lake/build/lib
@@ -39,3 +42,4 @@ Integration with the Lean LSP and defines the entry point for main
 
 ocamlfind ocamlc -o test -package pretty_expressive -linkpkg test.lean.ml && ./test
 
+eval $(opam env)

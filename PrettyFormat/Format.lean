@@ -69,25 +69,25 @@ def parseArguments (args:List String) : Except String InputArguments := do
     return { (← parseArguments xs) with output := Output.replace }
   | "-noWarnCST"::xs =>
     let res ← parseArguments xs
-    return { res with  opts := (res.opts).setInt `pf.warnCSTmismatch 0 }
+    return { res with  opts := (res.opts).setBool `pf.warnCSTmismatch false }
   | "-debugSyntax"::xs =>
     let res ← parseArguments xs
-    return { res with  opts := (res.opts).setInt `pf.debugSyntax 1 }
+    return { res with  opts := (res.opts).setBool `pf.debugSyntax true }
   | "-debugSyntaxAfter"::xs =>
     let res ← parseArguments xs
-    return { res with  opts := (res.opts).setInt `pf.debugSyntaxAfter 1 }
+    return { res with  opts := (res.opts).setBool `pf.debugSyntaxAfter true }
   | "-debugErrors"::xs =>
     let res ← parseArguments xs
-    return { res with  opts := (res.opts).setInt `pf.debugErrors 1 }
+    return { res with  opts := (res.opts).setBool `pf.debugErrors true }
   | "-debugMissingFormatters"::xs =>
     let res ← parseArguments xs
-    return { res with  opts := (res.opts).setInt `pf.debugMissingFormatters 1 }
+    return { res with  opts := (res.opts).setBool `pf.debugMissingFormatters true }
   | "-debugPPL"::xs =>
     let res ← parseArguments xs
-    return { res with  opts := (res.opts).setInt `pf.debugPPL 1 }
+    return { res with  opts := (res.opts).setBool `pf.debugPPL true }
   | "-warnMissingFormatters"::xs =>
     let res ← parseArguments xs
-    return { res with  opts := (res.opts).setInt `pf.warnMissingFormatters 1 }
+    return { res with  opts := (res.opts).setBool `pf.warnMissingFormatters true }
   | "-lineLength"::length::xs =>
     let res ← parseArguments xs
     match length.toNat? with
@@ -151,9 +151,10 @@ def parseArguments (args:List String) : Except String InputArguments := do
   -- return leadingUpdated
 
 unsafe def formatFile (fileName : String) (args : InputArguments): IO (String × FormatReport) := do
-  let ((moduleStx, env), timeReadAndParse) ← measureTime do
+  let ((moduleStx, env), timeReadAndParse) ← measureTime (fun _ => do
     let input ← IO.FS.readFile (fileName)
     parseModule input fileName
+  )
   let options := args.opts
 
   -- leadUpdated update trailing and leading. And the characters the content is assigned to atoms and ident
@@ -170,7 +171,7 @@ unsafe def formatFile (fileName : String) (args : InputArguments): IO (String ×
     let formatters ← getFormatters env
     let result ← pfTopLevelWithDebug a env formatters options fileName
 
-    formatted := formatted ++ "\n\n" ++ result.formattedPPL
+    formatted := formatted ++ (result.reportAsComment ++ result.formattedPPL)
     report := report.combineReports ({result.toReport with formattedCommands := if result.cstDifferenceError.isNone then 1 else 0, totalCommands := 1})
 
 
@@ -180,7 +181,7 @@ unsafe def formatFile (fileName : String) (args : InputArguments): IO (String ×
   | .none => none
 
   if report.totalCommands - report.formattedCommands ≠ 0 then
-    IO.println s!"{fileName} failed {report.formattedCommands} / {report.totalCommands}"
+    IO.println s!"{fileName} successfully formatted {report.formattedCommands} / {report.totalCommands}"
 
   if let some f := fileName then
     IO.FS.writeFile (f) (s!"{formatted}")
@@ -309,7 +310,7 @@ def main3 : IO Unit := do
     a := a.insert (i) (toString i)
 
 
-#eval measureTime main3
+#eval measureTime (fun _ => main3)
 
 
 partial def tellMeAbout (kind: SyntaxNodeKind) (args: Array Syntax): MetaM (Array Syntax) := do

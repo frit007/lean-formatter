@@ -1,7 +1,7 @@
 import Std.Data.HashSet
 open Std
 /-
-Originally created by Henrik Böving(https://github.com/hargoniX/pfmt) based on pretty expressive (https://arxiv.org/abs/2310.01530),
+Originally created by Henrik Böving() based on pretty expressive (https://arxiv.org/abs/2310.01530),
 Frithjof added fail, endOfLineComment, and bubbleComment
 -/
 namespace Pfmt
@@ -72,7 +72,25 @@ The main reason for this is to respect the decision made by flatten. The intende
 Fail will never be rendered.
 This error will propagate until the next choice, where branches containing errors are eliminated.
 -/
-| fail
+| fail 
+/--
+The special spacing options are
+- `space` which is a single space
+- `nl` which is a newline, which is converted to a `space` in `flatten`
+- `hardNl` which is a newline, which is removed when flattened `flatten`
+- `nospace` which is nothing and leaves the formatting choice up to the child, and is used when we want parenthesis.
+`nospace` will be automatically applied even if the parent does not provide any spacing information
+We can create variations of `nospace`,
+for example this can be used to detect if we are directly after a new function declaration
+do/by notation use `assignValue` to handle this scenario so they can place their keyword on the same line and then indent
+
+provide can be chained to narrow the options to overlap between the two sets
+-/
+| provide (spacing : HashSet String)
+/--
+expect must be preceded by a `provide` and will fail if the provided spacing does not contain the expected spacing
+-/
+| expect (spacing : HashSet String)
 -- TODO: Think about adding the cost constructor. It does however make type inference much harder
 -- TODO: Think about adding fail.
 deriving Inhabited, Repr
@@ -114,18 +132,40 @@ structure Measure (χ : Type) where
   -/
   -- TODO: Maybe Array?
   layout : List String → List String
-  /--
-  Force the next character to be newline. If it is not then fail
-  -/
-  forcedNewLine : Bool
-  /--
+  -- spacingL : Option (HashSet String) := none
+  spacingR : Option (HashSet String) := none
+  -- /--
+  -- Force the next character to be newline. If it is not then fail
+  -- -/
+  -- forcedNewLine : Bool
+  -- /--
 
-  -/
-  startsWithNewLine : Bool
-  /--
-  -/
+  -- -/
+  -- startsWithNewLine : Bool
+  -- /--
+  -- -/
   fail: Bool
 deriving Inhabited
+
+instance : BEq (HashSet String) where
+  beq s1 s2 := s1.toList == s2.toList  -- Compare by list representation
+
+instance : BEq (Option (HashSet String)) where
+  beq
+    | some s1, some s2 => s1 == s2
+    | none, none => true
+    | _, _ => false
+
+instance : Hashable (HashSet String) where
+  hash s := s.toList.foldl (fun acc x => mixHash acc (hash x)) 0
+
+def groupBySpacingR [BEq χ] [Hashable χ] (measures : List (Measure χ)) : Std.HashMap (Option (HashSet String)) (List (Measure χ)) :=
+  measures.foldl
+    (fun acc m =>
+      let key := m.spacingR
+      acc.insert key (m :: (acc.getD key []))
+    )
+    HashMap.empty
 
 instance [Cost χ] : LE (Measure χ) where
   le lhs rhs := lhs.last ≤ rhs.last ∧ lhs.cost ≤ rhs.cost
@@ -133,20 +173,32 @@ instance [Cost χ] : LE (Measure χ) where
 instance [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : Measure χ) : Decidable (lhs ≤ rhs) :=
   inferInstanceAs (Decidable (lhs.last ≤ rhs.last ∧ lhs.cost ≤ rhs.cost))
 
+def spacing (s : List String) : Doc := Doc.provide (HashSet.ofList s)
+def expect (s : List String) : Doc := Doc.expect (HashSet.ofList s)
 
-def Measure.mkFail [Cost χ] (cost : χ ) : Measure χ := {last := 0, cost:=cost, layout := fun _ => panic! "We never want to print fail", forcedNewLine := false, startsWithNewLine := false, fail := true}
+def spaceNl := "nl"
+def spaceHardNl := "hardNl"
+def space := "space"
+def nospace := "nospace"
+
+def Measure.mkFail [Cost χ] (cost : χ ) : Measure χ := {last := 0, cost:=cost, layout := fun _ => panic! "We never want to print fail", fail := true}
+
+def intersection {α:Type} [BEq α] [Hashable α] (set1 set2 : HashSet α): HashSet α :=
+  set1.filter (fun x => set2.contains x)
 
 /--
 Lifting `Doc.concat` to `Measure`.
 -/
 def Measure.concat [Cost χ] (lhs rhs : Measure χ) :Measure χ :=
-  match lhs.fail || rhs.fail || (lhs.forcedNewLine && !rhs.startsWithNewLine) with
+  match lhs.fail || rhs.fail with
   | true => Measure.mkFail lhs.cost
-  | _ => { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), forcedNewLine := rhs.forcedNewLine, startsWithNewLine := lhs.startsWithNewLine, fail := false }
+  | _ => { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), spacingR := rhs.spacingR, fail := false }
+    -- _ (none, _) => { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), forcedNewLine := rhs.forcedNewLine, startsWithNewLine := lhs.startsWithNewLine, fail := false }
+  -- Do I want to just call mergeList?
 
 
-instance [Cost χ] : Append ((Measure χ)) where
-  append := Measure.concat
+-- instance [Cost χ] : Append ((Measure χ)) where
+--   append := Measure.concat
 
 /--
 A set of `Measure`s out of which we will pick an optimal `Doc` in the end.
@@ -171,8 +223,8 @@ into a new Pareto front with correct ordering.
 -/
 private partial def mergeSet [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : List ((Measure χ))) (acc : List (Measure χ) := []) : List (Measure χ) :=
   match h1:lhs, h2:rhs with
-  | [], _ => acc ++ rhs
-  | _, [] => acc ++ lhs
+  | [], _ => acc.reverse ++ rhs
+  | _, [] => acc.reverse ++ lhs
   | l :: ls, r :: rs =>
     if l ≤ r then
       mergeSet lhs rs acc
@@ -198,20 +250,20 @@ def MeasureSet.merge [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : Meas
 
 
 
-def placeCommentReverse (indent : Nat) (comment : String) : List String → List String
-| []        => [comment, "\n", "".pushn ' ' indent]
-| "\n" :: xs => "\n" :: comment :: "".pushn ' ' indent :: "\n" :: xs
-| s :: xs    =>
-  -- [toString (s :: xs)]
-  -- reconstruct the indentation level
-  let remainingCharacters := s.trimLeft.length
-  let whiteSpaceCharacters := s.length - remainingCharacters
-  let newIndentationLevel :=
-    if remainingCharacters > 0 then
-      whiteSpaceCharacters
-    else
-      whiteSpaceCharacters + indent
-  s :: (placeCommentReverse newIndentationLevel comment xs)
+-- def placeCommentReverse (indent : Nat) (comment : String) : List String → List String
+-- | []        => [comment, "\n", "".pushn ' ' indent]
+-- | "\n" :: xs => "\n" :: comment :: "".pushn ' ' indent :: "\n" :: xs
+-- | s :: xs    =>
+--   -- [toString (s :: xs)]
+--   -- reconstruct the indentation level
+--   let remainingCharacters := s.trimLeft.length
+--   let whiteSpaceCharacters := s.length - remainingCharacters
+--   let newIndentationLevel :=
+--     if remainingCharacters > 0 then
+--       whiteSpaceCharacters
+--     else
+--       whiteSpaceCharacters + indent
+--   s :: (placeCommentReverse newIndentationLevel comment xs)
 
 def placeComment (indent : Nat) (comment : String) : List String → List String
 -- | a => (placeCommentReverse indent comment a.reverse).reverse
@@ -228,11 +280,17 @@ def placeComment (indent : Nat) (comment : String) : List String → List String
       whiteSpaceCharacters + indent
   s :: (placeComment newIndentationLevel comment xs)
 
+def removeMeasureFails (m : MeasureSet χ): MeasureSet χ:=
+  match m with
+  | .set xs =>
+    .set (xs.filter (fun x => !x.fail))
+  | x => x
+
 /--
 This function efficiently computes a Pareto front for the problem of rendering
 a `Doc` at a certain column position with a certain indentation level and width limit.
 -/
-def Doc.resolve [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (col indent widthLimit : Nat) : MeasureSet χ :=
+partial def Doc.resolve [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (col indent widthLimit : Nat) : MeasureSet χ :=
   -- If we were to exceed the widthLimit we delay any attempt to optimize
   -- the layout of `doc` in hopes that another branch of this function finds
   -- a non tainted `MeasureSet`.
@@ -242,111 +300,239 @@ def Doc.resolve [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc 
     | _ => indent > widthLimit || col > widthLimit
   if exceeds then
     .tainted (fun _ =>
-      match core doc col indent with
+      match core doc col indent none with
       | .tainted m => m ()
       | .set (m :: _) => m
       | .set [] => panic! "Empty measure sets are impossible"
     )
   else
-    core doc col indent
+    core doc col indent none
 where
   /--
   The core resolver that actually computes the `MeasureSet`s that result from rendering `doc`
   in the given context.
   -/
-  core (doc : Doc) (col : Nat) (indent : Nat) : MeasureSet χ :=
+  core (doc : Doc) (col : Nat) (indent : Nat) (spacing : Option (HashSet String)): MeasureSet χ :=
     -- If we end up in this function we know that this cannot exceed the widthLimit
     -- and can thus savely return a set in all cases except concat.
     match doc with
     | .text s =>
-      .set [{
-        last := col + s.length,
-        cost := Cost.text widthLimit col s.length
-        layout := fun ss => s :: ss
-        startsWithNewLine := s.startsWith "\n"
-        forcedNewLine := false
-        fail := false
-      }]
+      if s.length == 0 then
+        .set [{
+          last := col + s.length,
+          cost := Cost.text widthLimit col s.length
+          layout := fun ss => s :: ss
+          spacingR := spacing
+          fail := false
+        }]
+      else
+        match spacing with
+        | some leftSpacing =>
+          core (concat (restrictByFirstChar (leftSpacing) (s.get! 0)) (.text s)) col indent none
+        | none =>
+          .set [{
+            last := col + s.length,
+            cost := Cost.text widthLimit col s.length
+            layout := fun ss => s :: ss
+            spacingR := none
+            fail := false
+          }]
     | .newline _ =>
-      .set [{
-        last := indent,
-        cost := Cost.nl indent,
-        layout := fun ss =>  "".pushn ' ' indent :: "\n" :: ss
-        startsWithNewLine := true
-        forcedNewLine := false
-        fail := false
-      }]
-    | .concat lhs rhs => processConcat (fun l => core rhs l.last indent) (core lhs col indent)
-    | .choice lhs rhs => MeasureSet.merge (core lhs col indent) (core rhs col indent)
-    | .nest indentOffset doc => core doc col (indent + indentOffset)
-    | .align doc => core doc col col
-    | .reset doc => core doc col 0
+      match spacing with
+      | some leftSpacing =>
+        let possibilities := intersection leftSpacing (HashSet.ofList [spaceNl, spaceHardNl])
+        if possibilities.isEmpty then
+          core .fail col indent spacing
+        else
+          .set [{
+            last := indent,
+            cost := Cost.nl indent,
+            layout := fun ss => "".pushn ' ' indent :: "\n" :: ss
+            spacingR := possibilities
+            fail := false
+          }]
+      | none =>
+        .set [{
+          last := indent,
+          cost := Cost.nl indent,
+          layout := fun ss =>  "".pushn ' ' indent :: "\n" :: ss
+          spacingR := none
+          fail := false
+        }]
+    | .concat lhs rhs => processConcat (core lhs col indent spacing) (fun l spacing => core rhs l.last indent spacing)
+    | .choice lhs rhs => MeasureSet.merge (core lhs col indent spacing) (core rhs col indent spacing)
+    | .nest indentOffset doc => core doc col (indent + indentOffset) spacing
+    | .align doc => core doc col col spacing
+    | .reset doc => core doc col 0 spacing
     | .bubbleComment comment => .set [{
       last := col
       -- prioritize placing comments where they were placed by the user
       cost := (Cost.text widthLimit (indent + widthLimit) comment.length) + Cost.nl indent
       layout := placeComment 0 comment
-      forcedNewLine := false
-      startsWithNewLine := false
       fail := false
     }]
     | .endOfLineComment comment => .set [{
       last := col + comment.length
       cost := Cost.nl indent
       layout := (fun ss => comment :: ss)
-      forcedNewLine := true
-      startsWithNewLine := false
+      spacingR := HashSet.ofList [spaceHardNl, spaceNl]
       fail := false
     }]
     | .fail => .set [{
       last := 0
       cost := Cost.nl indent
       layout := (fun ss => ss)
-      forcedNewLine := false
-      startsWithNewLine := false
       fail := true
     }]
+    -- At the moment we can't narrow down the spacing options for a `spacing` document.
+    -- this could be done by
+    -- desugaring spacing to choice
+    | .provide s =>
+      match spacing with
+        | some leftSpacing =>
+          -- narrow down the possibilities to the intersection of the two sets
+          let possibilities := intersection leftSpacing s
+          .set [{
+            last := col
+            cost := Cost.text widthLimit col 0
+            layout := fun ss => ss
+            spacingR := possibilities
+            fail := false
+          }]
+        | none =>
+          .set [{
+            last := col
+            cost := Cost.text widthLimit col 0
+            layout := fun ss => ss
+            spacingR := s
+            fail := false
+          }]
+    | .expect s =>
+      match spacing with
+        | some leftSpacing =>
+          -- find the possibilities that are in both sets
+          -- which means the left and right side agree on how the document should be separated
+          let possibilities := intersection leftSpacing s
+          let choices := possibilitiesToMeasureSet possibilities col
+          core choices col indent none
+        | none =>
+          if s.contains nospace then
+            .set [{
+              last := col
+              cost := Cost.text widthLimit col 0
+              layout := fun ss => ss
+              spacingR := none
+              fail := false
+            }]
+          else
+            core .fail col indent spacing
+
+  possibilitiesToMeasureSet (possibilities : HashSet String) (col : Nat) : Doc :=
+    if possibilities.isEmpty then
+      .fail
+    else Id.run do
+      let mut options : List (Doc) := []
+      let list := possibilities.toList
+
+      if possibilities.contains spaceNl || possibilities.contains spaceHardNl then
+        options := .newline " "::options
+      -- In any other case we we let the child handle the separation
+      if possibilities.contains space then
+        options := .text " "::options
+
+      if possibilities.any (fun f => f != space && f != spaceNl && f != spaceHardNl) then
+        options := (text "")::options
+
+      let choices := options.tail.foldl (fun acc doc => Doc.choice acc doc) (options.head!)
+      return choices
+
+  impossibleMeasure : Measure χ := {
+      last := indent,
+      cost := Cost.nl indent + Cost.nl indent + Cost.nl indent,
+      layout := fun ss => "(no possible formatter)" :: "\n" :: ss
+      spacingR := none
+      fail := true
+    }
+
+  restrictByFirstChar (possibilities : HashSet String) (firstChar : Char) : Doc := Id.run do
+    let addAlternative (d : Doc) : Option Doc → Option Doc
+    | some e => some (Doc.choice d e)
+    | none => d
+
+    let mut options : Option Doc := none
+
+    if (possibilities.contains space && firstChar != ' ') then
+      options := addAlternative (.text " ") options
+
+    if (possibilities.contains space && firstChar == ' ') || (possibilities.contains nospace && firstChar != ' ') then
+      options := addAlternative (.text "") options
+
+    if ((possibilities.contains spaceNl || possibilities.contains spaceHardNl) && firstChar != ' ') then
+      options := addAlternative (.newline " ") options
+
+    match options with
+    | some e => e
+    | none => .fail
+    -- .text s!"__{repr options}__"
 
   /--
   Compute the set that contains the concatenations of all possible lhs measures
   with their corresponding rhs measure.
   -/
-  processConcat (processLeft : Measure χ → MeasureSet χ) (leftSet : MeasureSet χ) : MeasureSet χ :=
-    match leftSet with
+
+  processConcat (leftSet : MeasureSet χ) (processRight : Measure χ → Option (HashSet String) → MeasureSet χ) : MeasureSet χ :=
+    match removeMeasureFails leftSet with
     | .tainted leftThunk =>
       -- If the lhs is already tainted we can wrap the computation of the rhs
       -- in a tainted thunk, thus prunning it away.
+
       .tainted (fun _ =>
         let left := leftThunk ()
-        match processLeft left with
-        | .tainted rightThunk => left ++ rightThunk ()
-        | .set (right :: _) => left ++ right
-        | .set [] => panic! "Empty measure sets are impossible"
+        match processRight left (left.spacingR) with
+        | .tainted rightThunk => left.concat (rightThunk ())
+        | .set (right :: _) => left.concat right
+        | .set [] => left.concat impossibleMeasure
       )
     | .set lefts =>
-       let concatOneWithRight (l : Measure χ) : MeasureSet χ :=
+      let concatOneWithRight (l : Measure χ) : MeasureSet χ :=
          -- This is an optimized version of dedup from the paper. We use it to maintain
          -- the Pareto front invariant.
-         let rec dedup (rights result : List (Measure χ)) (currentBest : Measure χ) : List (Measure χ) :=
-           match rights with
-           | [] => List.reverse (currentBest :: result)
-           | r :: rights =>
-             let current := l ++ r
-             if current.cost ≤ currentBest.cost then
-               dedup rights result current
-             else
-               dedup rights (currentBest :: result) current
-         match processLeft l with
-         | .tainted rightThunk => .tainted (fun _ => l ++ rightThunk ())
-         | .set (r :: rights) => .set (dedup rights [] (l ++ r))
-         | .set [] => panic! "Empty measure sets are impossible"
+        -- let rec dedup (rights result : List (Measure χ)) (currentBest : Measure χ) : List (Measure χ) :=
+        --   match rights with
+        --   | [] => List.reverse (currentBest :: result)
+        --   | r :: rights =>
+        --     let current := l.concat r
+        --     if current.cost ≤ currentBest.cost then
+        --       -- if the cost is less than or equal, then this should be a part of the result
+        --       dedup rights result current
+        --     else
+        --       dedup rights (currentBest :: result) current
 
-       let rec concatAllWithRight (lefts : List (Measure χ)) : MeasureSet χ :=
-         match lefts with
-         | [] => panic! "Empty measure sets are impossible"
-         | [l] => concatOneWithRight l
-         | l :: ls => MeasureSet.merge (concatOneWithRight l) (concatAllWithRight ls)
-       concatAllWithRight lefts
+        let rec dedup (rights result : List (Measure χ)) (currentBest : Measure χ) : List (Measure χ) :=
+          match rights with
+          | [] => List.reverse (currentBest :: result)
+          | r :: rights =>
+            let current := l.concat r
+            if current.cost ≤ currentBest.cost then
+              -- if the cost is less than or equal, then this should be a part of the result
+              dedup rights (result) current
+            else
+              dedup rights (currentBest :: result) current
+
+
+        match processRight l (l.spacingR) |> removeMeasureFails with
+        | .tainted rightThunk => .tainted (fun _ => l.concat (rightThunk ()))
+        -- | .set (rights) => .set (rights.map (fun r => l.concat r))
+         | .set (r :: rights) => .set (dedup rights [] (l.concat r))
+        | .set [] => .set [impossibleMeasure]
+
+      let rec concatAllWithRight (lefts : List (Measure χ)) : MeasureSet χ :=
+        match lefts |>.filter (fun x => !x.fail) with
+        | [] => .set [impossibleMeasure]
+        | [l] => concatOneWithRight l
+        | l :: ls => MeasureSet.merge (concatOneWithRight l) (concatAllWithRight ls)
+
+      concatAllWithRight lefts
 
 structure PrintResult (χ : Type) where
   layout : String
@@ -423,6 +609,8 @@ where
     | .endOfLineComment comment => comment :: prev
     | .bubbleComment comment => placeComment 0 comment prev
     | .fail => panic! "A choice less document does not allow fail"
+    | .provide s => s.toList ++ prev
+    | .expect s => s.toList ++ prev
 
   lineLength : List String → Nat
     | [] => 0
@@ -483,6 +671,20 @@ def Doc.flatten (doc : Doc) : Doc :=
   -/
   | .endOfLineComment comment => .endOfLineComment comment
   | .fail => .fail
+  | .provide s =>
+    let s := s.erase spaceHardNl
+    let s := if s.contains spaceNl then s.erase spaceNl|>.insert "space" else s
+    if s.isEmpty then
+      .fail
+    else
+      .provide s
+  | .expect s =>
+    let s := s.erase spaceHardNl
+    let s := if s.contains spaceNl then s.erase spaceNl|>.insert "space" else s
+    if s.isEmpty then
+      .fail
+    else
+      .expect s
 
 /--
 Lay out a `Doc` or its `Doc.flatten`ed version.
@@ -526,6 +728,9 @@ def DefaultCost.add (lhs rhs : DefaultCost) : DefaultCost :=
 instance : Add DefaultCost where
   add := DefaultCost.add
 
+-- def DefaultCost.le (lhs rhs : DefaultCost) : Bool :=
+--   if lhs.widthCost == rhs.widthCost then lhs.lineCost ≤ rhs.lineCost else lhs.widthCost < rhs.widthCost
+
 def DefaultCost.le (lhs rhs : DefaultCost) : Bool :=
   if lhs.widthCost == rhs.widthCost then lhs.lineCost ≤ rhs.lineCost else lhs.widthCost < rhs.widthCost
 
@@ -560,5 +765,11 @@ instance : Cost DefaultCost where
     )
   let out := Doc.prettyPrint DefaultCost (col := 0) (widthLimit := 20) d
   IO.println out
+
+#eval (DefaultCost.le (DefaultCost.nl 3) (DefaultCost.text 100 2 0))
+#eval (DefaultCost.le (DefaultCost.text 100 2 0) (DefaultCost.nl 3))
+
+#eval (DefaultCost.add (DefaultCost.text 100 2 0) (DefaultCost.nl 3))
+#eval (DefaultCost.add (DefaultCost.nl 3) (DefaultCost.nl 3))
 
 end Pfmt
