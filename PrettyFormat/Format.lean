@@ -171,9 +171,8 @@ unsafe def formatFile (fileName : String) (args : InputArguments): IO (String ×
     let formatters ← getFormatters env
     let result ← pfTopLevelWithDebug a env formatters options fileName
 
-    formatted := formatted ++ (result.reportAsComment ++ result.formattedPPL)
+    formatted := formatted ++ (result.reportAsComment ++ result.formattedPPL) ++ "\n\n"
     report := report.combineReports ({result.toReport with formattedCommands := if result.cstDifferenceError.isNone then 1 else 0, totalCommands := 1})
-
 
   let fileName := match args.output with
   | .copy ext => some (fileName ++ ext)

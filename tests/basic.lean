@@ -154,9 +154,9 @@ def a : Nat := 2 * 3
 
 open PrettyFormat
 
-def formatPPL (p : PrettyFormat.PPL) : (Pfmt.Doc × String) :=
+def formatPPL (p : PrettyFormat.PPL) : (PrettyFormat.PPL × Pfmt.Doc × String) :=
   let d := PrettyFormat.toDoc p
-  (d, d|>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := PrettyFormat.getPFLineLength {}))
+  (p, d, d|>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := PrettyFormat.getPFLineLength {}))
 
 
 def badTest :PPL :=
@@ -247,3 +247,7 @@ def badTest2 :PPL :=
 
 
 #eval formatPPL (badTest2)
+
+
+set_option pf.debugPPL true
+

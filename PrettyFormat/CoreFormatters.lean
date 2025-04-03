@@ -306,7 +306,11 @@ partial def pfDeclId : Rule
 
 #coreFmt Lean.Parser.Command.declValSimple fun
 | #[assignAtom, value, suffix, whereDecls] => do
-  return (PPL.nest 2 (assignAtom <> ((([space] !> (flattenPPL value)) <^> ([spaceHardNl] !> value)))) <^> assignAtom <> [immediateValue] !> value) <> (""<$$$>"" <? suffix) <>(""<$$$>"" <? whereDecls)
+  return (PPL.nest 2 (assignAtom <> ((("" <_> (flattenPPL value))
+  <^> ("" <$$> value))))
+  <^> assignAtom <> [immediateValue] !> value)
+  <> (""<$$>"" <? suffix)
+  <>(""<$$>"" <? whereDecls)
 | _ => failure
 
 #coreFmt Lean.Parser.Term.whereDecls fun
@@ -380,8 +384,6 @@ def termOperator : Rule := fun
 
 #coreFmt Lean.Parser.Command.whereStructInst combine' (.<$$>.)
 
-#coreFmt Lean.Parser.Term.structInstFields combine' (.<$$>.)
-
 #coreFmt Lean.Parser.Term.structInstFieldDef fun
 | args => return PPL.nest 2 <| combine (.<**>.) args
 
@@ -389,9 +391,9 @@ def termOperator : Rule := fun
 -- #coreFmt Lean.Parser.Term.fun combine' (" " <^> PPL.nl)
 #coreFmt Lean.Parser.Term.fun fun
 | #[funAtom, content] => do
-  return (funAtom <> [space] !> content)
+  return (funAtom <**> content)
     -- pass through immediately value
-    <^> ([immediateValue] <! " " <> funAtom <_> [immediateValue] !> content)
+    <^> ([immediateValue] <! " " <> funAtom <> [immediateValue] !> content)
 | _ => failure
 
 
@@ -1022,7 +1024,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → PPL
 #coreFmt Lean.Parser.Term.doHave combine' (.<**>.)
 
 
-#coreFmt Lean.Parser.Term.liftMethod combine' (.<_>.)
+
 
 #coreFmt Lean.Parser.Term.doSeqItem fun
 | #[doExpr, unknown1] => do
@@ -1032,9 +1034,9 @@ def tacticSeqIndentSeparators : List Lean.Syntax → PPL
 
 #coreFmt Lean.Parser.Term.do fun
 | #[doAtom, value] =>
-  return [immediateValue]<! " " <> doAtom <$$$>value
+  return ([immediateValue]<! " " <> doAtom <$$$>value)
     <^>
-    doAtom <> (""<$$$>value<^>""<_>flattenPPL (value))
+    (doAtom <> (""<$$$>value<^>""<_>flattenPPL (value)))
 | _ => failure
 
 #coreFmt Lean.Parser.Term.let fun
@@ -1057,3 +1059,103 @@ def tacticSeqIndentSeparators : List Lean.Syntax → PPL
   return combine (.<_>.) #[toPPL lpar, toPPL ident, combine (.<_>.) type.getArgs, toPPL slashAtom, toPPL val, toPPL rpar]
 | _ => failure
 
+#coreFmt Lean.Parser.Term.termReturn fun
+| #[returnAtom, val] =>
+  return PPL.nest 2 (returnAtom <**> val)
+| _ => failure
+
+#coreFmt PrettyFormat.fmtCmd combine' (.<**>.)
+
+#coreFmt PrettyFormat.coreFmtCmd combine' (.<**>.)
+
+
+#coreFmt Lean.Parser.Term.leading_parser fun
+| #[leadingParserAtom, unknown1, unknown2, value] => do
+  assumeMissing unknown1
+  assumeMissing unknown2
+  return leadingParserAtom <$$$> value
+| _ => failure
+
+#coreFmt «term_>>_» termOperator
+#coreFmt Lean.Parser.Command.quot fun
+| #[lpar, decl, rpar] =>
+  return lpar <$$> combine (.<$$>.) decl.getArgs <$$> rpar
+  -- return lpar <$$$> decl <$$$> rpar <^> lpar <_> flattenPPL decl rpar
+| _ => failure
+
+#coreFmt Lean.Parser.Command.axiom fun
+| #[axiomAtom, ident, decl] =>
+  return axiomAtom <_> ident <**> decl
+| _ => failure
+
+
+
+#coreFmt Lean.Parser.Term.unsafe fun
+| #[unsafeAtom, val] =>
+  return unsafeAtom <**> val
+| _ => failure
+
+#coreFmt Lean.Parser.Term.binderTactic fun
+| #[assignAtom, byAtom, proof] =>
+  return PPL.nest 2 (assignAtom <_> byAtom <**> proof)
+| _ => failure
+
+#coreFmt Lean.Parser.Term.doPatDecl fun
+| #[tuple, arrowAtom, doExpr, unknown1] => do
+  assumeMissing unknown1
+  return tuple <_> PPL.nest 2 (arrowAtom <**> doExpr)
+| _ => failure
+
+#coreFmt Lean.Parser.Term.doLetArrow fun
+| #[letAtom, unknown1, val] => do
+  assumeMissing unknown1
+  return letAtom <_> val
+| _ => failure
+
+#coreFmt Lean.Parser.Term.doIdDecl fun
+| #[ident, unknown1, arrowAtom, val] => do
+  assumeMissing unknown1
+  return ident <_> PPL.nest 2 (arrowAtom <**> val)
+| _ => failure
+
+#coreFmt Lean.Parser.Command.definition fun
+| #[defAtom, declId, optDeclSig, val, derivings] => do
+  let derive := match derivings.getArgs with
+  | #[derivingAtom, values] => ""<$$$>derivingAtom <_> addSpaceAfterCommas values.getArgs
+  | _ => toPPL ""
+
+  return defAtom <_> PPL.nest 2 (combine (.<**>.) #[declId, optDeclSig]) <**> val <> derive
+| _ => failure
+
+#coreFmt Lean.Parser.Command.initialize fun
+| #[declModifiers, initializeAtom, typeSpec, value] => do
+  return declModifiers <**> initializeAtom <**> typeSpec <**> value
+| _ => failure
+
+#coreFmt Lean.Parser.Term.structInst fun
+| #[lpar, unknown1, structFields, optEllipsis, unknown2, rpar] => do
+  assumeMissing unknown1
+  assumeMissing unknown2
+  return lpar <$$$> PPL.nest 2 (toPPL structFields) <**> optEllipsis <$$$> rpar
+| _ => failure
+
+#coreFmt Lean.Parser.Term.structInstFields fun
+| #[args] => do
+  return tacticSeqIndentSeparators args.getArgs.toList
+| _ => failure
+
+#coreFmt Lean.Parser.Command.in fun
+| #[openCmd, inAtom, next] => do
+  return openCmd <_> inAtom <$$$> next
+| _ => failure
+
+#coreFmt Lean.Parser.Command.elab fun
+|#[declModifiers, unknown1, attrKind, elabAtom, unknown2, unknown3, unknown4, macroArgs, elabTail]  => do
+  assumeMissing unknown1
+  assumeMissing unknown2
+  assumeMissing unknown3
+  assumeMissing unknown4
+  return (declModifiers ?> PPL.provide [spaceHardNl, spaceNl]) <> attrKind <> elabAtom <**> combine (.<**>.) macroArgs.getArgs <**> elabTail
+| _ => failure
+
+#coreFmt Lean.Parser.Command.section combine' (.<_>.)

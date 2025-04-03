@@ -72,7 +72,7 @@ The main reason for this is to respect the decision made by flatten. The intende
 Fail will never be rendered.
 This error will propagate until the next choice, where branches containing errors are eliminated.
 -/
-| fail 
+| fail (err : String)
 /--
 The special spacing options are
 - `space` which is a single space
@@ -93,6 +93,7 @@ expect must be preceded by a `provide` and will fail if the provided spacing doe
 | expect (spacing : HashSet String)
 -- TODO: Think about adding the cost constructor. It does however make type inference much harder
 -- TODO: Think about adding fail.
+| rule (r : String) (doc : Doc)
 deriving Inhabited, Repr
 
 instance : Append Doc where
@@ -144,7 +145,7 @@ structure Measure (χ : Type) where
   -- startsWithNewLine : Bool
   -- /--
   -- -/
-  fail: Bool
+  fail: Option (List (List String)) := none
 deriving Inhabited
 
 instance : BEq (HashSet String) where
@@ -156,8 +157,20 @@ instance : BEq (Option (HashSet String)) where
     | none, none => true
     | _, _ => false
 
+set_option diagnostics true
+
 instance : Hashable (HashSet String) where
   hash s := s.toList.foldl (fun acc x => mixHash acc (hash x)) 0
+
+def HashSet.subset [BEq α] [Hashable α] (l r: HashSet α) : Bool :=
+  l.all (fun x => r.contains x)
+
+def HashSet.lessThan (lhs rhs: Option (HashSet String)) :=
+  match (lhs, rhs) with
+    | (some l, some r) =>
+      HashSet.subset l r
+    | (none, none) => true
+    | _ => false
 
 def groupBySpacingR [BEq χ] [Hashable χ] (measures : List (Measure χ)) : Std.HashMap (Option (HashSet String)) (List (Measure χ)) :=
   measures.foldl
@@ -169,6 +182,10 @@ def groupBySpacingR [BEq χ] [Hashable χ] (measures : List (Measure χ)) : Std.
 
 instance [Cost χ] : LE (Measure χ) where
   le lhs rhs := lhs.last ≤ rhs.last ∧ lhs.cost ≤ rhs.cost
+-- #check inferInstanceAs (Decidable ((some (HashSet.ofList ["1"])) ≤ some (HashSet.ofList ["2"])))
+
+-- instance [Cost χ] : LE (Option (HashSet String)) where
+--   le lhs rhs := lhs.last ≤ rhs.last ∧ lhs.cost ≤ rhs.cost
 
 instance [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : Measure χ) : Decidable (lhs ≤ rhs) :=
   inferInstanceAs (Decidable (lhs.last ≤ rhs.last ∧ lhs.cost ≤ rhs.cost))
@@ -181,7 +198,7 @@ def spaceHardNl := "hardNl"
 def space := "space"
 def nospace := "nospace"
 
-def Measure.mkFail [Cost χ] (cost : χ ) : Measure χ := {last := 0, cost:=cost, layout := fun _ => panic! "We never want to print fail", fail := true}
+def Measure.mkFail [Cost χ] (cost : χ ) (err : (List (List String))) : Measure χ := {last := 0, cost:=cost, layout := fun _ => panic! "We never want to print fail", fail := some err}
 
 def intersection {α:Type} [BEq α] [Hashable α] (set1 set2 : HashSet α): HashSet α :=
   set1.filter (fun x => set2.contains x)
@@ -190,10 +207,12 @@ def intersection {α:Type} [BEq α] [Hashable α] (set1 set2 : HashSet α): Hash
 Lifting `Doc.concat` to `Measure`.
 -/
 def Measure.concat [Cost χ] (lhs rhs : Measure χ) :Measure χ :=
-  match lhs.fail || rhs.fail with
-  | true => Measure.mkFail lhs.cost
-  | _ => { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), spacingR := rhs.spacingR, fail := false }
-    -- _ (none, _) => { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), forcedNewLine := rhs.forcedNewLine, startsWithNewLine := lhs.startsWithNewLine, fail := false }
+  match (lhs.fail, rhs.fail) with
+  | (some l, none) => Measure.mkFail lhs.cost l
+  | (none, some r) => Measure.mkFail rhs.cost r
+  | (some l, some r) => Measure.mkFail lhs.cost (l ++ r)
+  | _ => { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), spacingR := rhs.spacingR, fail := none }
+  -- _ (none, _) => { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), forcedNewLine := rhs.forcedNewLine, startsWithNewLine := lhs.startsWithNewLine, fail := false }
   -- Do I want to just call mergeList?
 
 
@@ -226,9 +245,11 @@ private partial def mergeSet [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rh
   | [], _ => acc.reverse ++ rhs
   | _, [] => acc.reverse ++ lhs
   | l :: ls, r :: rs =>
-    if l ≤ r then
+    -- let ls := l.spacingR
+    -- let rs := r.spacingR
+    if l ≤ r && HashSet.lessThan l.spacingR r.spacingR then
       mergeSet lhs rs acc
-    else if r ≤ l then
+    else if r ≤ l && HashSet.lessThan r.spacingR l.spacingR then
       mergeSet ls rhs acc
     else if l.last > r.last then
       mergeSet ls rhs (l :: acc)
@@ -244,9 +265,22 @@ def MeasureSet.merge [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : Meas
   | _, .tainted .. => lhs
   | .tainted .., _ => rhs
   | .set lhs, .set rhs =>
-    let lhs' := lhs.filter (fun s => !s.fail)
-    let rhs' := rhs.filter (fun s => !s.fail)
-    .set (mergeSet lhs' rhs')
+    let lhs' := lhs.filter (fun s => s.fail.isNone)
+    let rhs' := rhs.filter (fun s => s.fail.isNone)
+    if (lhs'.length == 0 && rhs'.length == 0) then
+      let addErrors (acc:List (List String)) (x:Measure χ):=
+        match x.fail with
+        | .some a => a++acc
+        | .none => acc
+
+      .set [Measure.mkFail (Cost.text 0 0 0) (lhs.foldl addErrors <| rhs.foldl addErrors [])]
+    else
+      .set (mergeSet lhs' rhs')
+
+def MeasureSet.getSet! [Cost χ] [DecidableRel (LE.le (α := χ))] (m : MeasureSet χ) : List (Measure χ) :=
+  match m with
+  | .set s => s
+  | .tainted _ => panic! "Cannot get tainted set"
 
 
 
@@ -283,7 +317,7 @@ def placeComment (indent : Nat) (comment : String) : List String → List String
 def removeMeasureFails (m : MeasureSet χ): MeasureSet χ:=
   match m with
   | .set xs =>
-    .set (xs.filter (fun x => !x.fail))
+    .set (xs.filter (fun x => x.fail.isNone))
   | x => x
 
 /--
@@ -300,19 +334,19 @@ partial def Doc.resolve [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ)
     | _ => indent > widthLimit || col > widthLimit
   if exceeds then
     .tainted (fun _ =>
-      match core doc col indent none with
+      match core doc [] col indent none with
       | .tainted m => m ()
       | .set (m :: _) => m
       | .set [] => panic! "Empty measure sets are impossible"
     )
   else
-    core doc col indent none
+    core doc [] col indent none
 where
   /--
   The core resolver that actually computes the `MeasureSet`s that result from rendering `doc`
   in the given context.
   -/
-  core (doc : Doc) (col : Nat) (indent : Nat) (spacing : Option (HashSet String)): MeasureSet χ :=
+  core (doc : Doc) (trace : List String) (col : Nat) (indent : Nat) (spacing : Option (HashSet String)): MeasureSet χ :=
     -- If we end up in this function we know that this cannot exceed the widthLimit
     -- and can thus savely return a set in all cases except concat.
     match doc with
@@ -323,33 +357,30 @@ where
           cost := Cost.text widthLimit col s.length
           layout := fun ss => s :: ss
           spacingR := spacing
-          fail := false
         }]
       else
         match spacing with
         | some leftSpacing =>
-          core (concat (restrictByFirstChar (leftSpacing) (s.get! 0)) (.text s)) col indent none
+          core (concat (restrictByFirstChar (leftSpacing) (s.get! 0)) (.text s)) trace col indent none
         | none =>
           .set [{
             last := col + s.length,
             cost := Cost.text widthLimit col s.length
             layout := fun ss => s :: ss
             spacingR := none
-            fail := false
           }]
     | .newline _ =>
       match spacing with
       | some leftSpacing =>
         let possibilities := intersection leftSpacing (HashSet.ofList [spaceNl, spaceHardNl])
         if possibilities.isEmpty then
-          core .fail col indent spacing
+          core (.fail "no options newline") trace col indent spacing
         else
           .set [{
             last := indent,
-            cost := Cost.nl indent,
-            layout := fun ss => "".pushn ' ' indent :: "\n" :: ss
+            cost := Cost.text widthLimit col 0,
+            layout := fun ss => ss
             spacingR := possibilities
-            fail := false
           }]
       | none =>
         .set [{
@@ -357,32 +388,29 @@ where
           cost := Cost.nl indent,
           layout := fun ss =>  "".pushn ' ' indent :: "\n" :: ss
           spacingR := none
-          fail := false
         }]
-    | .concat lhs rhs => processConcat (core lhs col indent spacing) (fun l spacing => core rhs l.last indent spacing)
-    | .choice lhs rhs => MeasureSet.merge (core lhs col indent spacing) (core rhs col indent spacing)
-    | .nest indentOffset doc => core doc col (indent + indentOffset) spacing
-    | .align doc => core doc col col spacing
-    | .reset doc => core doc col 0 spacing
+    | .concat lhs rhs => processConcat (core lhs trace col indent spacing) trace (fun l spacing => core rhs trace l.last indent spacing)
+    | .choice lhs rhs => MeasureSet.merge (core lhs trace col indent spacing) (core rhs trace col indent spacing)
+    | .nest indentOffset doc => core doc trace col (indent + indentOffset) spacing
+    | .align doc => core doc trace col col spacing
+    | .reset doc => core doc trace col 0 spacing
     | .bubbleComment comment => .set [{
       last := col
       -- prioritize placing comments where they were placed by the user
       cost := (Cost.text widthLimit (indent + widthLimit) comment.length) + Cost.nl indent
       layout := placeComment 0 comment
-      fail := false
     }]
     | .endOfLineComment comment => .set [{
       last := col + comment.length
       cost := Cost.nl indent
       layout := (fun ss => comment :: ss)
       spacingR := HashSet.ofList [spaceHardNl, spaceNl]
-      fail := false
     }]
-    | .fail => .set [{
+    | .fail e => .set [{
       last := 0
       cost := Cost.nl indent
-      layout := (fun ss => ss)
-      fail := true
+      layout := (fun _ => ["fail"])
+      fail := [e::trace]
     }]
     -- At the moment we can't narrow down the spacing options for a `spacing` document.
     -- this could be done by
@@ -397,7 +425,6 @@ where
             cost := Cost.text widthLimit col 0
             layout := fun ss => ss
             spacingR := possibilities
-            fail := false
           }]
         | none =>
           .set [{
@@ -405,7 +432,6 @@ where
             cost := Cost.text widthLimit col 0
             layout := fun ss => ss
             spacingR := s
-            fail := false
           }]
     | .expect s =>
       match spacing with
@@ -414,7 +440,7 @@ where
           -- which means the left and right side agree on how the document should be separated
           let possibilities := intersection leftSpacing s
           let choices := possibilitiesToMeasureSet possibilities col
-          core choices col indent none
+          core choices trace col indent none
         | none =>
           if s.contains nospace then
             .set [{
@@ -422,17 +448,19 @@ where
               cost := Cost.text widthLimit col 0
               layout := fun ss => ss
               spacingR := none
-              fail := false
             }]
           else
-            core .fail col indent spacing
+            core (.fail "no expect overlap") trace col indent spacing
+      | .rule s doc =>
+        core doc (s::trace) col indent spacing
+
 
   possibilitiesToMeasureSet (possibilities : HashSet String) (col : Nat) : Doc :=
     if possibilities.isEmpty then
-      .fail
+      .fail "No possibilities"
     else Id.run do
       let mut options : List (Doc) := []
-      let list := possibilities.toList
+      -- let list := possibilities.toList
 
       if possibilities.contains spaceNl || possibilities.contains spaceHardNl then
         options := .newline " "::options
@@ -446,12 +474,12 @@ where
       let choices := options.tail.foldl (fun acc doc => Doc.choice acc doc) (options.head!)
       return choices
 
-  impossibleMeasure : Measure χ := {
+  impossibleMeasure (trace: List String): Measure χ := {
       last := indent,
       cost := Cost.nl indent + Cost.nl indent + Cost.nl indent,
       layout := fun ss => "(no possible formatter)" :: "\n" :: ss
       spacingR := none
-      fail := true
+      fail := ["impossible"::trace]
     }
 
   restrictByFirstChar (possibilities : HashSet String) (firstChar : Char) : Doc := Id.run do
@@ -472,7 +500,7 @@ where
 
     match options with
     | some e => e
-    | none => .fail
+    | none => .fail "First char does not match"
     -- .text s!"__{repr options}__"
 
   /--
@@ -480,8 +508,8 @@ where
   with their corresponding rhs measure.
   -/
 
-  processConcat (leftSet : MeasureSet χ) (processRight : Measure χ → Option (HashSet String) → MeasureSet χ) : MeasureSet χ :=
-    match removeMeasureFails leftSet with
+  processConcat (leftSet : MeasureSet χ) (trace : List String)(processRight : Measure χ → Option (HashSet String) → MeasureSet χ) : MeasureSet χ :=
+    match leftSet with
     | .tainted leftThunk =>
       -- If the lhs is already tainted we can wrap the computation of the rhs
       -- in a tainted thunk, thus prunning it away.
@@ -491,7 +519,7 @@ where
         match processRight left (left.spacingR) with
         | .tainted rightThunk => left.concat (rightThunk ())
         | .set (right :: _) => left.concat right
-        | .set [] => left.concat impossibleMeasure
+        | .set [] => impossibleMeasure trace
       )
     | .set lefts =>
       let concatOneWithRight (l : Measure χ) : MeasureSet χ :=
@@ -513,22 +541,30 @@ where
           | [] => List.reverse (currentBest :: result)
           | r :: rights =>
             let current := l.concat r
-            if current.cost ≤ currentBest.cost then
+            if current.cost ≤ currentBest.cost && HashSet.lessThan current.spacingR currentBest.spacingR then
               -- if the cost is less than or equal, then this should be a part of the result
               dedup rights (result) current
             else
               dedup rights (currentBest :: result) current
 
-
-        match processRight l (l.spacingR) |> removeMeasureFails with
+        let rights := processRight l (l.spacingR)
+        match rights |> removeMeasureFails with
         | .tainted rightThunk => .tainted (fun _ => l.concat (rightThunk ()))
         -- | .set (rights) => .set (rights.map (fun r => l.concat r))
-         | .set (r :: rights) => .set (dedup rights [] (l.concat r))
-        | .set [] => .set [impossibleMeasure]
+        | .set (r :: rights) => .set (dedup rights [] (l.concat r))
+        | .set [] => .set [{impossibleMeasure trace with fail := some (rights.getSet!.foldl (
+            fun acc (a:Measure χ) =>
+            match a.fail with
+            | none => acc
+            | some err => acc ++ err) [])}]
 
       let rec concatAllWithRight (lefts : List (Measure χ)) : MeasureSet χ :=
-        match lefts |>.filter (fun x => !x.fail) with
-        | [] => .set [impossibleMeasure]
+        match lefts |>.filter (fun x => x.fail.isNone) with
+        | [] => .set [{impossibleMeasure trace with fail := some (lefts.foldl (
+            fun acc (a:Measure χ) =>
+            match a.fail with
+            | none => acc
+            | some err => acc ++ err) [])}]
         | [l] => concatOneWithRight l
         | l :: ls => MeasureSet.merge (concatOneWithRight l) (concatAllWithRight ls)
 
@@ -608,9 +644,11 @@ where
     | .choice .. => panic! "Not a choice less document"
     | .endOfLineComment comment => comment :: prev
     | .bubbleComment comment => placeComment 0 comment prev
-    | .fail => panic! "A choice less document does not allow fail"
+    | .fail e => panic! "A choice less document does not allow fail"
     | .provide s => s.toList ++ prev
     | .expect s => s.toList ++ prev
+    | .rule _ doc =>
+        go doc col indent prev
 
   lineLength : List String → Nat
     | [] => 0
@@ -628,11 +666,25 @@ def Doc.print (χ : Type) [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := �
     | .tainted thunk => (thunk (), true)
     | .set (measure :: _) => (measure, false)
     | .set [] => panic! "Empty measure sets are impossible"
-  {
-    layout := String.join (measure.layout []).reverse,
-    isTainted := isTainted,
-    cost := measure.cost
-  }
+        let c :=match measures with
+    | .tainted _ => 0
+    | .set a => a.length
+  match measure.fail with
+  | none =>
+    {
+      layout := String.join (measure.layout []).reverse,
+      isTainted := isTainted,
+      cost := measure.cost
+    }
+  | some failure =>
+    let sorted := failure.mergeSort (fun a b => a.length < b.length)
+    let x := sorted.foldl (fun (acc: String) (errs:List String) => acc ++ "\n" ++ (String.intercalate "::" errs.reverse)) ""
+    {
+      layout := if x.trim.length == 0 then s!"(unknown failure {isTainted} c {c})" else x,
+      -- layout := "definite error",
+      isTainted := isTainted,
+      cost := measure.cost
+    }
 
 /--
 Find an optimal layout for a document and render it.
@@ -670,21 +722,22 @@ def Doc.flatten (doc : Doc) : Doc :=
   `flatten (text "content" <> endOfLineComment comment) <> nl`
   -/
   | .endOfLineComment comment => .endOfLineComment comment
-  | .fail => .fail
+  | .fail e => .fail e
   | .provide s =>
     let s := s.erase spaceHardNl
     let s := if s.contains spaceNl then s.erase spaceNl|>.insert "space" else s
     if s.isEmpty then
-      .fail
+      .fail "Provide Flattened to nothing"
     else
       .provide s
   | .expect s =>
     let s := s.erase spaceHardNl
     let s := if s.contains spaceNl then s.erase spaceNl|>.insert "space" else s
     if s.isEmpty then
-      .fail
+      .fail "Expect flattened to nothing"
     else
       .expect s
+  | .rule s doc => .rule s doc.flatten
 
 /--
 Lay out a `Doc` or its `Doc.flatten`ed version.

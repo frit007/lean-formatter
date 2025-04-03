@@ -108,7 +108,7 @@ partial def isEmpty [ToPPL a] (ppl : a) : Bool :=
   isEmpty' (toPPL ppl)
 where
   isEmpty' : (ppl : PPL) → Bool
-  | .error s => true
+  | .error s => false
   | .text s => s.length == 0
   | .nl => false
   | .choice left right => isEmpty' left && isEmpty' right
@@ -124,7 +124,7 @@ where
   | .provide _ => false
   | .expect _ => false
 
-infixl:38 " <^> " => fun l r => PPL.choice (toPPL l) (toPPL r)
+infixl:34 " <^> " => fun l r => PPL.choice (toPPL l) (toPPL r)
 -- infixl:40 " <> " => fun l r =>
 --   match (isEmpty l, isEmpty r) with
 --   | (true, _) => (toPPL r)
@@ -274,7 +274,7 @@ partial def toDoc : PPL → Doc
   --   | PPLSpacing.space => Doc.text s!" "
   --   | PPLSpacing.newline => Doc.newline ""
   --   | PPLSpacing.either => Doc.text s!" " <|||> Doc.newline ""
-  | .error s => Doc.text s
+  | .error s => Doc.fail s
   | .text s => Doc.text s
   | .nl => Doc.newline " "
   | .choice l r => (toDoc l) <|||> (toDoc r)
@@ -288,7 +288,7 @@ partial def toDoc : PPL → Doc
   | .reset s => Doc.reset (toDoc s)
   /- rule does not affect the way the code is formatted
   -/
-  | .rule name s => (toDoc s)
+  | .rule name s => Doc.rule name (toDoc s)
   | .provide s => Doc.provide (Std.HashSet.ofList s)
   | .expect s => Doc.expect (Std.HashSet.ofList s)
 
