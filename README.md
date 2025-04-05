@@ -8,6 +8,8 @@ lake build
 
 lake exe Format -file ../batteries/Batteries/Logic.lean -include ../batteries/.lake/build/lib
 
+lake exe Format -file ../batteries/Batteries/Data/List/Perm.lean -include ../batteries/.lake/build/lib
+
 lake exe Format -folder ../batteries/Batteries -include ../batteries/.lake/build/lib
 
 

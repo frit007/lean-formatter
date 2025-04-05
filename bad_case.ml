@@ -12,10 +12,10 @@ let print_doc (w : int) =
              (let exit_d = text "exit();" in
               (space ^^ exit_d) <|> nest 4 (nl ^^ exit_d))) ^^
           nl ^^ text "}" *)
-  (* let d = ($$$FORMAT$$$) *)
-  
 
-  let d = text "s"
+  (* let d = text "s " ^^ ((text " " <|> nl) ^^ ((text " 3") <|> (nl ^^ (text " " <|> nl) ^^ text " 3"))) *)
+  (* let d = (text " " <|> nl) ^^ ((text " 3") <|> (nl ^^ ((text " " <|> nl) ^^ text " 3"))) *)
+  let d = (text " " <|> nl) ^^ ((text " 3") <|> (nl ^^ (text " " <|> nl)))
   in
   pretty_print print_string d
 

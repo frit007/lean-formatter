@@ -10,6 +10,15 @@ namespace Pfmt
 TODO list: nextcloud
 -/
 
+abbrev Bridge := UInt32
+
+def bridgeEmpty :Bridge := 0
+def bridgeFlex :Bridge := 1
+def bridgeNl :Bridge := 2
+def bridgeHardNl :Bridge := 4
+def bridgeSpace :Bridge := 8
+def bridgeImmediate :Bridge := 16
+
 /--
 A decision tree for rendering a document. If a `Doc` does not contain a `Doc.choice`
 constructor we call it "choice free". Usually we view a `Doc` in a rendering
@@ -86,13 +95,12 @@ do/by notation use `assignValue` to handle this scenario so they can place their
 
 provide can be chained to narrow the options to overlap between the two sets
 -/
-| provide (spacing : HashSet String)
+| provide (spacing : Bridge)
 /--
 expect must be preceded by a `provide` and will fail if the provided spacing does not contain the expected spacing
 -/
-| expect (spacing : HashSet String)
+| expect (spacing : Bridge)
 -- TODO: Think about adding the cost constructor. It does however make type inference much harder
--- TODO: Think about adding fail.
 | rule (r : String) (doc : Doc)
 deriving Inhabited, Repr
 
@@ -134,7 +142,7 @@ structure Measure (χ : Type) where
   -- TODO: Maybe Array?
   layout : List String → List String
   -- spacingL : Option (HashSet String) := none
-  spacingR : Option (HashSet String) := none
+  spacingR : Bridge := bridgeFlex
   -- /--
   -- Force the next character to be newline. If it is not then fail
   -- -/
@@ -147,6 +155,7 @@ structure Measure (χ : Type) where
   -- -/
   fail: Option (List (List String)) := none
 deriving Inhabited
+
 
 instance : BEq (HashSet String) where
   beq s1 s2 := s1.toList == s2.toList  -- Compare by list representation
@@ -162,17 +171,31 @@ set_option diagnostics true
 instance : Hashable (HashSet String) where
   hash s := s.toList.foldl (fun acc x => mixHash acc (hash x)) 0
 
-def HashSet.subset [BEq α] [Hashable α] (l r: HashSet α) : Bool :=
-  l.all (fun x => r.contains x)
+def Bridge.subset (l r: Bridge) : Bool :=
+  l &&& r == r
 
-def HashSet.lessThan (lhs rhs: Option (HashSet String)) :=
-  match (lhs, rhs) with
-    | (some l, some r) =>
-      HashSet.subset l r
-    | (none, none) => true
-    | _ => false
+def Bridge.contains (l r: Bridge) : Bool :=
+  l &&& r == l
 
-def groupBySpacingR [BEq χ] [Hashable χ] (measures : List (Measure χ)) : Std.HashMap (Option (HashSet String)) (List (Measure χ)) :=
+def Bridge.lessThan (lhs rhs: Bridge) :=
+  lhs.subset rhs
+
+def Bridge.erase (lhs rhs: Bridge) :=
+  lhs &&& (~~~ rhs)
+
+def Bridge.intersection (lhs rhs: Bridge) : Bridge :=
+  lhs &&& rhs
+
+def Bridge.union (lhs rhs: Bridge) : Bridge :=
+  lhs ||| rhs
+
+def Bridge.add (lhs rhs: Bridge) : Bridge :=
+  lhs ||| rhs
+
+def Bridge.isEmpty (b : Bridge) : Bool :=
+  b == 0
+
+def groupBySpacingR [BEq χ] [Hashable χ] (measures : List (Measure χ)) : Std.HashMap (Bridge) (List (Measure χ)) :=
   measures.foldl
     (fun acc m =>
       let key := m.spacingR
@@ -190,18 +213,14 @@ instance [Cost χ] : LE (Measure χ) where
 instance [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : Measure χ) : Decidable (lhs ≤ rhs) :=
   inferInstanceAs (Decidable (lhs.last ≤ rhs.last ∧ lhs.cost ≤ rhs.cost))
 
-def spacing (s : List String) : Doc := Doc.provide (HashSet.ofList s)
-def expect (s : List String) : Doc := Doc.expect (HashSet.ofList s)
+def spacing (s : Bridge) : Doc := Doc.provide (s)
+def expect (s : Bridge) : Doc := Doc.expect (s)
 
-def spaceNl := "nl"
-def spaceHardNl := "hardNl"
-def space := "space"
-def nospace := "nospace"
 
 def Measure.mkFail [Cost χ] (cost : χ ) (err : (List (List String))) : Measure χ := {last := 0, cost:=cost, layout := fun _ => panic! "We never want to print fail", fail := some err}
 
-def intersection {α:Type} [BEq α] [Hashable α] (set1 set2 : HashSet α): HashSet α :=
-  set1.filter (fun x => set2.contains x)
+def bridgeIntersection (set1 set2 : Bridge): Bridge :=
+  set1 &&& set2
 
 /--
 Lifting `Doc.concat` to `Measure`.
@@ -218,7 +237,6 @@ def Measure.concat [Cost χ] (lhs rhs : Measure χ) :Measure χ :=
 
 -- instance [Cost χ] : Append ((Measure χ)) where
 --   append := Measure.concat
-
 /--
 A set of `Measure`s out of which we will pick an optimal `Doc` in the end.
 -/
@@ -236,6 +254,27 @@ This list is ordered by the last line length in strict ascending order.
 | set (ms : List (Measure χ))
 deriving Inhabited
 
+structure MeasureGroup (χ : Type) where
+  bridge: Bridge
+  set: MeasureSet χ
+deriving Inhabited
+
+abbrev MeasureGroups (χ : Type) := List (MeasureGroup χ)
+
+
+-- Can it be a bitmask?
+-- intersection lhs rhs
+-- lhs & rhs
+-- subset lhs rhs
+-- lhs & rhs == rhs
+
+-- any 1 (In this case it is not allowed to have overlap with any other spacing option, )
+-- space 2
+-- hardNl 4
+-- spaceNl 8
+-- immediateValue 16
+-- nospace 32 (might be useful in the case of parenthesis, but they should probably prefer any, since if their counterpart allows no space then it will be chosen)
+
 /--
 If `MeasureSet.merge` receives two `MeasureSet.set` we use this operation to combine them
 into a new Pareto front with correct ordering.
@@ -245,11 +284,10 @@ private partial def mergeSet [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rh
   | [], _ => acc.reverse ++ rhs
   | _, [] => acc.reverse ++ lhs
   | l :: ls, r :: rs =>
-    -- let ls := l.spacingR
-    -- let rs := r.spacingR
-    if l ≤ r && HashSet.lessThan l.spacingR r.spacingR then
+    -- TODO: We do not have to compare bridge here because we know that they have the same bridge
+    if l ≤ r && l.spacingR.lessThan r.spacingR then
       mergeSet lhs rs acc
-    else if r ≤ l && HashSet.lessThan r.spacingR l.spacingR then
+    else if r ≤ l && r.spacingR.lessThan l.spacingR then
       mergeSet ls rhs acc
     else if l.last > r.last then
       mergeSet ls rhs (l :: acc)
@@ -334,19 +372,19 @@ partial def Doc.resolve [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ)
     | _ => indent > widthLimit || col > widthLimit
   if exceeds then
     .tainted (fun _ =>
-      match core doc [] col indent none with
+      match core doc [] col indent bridgeFlex with
       | .tainted m => m ()
       | .set (m :: _) => m
       | .set [] => panic! "Empty measure sets are impossible"
     )
   else
-    core doc [] col indent none
+    core doc [] col indent bridgeFlex
 where
   /--
   The core resolver that actually computes the `MeasureSet`s that result from rendering `doc`
   in the given context.
   -/
-  core (doc : Doc) (trace : List String) (col : Nat) (indent : Nat) (spacing : Option (HashSet String)): MeasureSet χ :=
+  core (doc : Doc) (trace : List String) (col : Nat) (indent : Nat) (spacing : Bridge): MeasureSet χ :=
     -- If we end up in this function we know that this cannot exceed the widthLimit
     -- and can thus savely return a set in all cases except concat.
     match doc with
@@ -359,37 +397,48 @@ where
           spacingR := spacing
         }]
       else
-        match spacing with
-        | some leftSpacing =>
-          core (concat (restrictByFirstChar (leftSpacing) (s.get! 0)) (.text s)) trace col indent none
-        | none =>
+        if spacing == bridgeFlex then
           .set [{
             last := col + s.length,
             cost := Cost.text widthLimit col s.length
             layout := fun ss => s :: ss
-            spacingR := none
+            spacingR := bridgeFlex
           }]
-    | .newline _ =>
-      match spacing with
-      | some leftSpacing =>
-        let possibilities := intersection leftSpacing (HashSet.ofList [spaceNl, spaceHardNl])
-        if possibilities.isEmpty then
-          core (.fail "no options newline") trace col indent spacing
         else
-          .set [{
-            last := indent,
-            cost := Cost.text widthLimit col 0,
-            layout := fun ss => ss
-            spacingR := possibilities
-          }]
-      | none =>
+          core (concat (possibilitiesToDoc spacing) (.text s)) trace col indent bridgeFlex
+          -- core ( .concat (.choice (.text "s") (.text "what")) (.text s)) trace col indent bridgeFlex
+
+    | .newline _ =>
+      if spacing == bridgeFlex then
         .set [{
           last := indent,
           cost := Cost.nl indent,
           layout := fun ss =>  "".pushn ' ' indent :: "\n" :: ss
-          spacingR := none
+          spacingR := bridgeFlex
         }]
-    | .concat lhs rhs => processConcat (core lhs trace col indent spacing) trace (fun l spacing => core rhs trace l.last indent spacing)
+      else
+        core (concat (possibilitiesToDoc (spacing)) (.newline " ")) trace col indent bridgeFlex
+
+      -- match spacing with
+      -- | some leftSpacing =>
+      --   let possibilities := bridgeIntersection leftSpacing (spaceNl ||| spaceHardNl)
+      --   if possibilities.isEmpty then
+      --     core (.fail "no options newline") trace col indent spacing
+      --   else
+      --     .set [{
+      --       last := indent,
+      --       cost := Cost.text widthLimit col 0,
+      --       layout := fun ss => ss
+      --       spacingR := possibilities
+      --     }]
+      -- | none =>
+      --   .set [{
+      --     last := indent,
+      --     cost := Cost.nl indent,
+      --     layout := fun ss =>  "".pushn ' ' indent :: "\n" :: ss
+      --     spacingR := none
+      --   }]
+    | .concat lhs rhs => processConcat (core lhs trace col indent spacing) trace (fun l newSpacing => core rhs trace l.last indent newSpacing)
     | .choice lhs rhs => MeasureSet.merge (core lhs trace col indent spacing) (core rhs trace col indent spacing)
     | .nest indentOffset doc => core doc trace col (indent + indentOffset) spacing
     | .align doc => core doc trace col col spacing
@@ -404,7 +453,7 @@ where
       last := col + comment.length
       cost := Cost.nl indent
       layout := (fun ss => comment :: ss)
-      spacingR := HashSet.ofList [spaceHardNl, spaceNl]
+      spacingR := bridgeHardNl ||| bridgeNl
     }]
     | .fail e => .set [{
       last := 0
@@ -416,60 +465,49 @@ where
     -- this could be done by
     -- desugaring spacing to choice
     | .provide s =>
-      match spacing with
-        | some leftSpacing =>
-          -- narrow down the possibilities to the intersection of the two sets
-          let possibilities := intersection leftSpacing s
-          .set [{
-            last := col
-            cost := Cost.text widthLimit col 0
-            layout := fun ss => ss
-            spacingR := possibilities
-          }]
-        | none =>
-          .set [{
-            last := col
-            cost := Cost.text widthLimit col 0
-            layout := fun ss => ss
-            spacingR := s
-          }]
+      if spacing == bridgeFlex then
+        .set [{
+          last := col
+          cost := Cost.text widthLimit col 0
+          layout := fun ss => ss
+          spacingR := s
+        }]
+      else
+        let possibilities := spacing.intersection s
+        .set [{
+          last := col
+          cost := Cost.text widthLimit col 0
+          layout := fun ss => ss
+          spacingR := possibilities
+        }]
+
     | .expect s =>
-      match spacing with
-        | some leftSpacing =>
-          -- find the possibilities that are in both sets
-          -- which means the left and right side agree on how the document should be separated
-          let possibilities := intersection leftSpacing s
-          let choices := possibilitiesToMeasureSet possibilities col
-          core choices trace col indent none
-        | none =>
-          if s.contains nospace then
-            .set [{
-              last := col
-              cost := Cost.text widthLimit col 0
-              layout := fun ss => ss
-              spacingR := none
-            }]
-          else
-            core (.fail "no expect overlap") trace col indent spacing
+      if spacing == bridgeFlex then
+        core (.fail "no expect overlap") trace col indent bridgeFlex
+      else
+        let possibilities := spacing.intersection s
+        let choices := possibilitiesToDoc possibilities
+        core choices trace col indent bridgeFlex
       | .rule s doc =>
         core doc (s::trace) col indent spacing
 
 
-  possibilitiesToMeasureSet (possibilities : HashSet String) (col : Nat) : Doc :=
-    if possibilities.isEmpty then
+  possibilitiesToDoc (possibilities : Bridge) : Doc :=
+    if possibilities == 0 then
       .fail "No possibilities"
     else Id.run do
-      let mut options : List (Doc) := []
+      let mut options : List (Doc) := [.newline " "]
       -- let list := possibilities.toList
 
-      if possibilities.contains spaceNl || possibilities.contains spaceHardNl then
-        options := .newline " "::options
-      -- In any other case we we let the child handle the separation
-      if possibilities.contains space then
-        options := .text " "::options
+      -- if bridgeContains possibilities bridgeNl || bridgeContains possibilities bridgeHardNl then
+      --   options := .newline " "::options
+      -- -- In any other case we we let the child handle the separation
+      -- if bridgeContains possibilities bridgeSpace then
+      --   options := .text " "::options
 
-      if possibilities.any (fun f => f != space && f != spaceNl && f != spaceHardNl) then
-        options := (text "")::options
+      -- -- if possibilities.any (fun f => f != space && f != spaceNl && f != spaceHardNl) then
+      -- if possibilities.erase (bridgeSpace ||| bridgeNl ||| bridgeHardNl) != 0 then
+      --   options := (text "")::options
 
       let choices := options.tail.foldl (fun acc doc => Doc.choice acc doc) (options.head!)
       return choices
@@ -478,37 +516,16 @@ where
       last := indent,
       cost := Cost.nl indent + Cost.nl indent + Cost.nl indent,
       layout := fun ss => "(no possible formatter)" :: "\n" :: ss
-      spacingR := none
+      spacingR := bridgeFlex
       fail := ["impossible"::trace]
     }
-
-  restrictByFirstChar (possibilities : HashSet String) (firstChar : Char) : Doc := Id.run do
-    let addAlternative (d : Doc) : Option Doc → Option Doc
-    | some e => some (Doc.choice d e)
-    | none => d
-
-    let mut options : Option Doc := none
-
-    if (possibilities.contains space && firstChar != ' ') then
-      options := addAlternative (.text " ") options
-
-    if (possibilities.contains space && firstChar == ' ') || (possibilities.contains nospace && firstChar != ' ') then
-      options := addAlternative (.text "") options
-
-    if ((possibilities.contains spaceNl || possibilities.contains spaceHardNl) && firstChar != ' ') then
-      options := addAlternative (.newline " ") options
-
-    match options with
-    | some e => e
-    | none => .fail "First char does not match"
-    -- .text s!"__{repr options}__"
 
   /--
   Compute the set that contains the concatenations of all possible lhs measures
   with their corresponding rhs measure.
   -/
 
-  processConcat (leftSet : MeasureSet χ) (trace : List String)(processRight : Measure χ → Option (HashSet String) → MeasureSet χ) : MeasureSet χ :=
+  processConcat (leftSet : MeasureSet χ) (trace : List String)(processRight : Measure χ → Bridge → MeasureSet χ) : MeasureSet χ :=
     match leftSet with
     | .tainted leftThunk =>
       -- If the lhs is already tainted we can wrap the computation of the rhs
@@ -541,7 +558,8 @@ where
           | [] => List.reverse (currentBest :: result)
           | r :: rights =>
             let current := l.concat r
-            if current.cost ≤ currentBest.cost && HashSet.lessThan current.spacingR currentBest.spacingR then
+            -- TODO: It should not be necessary to check spacing here
+            if current.cost ≤ currentBest.cost && current.spacingR.lessThan currentBest.spacingR then
               -- if the cost is less than or equal, then this should be a part of the result
               dedup rights (result) current
             else
@@ -645,8 +663,8 @@ where
     | .endOfLineComment comment => comment :: prev
     | .bubbleComment comment => placeComment 0 comment prev
     | .fail e => panic! "A choice less document does not allow fail"
-    | .provide s => s.toList ++ prev
-    | .expect s => s.toList ++ prev
+    | .provide s => [toString s] ++ prev
+    | .expect s => [toString s] ++ prev
     | .rule _ doc =>
         go doc col indent prev
 
@@ -724,15 +742,15 @@ def Doc.flatten (doc : Doc) : Doc :=
   | .endOfLineComment comment => .endOfLineComment comment
   | .fail e => .fail e
   | .provide s =>
-    let s := s.erase spaceHardNl
-    let s := if s.contains spaceNl then s.erase spaceNl|>.insert "space" else s
+    let s := s.erase bridgeHardNl
+    let s := if s.contains bridgeNl then s.erase bridgeNl|>.union bridgeSpace else s
     if s.isEmpty then
       .fail "Provide Flattened to nothing"
     else
       .provide s
   | .expect s =>
-    let s := s.erase spaceHardNl
-    let s := if s.contains spaceNl then s.erase spaceNl|>.insert "space" else s
+    let s := s.erase bridgeHardNl
+    let s := if s.contains bridgeNl then s.erase bridgeNl|>.union bridgeSpace else s
     if s.isEmpty then
       .fail "Expect flattened to nothing"
     else
@@ -807,22 +825,27 @@ instance : Cost DefaultCost where
   text := DefaultCost.text
   nl := DefaultCost.nl
 
+-- #eval
+--   let argD := (.nl ++ .text "arg1" ++ .nl ++ .text "arg2")
+--   let d :=
+--     .text "let ident :=" ++
+--     (
+--      (.space ++ .text "func" ++ .flatten argD)
+--      <|||>
+--      (.nest 2 (.nl ++ .text "func" ++ (.nest 2 argD)))
+--     )
+--   let out := Doc.prettyPrint DefaultCost (col := 0) (widthLimit := 20) d
+--   IO.println out
+
 #eval
-  let argD := (.nl ++ .text "arg1" ++ .nl ++ .text "arg2")
-  let d :=
-    .text "let ident :=" ++
-    (
-     (.space ++ .text "func" ++ .flatten argD)
-     <|||>
-     (.nest 2 (.nl ++ .text "func" ++ (.nest 2 argD)))
-    )
+  let d := Doc.concat (.provide bridgeHardNl) (.text "simple")
   let out := Doc.prettyPrint DefaultCost (col := 0) (widthLimit := 20) d
   IO.println out
 
-#eval (DefaultCost.le (DefaultCost.nl 3) (DefaultCost.text 100 2 0))
-#eval (DefaultCost.le (DefaultCost.text 100 2 0) (DefaultCost.nl 3))
+-- #eval (DefaultCost.le (DefaultCost.nl 3) (DefaultCost.text 100 2 0))
+-- #eval (DefaultCost.le (DefaultCost.text 100 2 0) (DefaultCost.nl 3))
 
-#eval (DefaultCost.add (DefaultCost.text 100 2 0) (DefaultCost.nl 3))
-#eval (DefaultCost.add (DefaultCost.nl 3) (DefaultCost.nl 3))
+-- #eval (DefaultCost.add (DefaultCost.text 100 2 0) (DefaultCost.nl 3))
+-- #eval (DefaultCost.add (DefaultCost.nl 3) (DefaultCost.nl 3))
 
 end Pfmt
