@@ -308,10 +308,19 @@ partial def pfDeclId : Rule
 | #[assignAtom, value, suffix, whereDecls] => do
   return (PPL.nest 2 (assignAtom <> ((("" <_> (flattenPPL value))
   <^> ("" <$$> value))))
-  <^> assignAtom <> [immediateValue] !> value)
-  <> (""<$$>"" <? suffix)
-  <>(""<$$>"" <? whereDecls)
+  <^> assignAtom <> [immediateValue] !> value) // changed line
+  <> (nl <? suffix)
+  <>(nl <? whereDecls)
 | _ => failure
+
+-- #coreFmt Lean.Parser.Command.declValSimple fun
+-- | #[assignAtom, value, suffix, whereDecls] => do
+--   return (PPL.nest 2 (assignAtom <> ((("" <_> (flattenPPL value))
+--   <^> ("" <$$> value))))
+--   <^> assignAtom <> immediateSyntax (value)) //changed line
+--   <> (nl <? suffix)
+--   <>(nl <? whereDecls)
+-- | _ => failure
 
 #coreFmt Lean.Parser.Term.whereDecls fun
 | #[whereAtom, decl] =>
@@ -479,6 +488,26 @@ def termOperator : Rule := fun
   ([space, nospace] <! byAtom <> (PPL.nest 2 ([spaceHardNl] !> tactic) <^> PPL.flatten ([space] !> tactic))) <^>
   ([immediateValue] <! " " <> (PPL.nest 2 (byAtom <> nl <> tactic)))
 | _ => failure
+
+-- extra parameters (that should be everywhere)
+#coreFmt Lean.Parser.Term.byTactic fun
+| false, #[byAtom, tactic] => do
+  return (byAtom <> PPL.nest 2 (nl !> tactic)) <^>
+  (byAtom <> (PPL.nest 2 (nl !> tactic) <^> PPL.flatten (" " !> tactic)))
+| true, #[byAtom, tactic] => do
+  " " <> PPL.nest 2 (byAtom <> nl <> tactic)
+| _ => failure
+
+-- register immediate separately
+#coreFmt Lean.Parser.Term.byTactic fun
+| #[byAtom, tactic] => do
+  return (byAtom <> PPL.nest 2 (nl !> tactic)) <^>
+  (byAtom <> (PPL.nest 2 (nl !> tactic) <^> PPL.flatten (" " !> tactic)))
+| _ => failure
+
+#coreFmtImmediate Lean.Parser.Term.byTactic fun
+| #[byAtom, tactic] => do
+  " " <> PPL.nest 2 (byAtom <> nl <> tactic)
 
 def formatTheorem : Array Syntax → RuleM PPL
 | #[theoremAtom, ident, typeSignature, content] =>

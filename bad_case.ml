@@ -15,8 +15,15 @@ let print_doc (w : int) =
 
   (* let d = text "s " ^^ ((text " " <|> nl) ^^ ((text " 3") <|> (nl ^^ (text " " <|> nl) ^^ text " 3"))) *)
   (* let d = (text " " <|> nl) ^^ ((text " 3") <|> (nl ^^ ((text " " <|> nl) ^^ text " 3"))) *)
-  let d = (text " " <|> nl) ^^ ((text " 3") <|> (nl ^^ (text " " <|> nl)))
+  (* let d = (text " " <|> nl) ^^ ((text " 3") <|> (nl ^^ (text " " <|> nl))) *)
+  let d = (text "aaaaaaaaaa" ^^ text " " <|> text "bbbbbbbbbb" ^^ text " ")^^(text "aaaaaaaaaa" ^^ text " " <|> text "bbbbbbbbbb" ^^ text " ")^^(text "aaaaaaaaaa" ^^ fail <|> text "b" ^^ text " ")
   in
   pretty_print print_string d
 
-let () = print_doc 80
+  (* 
+  Left side er blevet resolved... 
+
+
+  *)
+
+let () = print_doc 5

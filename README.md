@@ -44,4 +44,7 @@ Integration with the Lean LSP and defines the entry point for main
 
 ocamlfind ocamlc -o test -package pretty_expressive -linkpkg test.lean.ml && ./test
 
+
+ocamlfind ocamlc -o test -package pretty_expressive -linkpkg bad_case.ml && ./test
+
 eval $(opam env)

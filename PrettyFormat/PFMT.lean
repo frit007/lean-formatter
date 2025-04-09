@@ -19,6 +19,23 @@ def bridgeHardNl :Bridge := 4
 def bridgeSpace :Bridge := 8
 def bridgeImmediate :Bridge := 16
 
+
+/--
+This typeclass allows us to calculate the cost of a `Doc`. We use it to find
+the prettier document in `Doc.choice`. A valid `Cost` instance must satisfy
+the laws defined in `LawfulCost`.
+-/
+class Cost (χ : Type) extends LE χ, Add χ where
+  /--
+  Compute the cost of a `String` of length `length`, rendered at `col` with a certain
+  `widhLimit`.
+  -/
+  text : (widthLimit : Nat) → (col : Nat) → (length : Nat) → χ
+  /--
+  Compute the cost of a new line.
+  -/
+  nl : (indent : Nat) → χ
+
 /--
 A decision tree for rendering a document. If a `Doc` does not contain a `Doc.choice`
 constructor we call it "choice free". Usually we view a `Doc` in a rendering
@@ -27,7 +44,7 @@ context that consists of:
 2. A current column position `c`.
 3. An indentation level `i`.
 -/
-inductive Doc where
+inductive Doc (α : Type) where
 /--
 Render a `String` that does not contain newlines.
 -/
@@ -45,25 +62,25 @@ lllllrrrrrrrr
 rrrrrr
 ```
 -/
-| concat (lhs rhs : Doc)
+| concat (lhs rhs : α)
 /--
 Render `doc` width the indentation level increased by `nesting`.
 -/
-| nest (nesting : Nat) (doc : Doc)
+| nest (nesting : Nat) (doc : α)
 /--
 Render `doc` with the indentation level set to the column position.
 -/
-| align (doc : Doc)
+| align (doc : α)
 /--
 Make a choice between rendering either `lhs` or `rhs` by picking the prettier variant.
 If one of the sides `fail`, then other side is chosen. If both sides `fail`, then the result is also `fail`
 -/
-| choice (lhs rhs : Doc)
+| choice (lhs rhs : α)
 
 /--
 Reset the indentation level to 0.
 -/
-| reset (doc : Doc)
+| reset (doc : α)
 /--
 The comment will be placed after the last newline before this line
 -/
@@ -101,27 +118,28 @@ expect must be preceded by a `provide` and will fail if the provided spacing doe
 -/
 | expect (spacing : Bridge)
 -- TODO: Think about adding the cost constructor. It does however make type inference much harder
-| rule (r : String) (doc : Doc)
+| rule (r : String) (doc : α)
+| stx (s : Lean.Syntax)
 deriving Inhabited, Repr
 
-instance : Append Doc where
-  append lhs rhs := .concat lhs rhs
 
-/--
-This typeclass allows us to calculate the cost of a `Doc`. We use it to find
-the prettier document in `Doc.choice`. A valid `Cost` instance must satisfy
-the laws defined in `LawfulCost`.
--/
-class Cost (χ : Type) extends LE χ, Add χ where
+structure PPL where
+  d : Doc PPL
+  leftBridge : Bridge
   /--
-  Compute the cost of a `String` of length `length`, rendered at `col` with a certain
-  `widhLimit`.
+  If id is 0, then it will be assigned an id later
+  The Id is important to avoid formatting code twice
   -/
-  text : (widthLimit : Nat) → (col : Nat) → (length : Nat) → χ
-  /--
-  Compute the cost of a new line.
-  -/
-  nl : (indent : Nat) → χ
+  id : Nat := 0
+
+abbrev DocP := Doc PPL
+
+
+
+-- instance : Append PPL where
+--   append lhs rhs := .concat lhs rhs
+
+
 
 /--
 A `Measure` contains a `Doc` along with meta information from the rendering process.
@@ -195,6 +213,14 @@ def Bridge.add (lhs rhs: Bridge) : Bridge :=
 def Bridge.isEmpty (b : Bridge) : Bool :=
   b == 0
 
+def Bridge.smallerThan (lhs rhs: Bridge) : Bool :=
+  lhs < rhs
+-- def Bridge.order (lhs rhs: Bridge) : Bool :=
+--   lhs < rhs
+
+instance : DecidableRel (LE.le : Bridge → Bridge → Prop) :=
+  inferInstanceAs (DecidableRel (LE.le : UInt32 → UInt32 → Prop))
+
 def groupBySpacingR [BEq χ] [Hashable χ] (measures : List (Measure χ)) : Std.HashMap (Bridge) (List (Measure χ)) :=
   measures.foldl
     (fun acc m =>
@@ -213,8 +239,13 @@ instance [Cost χ] : LE (Measure χ) where
 instance [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : Measure χ) : Decidable (lhs ≤ rhs) :=
   inferInstanceAs (Decidable (lhs.last ≤ rhs.last ∧ lhs.cost ≤ rhs.cost))
 
-def spacing (s : Bridge) : Doc := Doc.provide (s)
-def expect (s : Bridge) : Doc := Doc.expect (s)
+def doc (p : DocP) : PPL :=
+  {d := p, leftBridge := bridgeFlex}
+
+-- set_option
+-- set_option diagnostics.threshold 2
+def spacing (s : Bridge) : PPL := doc (Doc.provide (s))
+def expect (s : Bridge) : PPL := doc (Doc.expect (s))
 
 
 def Measure.mkFail [Cost χ] (cost : χ ) (err : (List (List String))) : Measure χ := {last := 0, cost:=cost, layout := fun _ => panic! "We never want to print fail", fail := some err}
@@ -246,21 +277,31 @@ If a branch of the rendering process would end up producing only invalid documen
 it produces a `MeasureSet.tainted`. It consists of a thunk that we can evaluate
 to a `Measure` if we end up finding no way to produce a valid document.
 -/
-| tainted (m : Unit → Measure χ)
+| tainted (bridge: Bridge) (m : Unit → List (Bridge × Measure χ))
 /--
 A list of `Measure`s that form a Pareto front for our rendering problem.
 This list is ordered by the last line length in strict ascending order.
 -/
-| set (ms : List (Measure χ))
+| set (bridge: Bridge) (ms : List (Measure χ))
 deriving Inhabited
 
-structure MeasureGroup (χ : Type) where
-  bridge: Bridge
-  set: MeasureSet χ
-deriving Inhabited
+abbrev MeasureGroups (χ : Type) := List (MeasureSet χ)
 
-abbrev MeasureGroups (χ : Type) := List (MeasureGroup χ)
 
+structure Cache (χ : Type) where
+  /--
+  It was tried to format this piece with the following left bridge
+  -/
+  leftBridge : Bridge
+  indent : Nat
+  /-
+  In the future we could add maxWidth to allow caching across different indents as long as indent-newIndent+maxWidth < maxWidth
+  -/
+  -- maxWidth : Nat
+  -- if there are no results it is considered a failure
+  results : MeasureGroups χ
+
+abbrev s χ := StateT (Std.HashMap Nat (Cache χ)) MeasureGroups χ
 
 -- Can it be a bitmask?
 -- intersection lhs rhs
@@ -302,7 +343,7 @@ def MeasureSet.merge [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : Meas
   match lhs, rhs with
   | _, .tainted .. => lhs
   | .tainted .., _ => rhs
-  | .set lhs, .set rhs =>
+  | .set b lhs, .set _ rhs =>
     let lhs' := lhs.filter (fun s => s.fail.isNone)
     let rhs' := rhs.filter (fun s => s.fail.isNone)
     if (lhs'.length == 0 && rhs'.length == 0) then
@@ -311,16 +352,19 @@ def MeasureSet.merge [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : Meas
         | .some a => a++acc
         | .none => acc
 
-      .set [Measure.mkFail (Cost.text 0 0 0) (lhs.foldl addErrors <| rhs.foldl addErrors [])]
+      .set b [Measure.mkFail (Cost.text 0 0 0) (lhs.foldl addErrors <| rhs.foldl addErrors [])]
     else
-      .set (mergeSet lhs' rhs')
+      .set b (mergeSet lhs' rhs')
 
-def MeasureSet.getSet! [Cost χ] [DecidableRel (LE.le (α := χ))] (m : MeasureSet χ) : List (Measure χ) :=
+def MeasureSet.getSet! [Cost χ] (m : MeasureSet χ) : List (Measure χ) :=
   match m with
-  | .set s => s
-  | .tainted _ => panic! "Cannot get tainted set"
+  | .set _ s => s
+  | .tainted _ _ => panic! "Cannot get tainted set"
 
-
+def MeasureSet.getBridge [Cost χ] (m : MeasureSet χ) : Bridge :=
+  match m with
+  | .set b _ => b
+  | .tainted b _ => b
 
 -- def placeCommentReverse (indent : Nat) (comment : String) : List String → List String
 -- | []        => [comment, "\n", "".pushn ' ' indent]
@@ -354,15 +398,116 @@ def placeComment (indent : Nat) (comment : String) : List String → List String
 
 def removeMeasureFails (m : MeasureSet χ): MeasureSet χ:=
   match m with
-  | .set xs =>
-    .set (xs.filter (fun x => x.fail.isNone))
+  | .set b xs =>
+    .set b (xs.filter (fun x => x.fail.isNone))
   | x => x
+
+
+-- def listToMeasureGroups [Cost χ] [DecidableRel (LE.le (α := χ))] (m : List (MeasureSet χ)) : MeasureGroups χ :=
+--   m.map (fun x => {
+--     bridge := x.getSet!,
+--     set := x
+--   })
+
+-- I need to pass in a lot of extra information:
+-- I need to pass the rules so we can transform the syntax tree
+-- what if: I only allow caching on syntax elements?
+--   - Does not generalize well
+-- How do I identify if 2 syntax are the same?
+--   - I need to pass in the syntax tree
+--   - maybe I can identify the syntax tree by the hash of the syntax
+--      - why would that be bad?
+--         - slow: I need to hash the syntax tree. The syntax tree is large
+--
+def impossibleMeasure [Cost χ] [DecidableRel (LE.le (α := χ))] (trace: List String): Measure χ := {
+      last := 0,
+      cost := Cost.text 0 0 0,
+      layout := fun ss => "(no possible formatter)" :: "\n" :: ss
+      spacingR := bridgeFlex
+      fail := ["impossible"::trace]
+    }
+
+partial def combineMeasureSetGroups [Cost χ] [DecidableRel (LE.le (α := χ))] (ml mr : MeasureGroups χ) : MeasureGroups χ :=
+  match ml, mr with
+  | [], rs => rs
+  | ls, [] => ls
+  | l::ls, r::rs =>
+    let lbridge : Bridge := l.getBridge
+    let rbridge : Bridge := r.getBridge
+
+    if lbridge < rbridge then
+      r :: combineMeasureSetGroups ls (r::rs)
+    else if rbridge < lbridge then
+      l :: combineMeasureSetGroups (l::ls) rs
+    else
+      let merged := MeasureSet.merge l r
+      let rest := combineMeasureSetGroups ls rs
+      merged::rest
+
+partial def combineMeasureSetGroupsExpand [Cost χ] [DecidableRel (LE.le (α := χ))] (ml : MeasureGroups χ) (mr : Bridge → Measure χ → MeasureGroups χ) : MeasureGroups χ :=
+  ml.foldl
+    (fun acc m =>
+      match m with
+      | .tainted b' m =>
+        let merged := m ()
+        -- take the first none failure
+        match merged.filter (fun (_, x) => x.fail.isNone) with
+        | (b, r) :: _ => -- We are in a tainted context, so we no longer care about the optimal solution and instead take the first solution
+          (mr b r)
+        | [] => [.set b' [impossibleMeasure []]]
+      | .set b ms =>
+        ms.foldl (fun acc x => combineMeasureSetGroups acc (mr b x)) acc
+    )
+    []
+
+partial def combineMeasureSetGroupsClosed [Cost χ] [DecidableRel (LE.le (α := χ))] (ml : MeasureGroups χ) (mr : Bridge → Measure χ → MeasureGroups χ) : MeasureGroups χ :=
+  ml.foldl
+    (fun acc m =>
+      match m with
+      | .tainted b m =>
+        -- combineMeasureSetGroups acc ([.tainted b m])
+
+        let a := [.tainted b (fun _ =>
+          let lefts := m ()
+          let leftSets : List (MeasureSet χ):= lefts.map (fun (b, l) => .set b [l])
+          let combined := combineMeasureSetGroups acc (combineMeasureSetGroupsExpand leftSets mr)
+          -- is it a domain problem?
+          -- the problem is that we call a function that returns a measure group
+          -- that function might be a tainted function
+          -- at the moment we discard tainted results
+          -- but the desired result is to take a result, no matter how bad it is
+          -- essentially give up on the optimal solution
+          -- therefore Expand must continue to expand
+          combined.foldl (fun acc m =>
+            match m with
+            | .set b' (m::_) =>
+              (b', m)::acc
+            | .set _ _ =>
+              acc
+            | .tainted _ _ =>
+              acc
+          ) []
+          -- take the first none failure
+          -- match merged.filter (fun (_, x) => x.fail.isNone) with
+          -- | (b, r) :: _ => -- We are in a tainted context, so we no longer care about the optimal solution and instead take the first solution
+          --   (mr b r)
+          -- | [] => [.set b [impossibleMeasure []]]
+        )]
+        combineMeasureSetGroups acc a
+      | .set b ms =>
+        ms.foldl (fun acc x => combineMeasureSetGroups acc (mr b x)) acc
+    )
+    []
+
+def orderMeasureSet [Cost χ] [DecidableRel (LE.le (α := χ))] : MeasureGroups χ → MeasureGroups χ
+  | m =>
+    m.mergeSort (fun a b => a.getBridge > b.getBridge)
 
 /--
 This function efficiently computes a Pareto front for the problem of rendering
 a `Doc` at a certain column position with a certain indentation level and width limit.
 -/
-partial def Doc.resolve [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (col indent widthLimit : Nat) : MeasureSet χ :=
+partial def Doc.resolve [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (trace : List String) (col indent widthLimit : Nat) (spacing : Bridge) : List (MeasureSet χ) :=
   -- If we were to exceed the widthLimit we delay any attempt to optimize
   -- the layout of `doc` in hopes that another branch of this function finds
   -- a non tainted `MeasureSet`.
@@ -371,125 +516,111 @@ partial def Doc.resolve [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ)
     | .text s => indent > widthLimit || col + s.length > widthLimit
     | _ => indent > widthLimit || col > widthLimit
   if exceeds then
-    .tainted (fun _ =>
-      match core doc [] col indent bridgeFlex with
-      | .tainted m => m ()
-      | .set (m :: _) => m
-      | .set [] => panic! "Empty measure sets are impossible"
+    let a := MeasureSet.tainted spacing (fun _ =>
+      let l : List (MeasureSet χ) := core doc trace col indent widthLimit spacing
+      let m := l.map (fun (m : MeasureSet χ) =>
+        match m with
+        | .tainted _ m =>
+          m () |>.map (fun (_,x) => x)
+        | .set _ (m :: _) => [m]
+        | .set _ [] => panic! "Empty measure sets are impossible"
+      )
+      m
     )
+    []
   else
-    core doc [] col indent bridgeFlex
+    core doc trace col indent widthLimit spacing
 where
   /--
   The core resolver that actually computes the `MeasureSet`s that result from rendering `doc`
   in the given context.
   -/
-  core (doc : Doc) (trace : List String) (col : Nat) (indent : Nat) (spacing : Bridge): MeasureSet χ :=
+  core (doc : Doc) (trace : List String) (col indent widthLimit : Nat) (spacing : Bridge): List (MeasureSet χ) :=
     -- If we end up in this function we know that this cannot exceed the widthLimit
     -- and can thus savely return a set in all cases except concat.
     match doc with
     | .text s =>
       if s.length == 0 then
-        .set [{
+        [.set spacing [{
           last := col + s.length,
           cost := Cost.text widthLimit col s.length
           layout := fun ss => s :: ss
           spacingR := spacing
-        }]
+        }]]
       else
         if spacing == bridgeFlex then
-          .set [{
+          [.set bridgeFlex [{
             last := col + s.length,
             cost := Cost.text widthLimit col s.length
             layout := fun ss => s :: ss
             spacingR := bridgeFlex
-          }]
+          }]]
         else
-          core (concat (possibilitiesToDoc spacing) (.text s)) trace col indent bridgeFlex
+          (concat (possibilitiesToDoc spacing) (.text s)).resolve trace col indent widthLimit bridgeFlex
           -- core ( .concat (.choice (.text "s") (.text "what")) (.text s)) trace col indent bridgeFlex
 
     | .newline _ =>
       if spacing == bridgeFlex then
-        .set [{
+        [.set bridgeFlex [{
           last := indent,
           cost := Cost.nl indent,
           layout := fun ss =>  "".pushn ' ' indent :: "\n" :: ss
           spacingR := bridgeFlex
-        }]
+        }]]
       else
-        core (concat (possibilitiesToDoc (spacing)) (.newline " ")) trace col indent bridgeFlex
-
-      -- match spacing with
-      -- | some leftSpacing =>
-      --   let possibilities := bridgeIntersection leftSpacing (spaceNl ||| spaceHardNl)
-      --   if possibilities.isEmpty then
-      --     core (.fail "no options newline") trace col indent spacing
-      --   else
-      --     .set [{
-      --       last := indent,
-      --       cost := Cost.text widthLimit col 0,
-      --       layout := fun ss => ss
-      --       spacingR := possibilities
-      --     }]
-      -- | none =>
-      --   .set [{
-      --     last := indent,
-      --     cost := Cost.nl indent,
-      --     layout := fun ss =>  "".pushn ' ' indent :: "\n" :: ss
-      --     spacingR := none
-      --   }]
-    | .concat lhs rhs => processConcat (core lhs trace col indent spacing) trace (fun l newSpacing => core rhs trace l.last indent newSpacing)
-    | .choice lhs rhs => MeasureSet.merge (core lhs trace col indent spacing) (core rhs trace col indent spacing)
-    | .nest indentOffset doc => core doc trace col (indent + indentOffset) spacing
-    | .align doc => core doc trace col col spacing
-    | .reset doc => core doc trace col 0 spacing
-    | .bubbleComment comment => .set [{
+        core (concat (possibilitiesToDoc (spacing)) (.newline " ")) trace col indent widthLimit bridgeFlex
+    | .concat lhs rhs => processConcatList (lhs.resolve trace col indent widthLimit spacing) trace (fun l newSpacing => rhs.resolve trace l.last indent widthLimit newSpacing)
+    | .choice lhs rhs => combineMeasureSetGroups (lhs.resolve trace col indent widthLimit spacing) (rhs.resolve trace col indent widthLimit spacing)
+    | .nest indentOffset doc => doc.resolve trace col (indent + indentOffset) widthLimit spacing
+    | .align doc => doc.resolve trace col col widthLimit spacing
+    | .reset doc => doc.resolve trace col 0 widthLimit spacing
+    | .bubbleComment comment => [.set bridgeFlex [{
       last := col
       -- prioritize placing comments where they were placed by the user
       cost := (Cost.text widthLimit (indent + widthLimit) comment.length) + Cost.nl indent
       layout := placeComment 0 comment
-    }]
-    | .endOfLineComment comment => .set [{
+    }]]
+    | .endOfLineComment comment => [.set (bridgeHardNl ||| bridgeNl) [{
       last := col + comment.length
       cost := Cost.nl indent
       layout := (fun ss => comment :: ss)
       spacingR := bridgeHardNl ||| bridgeNl
-    }]
-    | .fail e => .set [{
+    }]]
+    | .fail e => [.set bridgeFlex [{
       last := 0
       cost := Cost.nl indent
       layout := (fun _ => ["fail"])
       fail := [e::trace]
-    }]
+    }]]
     -- At the moment we can't narrow down the spacing options for a `spacing` document.
     -- this could be done by
     -- desugaring spacing to choice
     | .provide s =>
       if spacing == bridgeFlex then
-        .set [{
+        [.set s [{
           last := col
           cost := Cost.text widthLimit col 0
           layout := fun ss => ss
           spacingR := s
-        }]
+        }]]
       else
         let possibilities := spacing.intersection s
-        .set [{
+        [.set possibilities [{
           last := col
           cost := Cost.text widthLimit col 0
           layout := fun ss => ss
           spacingR := possibilities
-        }]
+        }]]
 
     | .expect s =>
       if spacing == bridgeFlex then
-        core (.fail "no expect overlap") trace col indent bridgeFlex
+        (Doc.fail "expect given no bridges").resolve trace col indent widthLimit bridgeFlex
       else
         let possibilities := spacing.intersection s
         let choices := possibilitiesToDoc possibilities
-        core choices trace col indent bridgeFlex
+        choices.resolve trace col indent widthLimit bridgeFlex
       | .rule s doc =>
-        core doc (s::trace) col indent spacing
+        doc.resolve (s::trace) col indent widthLimit spacing
 
 
   possibilitiesToDoc (possibilities : Bridge) : Doc :=
@@ -512,33 +643,45 @@ where
       let choices := options.tail.foldl (fun acc doc => Doc.choice acc doc) (options.head!)
       return choices
 
-  impossibleMeasure (trace: List String): Measure χ := {
-      last := indent,
-      cost := Cost.nl indent + Cost.nl indent + Cost.nl indent,
-      layout := fun ss => "(no possible formatter)" :: "\n" :: ss
-      spacingR := bridgeFlex
-      fail := ["impossible"::trace]
-    }
+
 
   /--
   Compute the set that contains the concatenations of all possible lhs measures
   with their corresponding rhs measure.
   -/
+  processConcatList (leftSet : List (MeasureSet χ)) (trace : List String) (processRight : Measure χ → Bridge → List (MeasureSet χ)) : MeasureGroups χ :=
+    leftSet.foldl (fun acc (l : MeasureSet χ) =>
+      combineMeasureSetGroups acc (processConcat l trace processRight)
+    ) []
 
-  processConcat (leftSet : MeasureSet χ) (trace : List String)(processRight : Measure χ → Bridge → MeasureSet χ) : MeasureSet χ :=
+  processConcat (leftSet : MeasureSet χ) (trace : List String) (processRight : Measure χ → Bridge → List (MeasureSet χ)) : MeasureGroups χ :=
     match leftSet with
-    | .tainted leftThunk =>
+    | .tainted b leftThunk =>
       -- If the lhs is already tainted we can wrap the computation of the rhs
       -- in a tainted thunk, thus prunning it away.
 
-      .tainted (fun _ =>
+      [.tainted b (fun _ =>
         let left := leftThunk ()
-        match processRight left (left.spacingR) with
-        | .tainted rightThunk => left.concat (rightThunk ())
-        | .set (right :: _) => left.concat right
-        | .set [] => impossibleMeasure trace
-      )
-    | .set lefts =>
+        let leftSets := left.map (fun (b, l) => .set b [l])
+        let groups := combineMeasureSetGroupsExpand leftSets (fun b l =>
+          let right := processRight l b
+          combineMeasureSetGroupsClosed right (fun b r =>
+            [.set b [l.concat r]]
+          )
+        )
+
+        groups.foldl (fun acc m =>
+          match m with
+          | .set b' (m::_) =>
+            (b', m)::acc
+          | .set b' _ =>
+            acc
+          | .tainted b' m =>
+            acc
+        ) []
+        )
+      ]
+    | .set b lefts =>
       let concatOneWithRight (l : Measure χ) : MeasureSet χ :=
          -- This is an optimized version of dedup from the paper. We use it to maintain
          -- the Pareto front invariant.
@@ -566,6 +709,7 @@ where
               dedup rights (currentBest :: result) current
 
         let rights := processRight l (l.spacingR)
+
         match rights |> removeMeasureFails with
         | .tainted rightThunk => .tainted (fun _ => l.concat (rightThunk ()))
         -- | .set (rights) => .set (rights.map (fun r => l.concat r))
@@ -678,7 +822,7 @@ where
 Find an optimal layout for a document and render it.
 -/
 def Doc.print (χ : Type) [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (col widthLimit : Nat) : PrintResult χ :=
-  let measures := doc.resolve (χ := χ) col 0 widthLimit
+  let measures := doc.resolve (χ := χ) [] col 0 widthLimit bridgeFlex
   let (measure, isTainted) :=
     match measures with
     | .tainted thunk => (thunk (), true)
