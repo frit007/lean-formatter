@@ -122,7 +122,6 @@ expect must be preceded by a `provide` and will fail if the provided spacing doe
 | stx (s : Lean.Syntax)
 deriving Inhabited, Repr
 
-
 structure PPL where
   d : Doc PPL
   leftBridge : Bridge
@@ -131,6 +130,8 @@ structure PPL where
   The Id is important to avoid formatting code twice
   -/
   id : Nat := 0
+  weight : Nat := 0
+  shouldCache : Bool := false
 
 abbrev DocP := Doc PPL
 
@@ -239,13 +240,13 @@ instance [Cost χ] : LE (Measure χ) where
 instance [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : Measure χ) : Decidable (lhs ≤ rhs) :=
   inferInstanceAs (Decidable (lhs.last ≤ rhs.last ∧ lhs.cost ≤ rhs.cost))
 
-def doc (p : DocP) : PPL :=
+def toDoc (p : DocP) : PPL :=
   {d := p, leftBridge := bridgeFlex}
 
 -- set_option
 -- set_option diagnostics.threshold 2
-def spacing (s : Bridge) : PPL := doc (Doc.provide (s))
-def expect (s : Bridge) : PPL := doc (Doc.expect (s))
+def spacing (s : Bridge) : PPL := toDoc (Doc.provide (s))
+def expect (s : Bridge) : PPL := toDoc (Doc.expect (s))
 
 
 def Measure.mkFail [Cost χ] (cost : χ ) (err : (List (List String))) : Measure χ := {last := 0, cost:=cost, layout := fun _ => panic! "We never want to print fail", fail := some err}
@@ -301,7 +302,12 @@ structure Cache (χ : Type) where
   -- if there are no results it is considered a failure
   results : MeasureGroups χ
 
-abbrev s χ := StateT (Std.HashMap Nat (Cache χ)) MeasureGroups χ
+abbrev MeasureResult χ := StateT (Array (List (Cache χ))) Id
+-- abbrev MeasureResult χ := StateT (Std.HashMap Nat (Cache χ)) MeasureGroups χ
+
+-- abbrev otherResult χ := StateT (Std.HashMap Nat (Nat)) Id MeasureGroups
+
+
 
 -- Can it be a bitmask?
 -- intersection lhs rhs
@@ -499,49 +505,76 @@ partial def combineMeasureSetGroupsClosed [Cost χ] [DecidableRel (LE.le (α := 
     )
     []
 
-def orderMeasureSet [Cost χ] [DecidableRel (LE.le (α := χ))] : MeasureGroups χ → MeasureGroups χ
+def orderMeasureGroup [Cost χ] [DecidableRel (LE.le (α := χ))] : MeasureGroups χ → MeasureGroups χ
   | m =>
     m.mergeSort (fun a b => a.getBridge > b.getBridge)
+
+-- The idea is that
+def getCached [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : PPL) (indent : Nat) (bridges : Bridge) : MeasureResult χ (MeasureGroups χ × Bridge) := do
+  let cacheStore ← get
+  let (caches, bridges) := foundSolutions indent [] bridges (cacheStore.get! doc.id)
+  let measureSets := caches |>.foldl (fun (acc : MeasureGroups χ) (cache : Cache χ) =>
+      combineMeasureSetGroups acc cache.results
+    ) []
+  return (measureSets, bridges)
+where
+  -- TODO: consider optimizing by considering previous results, if their maxWidth does not exceed the widthLimit
+  foundSolutions (indent : Nat) (acc : List (Cache χ)) : Bridge → List (Cache χ) → (List (Cache χ) × Bridge)
+  | 0, _ => (acc, 0)
+  | bridges, [] => (acc, bridges)
+  | bridges, c::rest =>
+    if c.leftBridge.subset bridges && c.indent == indent then
+      foundSolutions indent (c::acc) (bridges.erase c.leftBridge) rest
+    else
+      foundSolutions indent acc bridges rest
+
+def addToCache [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : PPL) (indent : Nat) (bridges : Bridge) (results:MeasureGroups χ): MeasureResult χ Unit := do
+  modify (fun cacheStore =>
+    cacheStore.modify doc.id (fun caches => {leftBridge:=bridges, indent := indent, results := results}::caches)
+  )
 
 /--
 This function efficiently computes a Pareto front for the problem of rendering
 a `Doc` at a certain column position with a certain indentation level and width limit.
 -/
-partial def Doc.resolve [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (trace : List String) (col indent widthLimit : Nat) (spacing : Bridge) : List (MeasureSet χ) :=
+partial def Doc.resolve [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : PPL) (trace : List String) (col indent widthLimit : Nat) (spacing : Bridge) : MeasureResult χ (MeasureGroups χ) :=
+
   -- If we were to exceed the widthLimit we delay any attempt to optimize
   -- the layout of `doc` in hopes that another branch of this function finds
   -- a non tainted `MeasureSet`.
-  let exceeds :=
-    match doc with
-    | .text s => indent > widthLimit || col + s.length > widthLimit
-    | _ => indent > widthLimit || col > widthLimit
-  if exceeds then
-    let a := MeasureSet.tainted spacing (fun _ =>
-      let l : List (MeasureSet χ) := core doc trace col indent widthLimit spacing
-      let m := l.map (fun (m : MeasureSet χ) =>
-        match m with
-        | .tainted _ m =>
-          m () |>.map (fun (_,x) => x)
-        | .set _ (m :: _) => [m]
-        | .set _ [] => panic! "Empty measure sets are impossible"
-      )
-      m
-    )
-    []
-  else
-    core doc trace col indent widthLimit spacing
+  exceedCheck doc trace col indent widthLimit spacing
 where
+  exceedCheck (doc : PPL) (trace : List String) (col indent widthLimit : Nat) (spacing : Bridge) : MeasureResult χ (MeasureGroups χ) := do
+    let exceeds :=
+      match doc.d with
+      | .text s => indent > widthLimit || col + s.length > widthLimit
+      | _ => indent > widthLimit || col > widthLimit
+    if exceeds then
+      let a := MeasureSet.tainted spacing (fun _ =>
+        let l : List (MeasureSet χ) ← core doc trace col indent widthLimit spacing
+        let m := l.map (fun (m : MeasureSet χ) =>
+          match m with
+          | .tainted _ m =>
+            m () |>.map (fun (_,x) => x)
+          | .set _ (m :: _) => [m]
+          | .set _ [] => panic! "Empty measure sets are impossible"
+        )
+        m
+      )
+      []
+    else
+      core doc trace col indent widthLimit spacing
   /--
   The core resolver that actually computes the `MeasureSet`s that result from rendering `doc`
   in the given context.
   -/
-  core (doc : Doc) (trace : List String) (col indent widthLimit : Nat) (spacing : Bridge): List (MeasureSet χ) :=
+  core (doc : PPL) (trace : List String) (col indent widthLimit : Nat) (spacing : Bridge): MeasureResult χ (MeasureGroups χ) :=
     -- If we end up in this function we know that this cannot exceed the widthLimit
     -- and can thus savely return a set in all cases except concat.
-    match doc with
+    match doc.d with
     | .text s =>
       if s.length == 0 then
-        [.set spacing [{
+        return [.set spacing [{
           last := col + s.length,
           cost := Cost.text widthLimit col s.length
           layout := fun ss => s :: ss
@@ -549,14 +582,14 @@ where
         }]]
       else
         if spacing == bridgeFlex then
-          [.set bridgeFlex [{
+          return [.set bridgeFlex [{
             last := col + s.length,
             cost := Cost.text widthLimit col s.length
             layout := fun ss => s :: ss
             spacingR := bridgeFlex
           }]]
         else
-          (concat (possibilitiesToDoc spacing) (.text s)).resolve trace col indent widthLimit bridgeFlex
+          return (concat (← (possibilitiesToDoc spacing) (.text s)).resolve) trace col indent widthLimit bridgeFlex
           -- core ( .concat (.choice (.text "s") (.text "what")) (.text s)) trace col indent bridgeFlex
 
     | .newline _ =>
@@ -623,24 +656,23 @@ where
         doc.resolve (s::trace) col indent widthLimit spacing
 
 
-  possibilitiesToDoc (possibilities : Bridge) : Doc :=
+  possibilitiesToDoc (possibilities : Bridge) : PPL :=
     if possibilities == 0 then
-      .fail "No possibilities"
+      toDoc (Doc.fail "No possibilities")
     else Id.run do
-      let mut options : List (Doc) := [.newline " "]
-      -- let list := possibilities.toList
+      let mut options : List (DocP) := [.newline " "]
 
-      -- if bridgeContains possibilities bridgeNl || bridgeContains possibilities bridgeHardNl then
-      --   options := .newline " "::options
-      -- -- In any other case we we let the child handle the separation
-      -- if bridgeContains possibilities bridgeSpace then
-      --   options := .text " "::options
+      if possibilities.contains bridgeNl || possibilities.contains bridgeHardNl then
+        options := Doc.newline " "::options
+      -- In any other case we we let the child handle the separation
+      if possibilities.contains bridgeSpace then
+        options := Doc.text " "::options
 
-      -- -- if possibilities.any (fun f => f != space && f != spaceNl && f != spaceHardNl) then
-      -- if possibilities.erase (bridgeSpace ||| bridgeNl ||| bridgeHardNl) != 0 then
-      --   options := (text "")::options
+      -- if possibilities.any (fun f => f != space && f != spaceNl && f != spaceHardNl) then
+      if possibilities.erase (bridgeSpace ||| bridgeNl ||| bridgeHardNl) != 0 then
+        options := (Doc.text "")::options
 
-      let choices := options.tail.foldl (fun acc doc => Doc.choice acc doc) (options.head!)
+      let choices := options.tail.foldl (fun (acc : PPL) d => toDoc (Doc.choice (acc) (toDoc d))) (toDoc options.head!)
       return choices
 
 
@@ -854,18 +886,18 @@ Find an optimal layout for a document and render it.
 def Doc.prettyPrint (χ : Type) [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (col widthLimit : Nat) : String :=
   Doc.print χ doc col widthLimit |>.layout
 
-def Doc.comma : Doc := .text ","
-def Doc.lbrack : Doc := .text "["
-def Doc.rbrack : Doc := .text "]"
-def Doc.lbrace : Doc := .text "{"
-def Doc.rbrace : Doc := .text "}"
-def Doc.lparen : Doc := .text "("
-def Doc.rparen : Doc := .text ")"
-def Doc.dquote : Doc := .text "\""
-def Doc.empty : Doc := .text ""
-def Doc.space : Doc := .text " "
-def Doc.nl : Doc := .newline " "
-def Doc.break : Doc := .newline ""
+-- def Doc.comma : Doc := .text ","
+-- def Doc.lbrack : Doc := .text "["
+-- def Doc.rbrack : Doc := .text "]"
+-- def Doc.lbrace : Doc := .text "{"
+-- def Doc.rbrace : Doc := .text "}"
+-- def Doc.lparen : Doc := .text "("
+-- def Doc.rparen : Doc := .text ")"
+-- def Doc.dquote : Doc := .text "\""
+-- def Doc.empty : Doc := .text ""
+-- def Doc.space : Doc := .text " "
+-- def Doc.nl : Doc := .newline " "
+-- def Doc.break : Doc := .newline ""
 -- TODO: hard_nl and definitions based on it if necessary
 
 /--

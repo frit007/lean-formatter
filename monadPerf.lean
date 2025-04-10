@@ -22,6 +22,21 @@ def monadicSum (n : Nat) : StateM Nat Unit := do
   for i in [0:n+1] do
     modify (· + i)
 
+def goodArraySum (n : Nat) : StateM (Array Nat) Unit := do
+  for i in [0:n+1] do
+    modify (fun c => c.modify 0 (· + 1))
+
+def badArraySum (n : Nat) : StateM (Array Nat) Unit := do
+  for i in [0:n+1] do
+    let cache := ← get
+    let updated := cache.modify (1000000) (· + 1)
+    set updated
+
+def badHashSum (n : Nat) : StateM (Std.HashMap Nat Nat) Unit := do
+  for i in [0:n+1] do
+    let cache := ← get
+    let updated := cache.modify (0) (· + 1)
+    set updated
 
 def timeIO (action : Unit → α) : IO α := do
   let start ← IO.monoMsNow
@@ -30,25 +45,59 @@ def timeIO (action : Unit → α) : IO α := do
   IO.println s!"Time: {stop - start} ms"
   return result
 
-def main : IO Unit := do
-  let n := 10000000
+-- what about hashmap?
 
+def buildMap : HashMap Nat Nat :=
+  Id.run do
+    let mut m := HashMap.empty
+    for i in [0:10000] do
+      m := m.insert i 0
+    return m
+
+def main : IO Unit := do
+  let n := 100000
+  let map := buildMap
   IO.println "== Pure version =="
   let res ← (timeIO <| (fun _ => pureSum 0 (n)))
   IO.println res
 
   IO.println "== Monadic version =="
-  -- let a ← (monadicSum n).run 0
-  -- let a :=((monadicSum n).run 0).run |>.snd
-  let res2 ← timeIO (fun _ => ((monadicSum n).run 0).run)
+  let res2 ← timeIO (fun _ => ((monadicSum n).run 0).run.fst)
+  IO.println res2
+
+
+  -- IO.println "== good array version =="
+  -- let res2 ← timeIO (fun _ => ((goodArraySum n).run #[0]).run.fst)
+  -- IO.println res2
+
+
+  -- IO.println "== bad array version =="
+  -- let res2 ← timeIO (fun _ => ((badArraySum n).run #[0]).run.fst)
+  -- IO.println res2
+
+  IO.println "== bad array version long =="
+  let res2 ← timeIO (fun _ => ((badArraySum n).run (Array.range 10000000)).run.fst)
+  IO.println res2
+
+  IO.println "== good array version long =="
+  let res2 ← timeIO (fun _ => ((goodArraySum n).run (Array.range 10000000)).run.fst)
+  IO.println res2
+
+  IO.println "== bad HashMap version=="
+  let res2 ← timeIO (fun _ => ((badHashSum n).run (Std.HashMap.mk {})).run.fst)
+  IO.println res2
+
+  IO.println "== bad HashMap version long=="
+  let res2 ← timeIO (fun _ => ((badHashSum n).run (map)).run.fst)
   IO.println res2
   -- timeIO <| (monadicSum n).run 0 >>= (fun (_, s) => IO.println s)
 
 
 #eval main
--- #eval main
--- #eval main
--- #eval main
+#eval main
+#eval main
+#eval main
+#eval main
 -- #eval main
 -- #eval main
 -- #eval main
