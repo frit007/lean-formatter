@@ -1,4 +1,5 @@
 import Std
+import monadPerfImported
 open Std
 
 -- Non-monadic version (pure recursion)
@@ -38,9 +39,26 @@ def badHashSum (n : Nat) : StateM (Std.HashMap Nat Nat) Unit := do
     let updated := cache.modify (0) (· + 1)
     set updated
 
+def ioSumBad (n : Nat) : IO Unit := do
+  for i in [0:n+1] do
+    let cache ← ioCounter.get
+    let updated := cache + 1
+    ioCounter.set updated
+
+def ioSumGood (n : Nat) : IO Unit := do
+  for i in [0:n+1] do
+    ioCounter.modify (· + 1)
+
 def timeIO (action : Unit → α) : IO α := do
   let start ← IO.monoMsNow
   let result := action ()
+  let stop ← IO.monoMsNow
+  IO.println s!"Time: {stop - start} ms"
+  return result
+
+def timeIOIO (action : Unit → IO α) : IO α := do
+  let start ← IO.monoMsNow
+  let result ← action ()
   let stop ← IO.monoMsNow
   IO.println s!"Time: {stop - start} ms"
   return result
@@ -89,6 +107,14 @@ def main : IO Unit := do
 
   IO.println "== bad HashMap version long=="
   let res2 ← timeIO (fun _ => ((badHashSum n).run (map)).run.fst)
+  IO.println res2
+
+  IO.println "== bad IO version=="
+  let res2 ← timeIOIO (fun _ => ioSumBad n)
+  IO.println res2
+
+  IO.println "== good IO version=="
+  let res2 ← timeIOIO (fun _ => ioSumGood n)
   IO.println res2
   -- timeIO <| (monadicSum n).run 0 >>= (fun (_, s) => IO.println s)
 

@@ -27,6 +27,11 @@ root = "CoreFormatters"
 srcDir = "PrettyFormat"
 
 [[lean_lib]]
+name = "Doc"
+root = "Doc"
+srcDir = "PrettyFormat"
+
+[[lean_lib]]
 name = "PFMT"
 root = "PFMT"
 srcDir = "PrettyFormat"
@@ -38,8 +43,8 @@ root = "simple_imported"
 
 
 [[lean_lib]]
-name = "temporary_imported"
-root = "temporary_imported"
+name = "monadPerfImported"
+root = "monadPerfImported"
 
 [[lean_lib]]
 name = "LSPformat"
