@@ -1,6 +1,6 @@
 import PFMT
 
-open Pfmt
+open PrettyFormat
 
 #eval
   let d := Doc.concat (spacing [space]) (Doc.choice (Doc.concat (spacing [space])  (Doc.text "b")) (Doc.concat (spacing [spaceNl]) (Doc.text "a")))

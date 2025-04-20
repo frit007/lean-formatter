@@ -39,7 +39,7 @@ namespace PrettyFormat
 
 
 
-  partial def findFirstMatch (fmts : List (Name → Option Rule)) (kind : SyntaxNodeKind) (r : RuleRec) (stx : Syntax) :FormatM (List FormatError ⊕ PPL):= do
+  partial def findFirstMatch (fmts : List (Name → Option Rule)) (kind : SyntaxNodeKind) (r : RuleRec) (stx : Syntax) :FormatM (List FormatError ⊕ Doc):= do
     let mut errors : List FormatError := []
     for fmt in fmts do
       -- let options := pFormatAttr.getValues env kind
@@ -63,57 +63,68 @@ namespace PrettyFormat
     -- At this point we also tag the syntax with Ids
     -- At this point we want to add bridgeInformation
     -- At this point we could also remove failures (we wait until now to because otherwise failure can not be cascade across syntax)
-    expandSyntax (r : RuleRec) (ppl : PPL) : FormatM PPL := do
-      match ppl.d with
-      | .fail s => return PPL.mk (.fail s)
-      | .text s => return PPL.mk (.text s)
-      | .newline s => return PPL.mk (.newline s)
-      | .choice left right => do
+    expandSyntax (r : RuleRec) (ppl : Doc) : FormatM Doc := do
+      match ppl with
+      | .fail s _ => return (.fail s)
+      | .text s _ => return (.text s)
+      | .newline s _ => return (.newline s)
+      | .choice left right _ => do
         let left ← expandSyntax r left
         let right ← expandSyntax r right
-        match left.d, right.d with
+        match left, right with
         | .fail _, _ =>
           return right
         | _, .fail _ =>
           return left
         | _, _ =>
-          cachePPL (.choice left right) (max left.cacheWeight right.cacheWeight) (left.leftBridge ||| right.leftBridge)
-      | .flatten inner =>
+          cachePPL (.choice left right) (max left.meta.cacheWeight right.meta.cacheWeight) (left.meta.leftBridge ||| right.meta.leftBridge)
+      | .flatten inner _ =>
         let inner ← expandSyntax r inner
-        cachePPL (.flatten inner) (inner.cacheWeight) (inner.leftBridge)
-      | .align inner =>
+        cachePPL (.flatten inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
+      | .align inner _ =>
         let inner ← expandSyntax r inner
-        cachePPL (.align inner) (inner.cacheWeight) (inner.leftBridge)
-      | .nest n inner =>
+        cachePPL (.align inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
+      | .nest n inner _ =>
         let inner ← expandSyntax r inner
-        cachePPL (.nest n inner) (inner.cacheWeight) (inner.leftBridge)
-      | .concat left right =>
+        cachePPL (.nest n inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
+      | .concat left right _ =>
         let left ← expandSyntax r left
         let right ← expandSyntax r right
-        match left.d, right.d with
+        match left, right with
         | .fail s, _ =>
-          return toPPL (Doc.fail s)
+          return Doc.fail s
         | _, .fail s =>
-          return toPPL (Doc.fail s)
+          return Doc.fail s
         | _, _ =>
-          cachePPL (.concat left right) (max left.cacheWeight right.cacheWeight) (left.leftBridge)
+          cachePPL (.concat left right) (max left.meta.cacheWeight right.meta.cacheWeight) (left.meta.leftBridge)
       -- for performance reasons stop when seing another group, to avoid re-evaluating the entire tree
       -- this is safe because of the invariant
-      | .rule _ _ => return ppl
-      | .bubbleComment s => return PPL.mk (.bubbleComment s)
-      | .endOfLineComment s => return PPL.mk (.endOfLineComment s)
-      | .stx stx => return ← r stx
-      | .reset inner =>
+      | .rule _ _ _ => return ppl
+      | .bubbleComment s _ => return (.bubbleComment s)
+      | .endOfLineComment s _ => return (.endOfLineComment s)
+      | .stx stx _ => return ← r stx
+      | .reset inner _ =>
         let inner ← expandSyntax r inner
-        cachePPL (.reset inner) (inner.cacheWeight) (inner.leftBridge)
-      | .provide s => cachePPL (.provide s) 0 s
-      | .expect s => cachePPL (.expect s) 0 s
+        cachePPL (.reset inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
+      | .provide s _ => cachePPL (.provide s) 0 s
+      | .expect s _ => cachePPL (.expect s) 0 s
 
-    cachePPL (doc:Doc) (childCacheWeight:Nat) (leftBridge:Bridge := bridgeFlex): FormatM PPL := do
+    cachePPL (doc:Doc) (childCacheWeight:Nat) (leftBridge:Bridge := bridgeFlex): FormatM Doc := do
       if childCacheWeight >= cacheLimit then
-        return PPL.mk doc leftBridge (← FormatM.genId) childCacheWeight true
+        -- return doc leftBridge (← FormatM.genId) 0 true
+        return doc.setMeta {
+          cacheWeight := 0,
+          leftBridge := leftBridge,
+          id := ← FormatM.genId,
+          shouldCache := true
+        }
       else
-        return PPL.mk doc leftBridge (← FormatM.genId) childCacheWeight true
+        return doc.setMeta {
+          cacheWeight := childCacheWeight + 1,
+          leftBridge := leftBridge,
+          id := 0,
+          shouldCache := false
+        }
 
   def updateSyntaxTrail (stx : Syntax) (f:FormatM PPL) : FormatM PPL := do
     let _ ← modify (fun s => {s with stx := stx::s.stx})
@@ -143,13 +154,13 @@ namespace PrettyFormat
     else
       []
 
-  partial def knownStringToPPL (s:String) (p: PPL) : PPL :=
+  partial def knownStringToPPL (s:String) (p: Doc) : Doc :=
     -- stringCommentsStr s |>.foldl (fun p' c => p' <> ((PPL.endOfLineComment (" " ++ c)) <^> PPL.bubbleComment c)) p
     stringCommentsStr s |>.foldl (fun p' c => p' <> ((" " ++ c <> (Doc.provide bridgeHardNl)) <^> Doc.bubbleComment c)) p
 
-  partial def surroundWithComments (info : SourceInfo) (p:PPL) (f : PPL → PPL): PPL:=
+  partial def surroundWithComments (info : SourceInfo) (p:Doc) (f : Doc → Doc): Doc:=
     match info with
-    | .original (leading : Substring) (pos : String.Pos) (trailing : Substring) (endPos : String.Pos) =>
+    | .original (leading : Substring) _ (trailing : Substring) _ =>
       knownStringToPPL leading.toString p
       |> f
       |> knownStringToPPL trailing.toString
@@ -163,42 +174,42 @@ namespace PrettyFormat
     | c :: cs => if c.isWhitespace then check cs else false
   check chars
 
-  partial def unknownStringToPPL (s:String) (leading : Bool): PPL :=
+  partial def unknownStringToPPL (s:String) (leading : Bool): Doc :=
     let comments := unknownStringCommentsStr s
     let bubbled := comments.foldl (fun p' c =>
         p' <> Doc.bubbleComment (c)
-    ) (toPPL "")
-    let endOfLine := comments.foldl (fun p' c => p' <> (((c) <> (Doc.provide bridgeHardNl)) <^> Doc.bubbleComment c)) (toPPL "")
+    ) (toDoc "")
+    let endOfLine := comments.foldl (fun p' c => p' <> (((c) <> (Doc.provide bridgeHardNl)) <^> Doc.bubbleComment c)) (toDoc "")
     if comments.length == 0 then
-      toPPL ""
+      toDoc ""
     else
       if leading || hasNewlineBeforeNonWhitespace s then
-        toPPL (bubbled <^> (bridgeHardNl !> endOfLine))
+        toDoc (bubbled <^> (bridgeHardNl !> endOfLine))
       else
-        toPPL (bubbled <^> bridgeSpace !> endOfLine)
+        toDoc (bubbled <^> bridgeSpace !> endOfLine)
 
   -- if the value is unknown then we will try to keep the value the same as it was
-  partial def unknownSurroundWithComments (info : SourceInfo) (p:PPL): PPL:=
+  partial def unknownSurroundWithComments (info : SourceInfo) (p:Doc): Doc:=
     match info with
     | .original (leading : Substring) _ (trailing : Substring) _ =>
       unknownStringToPPL leading.toString true
       <> p <> unknownStringToPPL trailing.toString false
     | _ => p
 
-  partial def pfCombine (r: RuleRec) (stxArr : Array Syntax) : FormatM PPL := do
-    let mut res := toPPL ""
+  partial def pfCombine (r: RuleRec) (stxArr : Array Syntax) : FormatM Doc := do
+    let mut res := toDoc ""
     for p in stxArr do
       res := res <> (← r p)
     return res
 
-  partial def pf (formatters : Formatters) (stx: Syntax): FormatM PPL := updateSyntaxTrail stx do
+  partial def pf (formatters : Formatters) (stx: Syntax): FormatM Doc := updateSyntaxTrail stx do
     -- can we assume that the other environment has all of the attributes? for now we do not
     -- let context ← read
     let r : RuleRec := fun (stx) => pf formatters stx
     -- let rr : RuleCtx :=
 
     match stx with
-    | .missing => pure (toPPL "")
+    | .missing => pure (toDoc "")
     | .node (info : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
       match kind with
       | `null => -- null nodes are combined without whitespaces
@@ -210,7 +221,7 @@ namespace PrettyFormat
         | Sum.inr ppl =>
           -- if stx.getKind == `Lean.Parser.Tactic.tacticSeq then
           --   return text "capture good"
-          return toPPL (Doc.rule (toString kind) ppl)
+          return Doc.rule (toString kind) ppl
         | Sum.inl errs =>
           -- if stx.getKind == `Lean.Parser.Tactic.tacticSeq then
           --   return text "capture err"
@@ -226,9 +237,9 @@ namespace PrettyFormat
               v := (e, (← get).stx)::v
             set {s with diagnostic := {d with failures := v}}
 
-          return toPPL (Doc.rule (toString kind) (← pfCombine r args))
+          return Doc.rule (toString kind) (← pfCombine r args)
     | .atom (info : SourceInfo) (val : String) =>
-      return (unknownSurroundWithComments info (toPPL val))
+      return (unknownSurroundWithComments info (toDoc val))
       -- return text val
       -- if state.unknown then
       --   return
@@ -236,7 +247,7 @@ namespace PrettyFormat
       --   return (surroundWithComments info (text "")) (fun p => p <> text val)
 
     | .ident  (info : SourceInfo) (rawVal : Substring) _ _ =>
-      return (unknownSurroundWithComments info (toPPL rawVal.toString))
+      return (unknownSurroundWithComments info (toDoc rawVal.toString))
       -- return text rawVal.toString
         -- return (unknownSurroundWithComments info (text "")) (fun p => p <> text rawVal.toString)
       -- if state.unknown then
@@ -257,10 +268,10 @@ namespace PrettyFormat
   --       combined := combined <> sep <> p'
   --   return combined
 
-  def combine [ToPPL a] (sep: PPL → PPL → PPL) (stxArr : Array a) : PPL := Id.run do
-    let mut combined : PPL := toPPL ""
+  def combine [ToDoc a] (sep: Doc → Doc → Doc) (stxArr : Array a) : Doc := Id.run do
+    let mut combined : Doc := toDoc ""
     for p in stxArr do
-      let p' ← toPPL p
+      let p' ← toDoc p
       if isEmpty p' then
         combined := combined -- no change
       else if isEmpty combined then
@@ -270,10 +281,10 @@ namespace PrettyFormat
     return combined
 
   -- continue combining children if they are null arrays
-  partial def nestedCombine (sep: PPL → PPL → PPL) (stxArr : Array Syntax) : PPL := Id.run do
-    let mut combined := toPPL ""
+  partial def nestedCombine (sep: Doc → Doc → Doc) (stxArr : Array Syntax) : Doc := Id.run do
+    let mut combined := toDoc ""
     for p in stxArr do
-      let p' ← toPPL p
+      let p' ← toDoc p
       let formatted :=
         if p.getKind == `null then
             sep combined (nestedCombine (fun a b => "n(" <> sep a b <> ")n") p.getArgs)
@@ -287,7 +298,7 @@ namespace PrettyFormat
         combined := sep combined formatted
     return combined
 
-  def combine' [ToPPL a] (sep : PPL → PPL → PPL) (stx : Array a) : RuleM PPL :=
+  def combine' [ToDoc a] (sep : Doc → Doc → Doc) (stx : Array a) : RuleM Doc :=
     return combine sep stx
   -- def combineArgs' [ToPPL a] (sep : a) (stx : Syntax) : RuleM PPL :=
   --   return combine sep stx.getArgs
@@ -323,11 +334,11 @@ namespace PrettyFormat
   --   leading.splitOn "\n"
   --   |>.map.
 
-  private def whitespaceToPPL (str:String):PPL:=
-    let parts := str.split (fun c => c == '\n') |>.map (fun c => toPPL c)
+  private def whitespaceToPPL (str:String):Doc:=
+    let parts := str.split (fun c => c == '\n') |>.map (fun c => toDoc c)
     match parts with
     | x::xs => xs.foldl (fun acc x => acc <> x <> Doc.newline " ") x
-    | _ => toPPL ""
+    | _ => toDoc ""
 
   private def getLeading (info:SourceInfo) : String :=
     match info with
@@ -343,16 +354,16 @@ namespace PrettyFormat
 
   -- keep the syntax exactly the same
   -- TODO: remove Id.run
-  partial def topLevelUnformatedSyntaxToPPL (stx:Syntax): PPL := Id.run do
+  partial def topLevelUnformatedSyntaxToPPL (stx:Syntax): Doc := Id.run do
     match stx with
-    | .missing => return toPPL ""
+    | .missing => return toDoc ""
     | .node   (info : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
-      let combined ← args.foldlM (fun acc c => do return acc <> (← topLevelUnformatedSyntaxToPPL c) ) (toPPL "")
+      let combined ← args.foldlM (fun acc c => do return acc <> (← topLevelUnformatedSyntaxToPPL c) ) (toDoc "")
       return combined
       -- info.
-    | .atom   (info : SourceInfo) (val : String) => return (getLeading info |> whitespaceToPPL) <> toPPL val <> (getTrailing info |> whitespaceToPPL)
+    | .atom   (info : SourceInfo) (val : String) => return (getLeading info |> whitespaceToPPL) <> toDoc val <> (getTrailing info |> whitespaceToPPL)
     | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) =>
-      return (getLeading info |> whitespaceToPPL) <> toPPL rawVal.toString <> (getTrailing info |> whitespaceToPPL)
+      return (getLeading info |> whitespaceToPPL) <> toDoc rawVal.toString <> (getTrailing info |> whitespaceToPPL)
 
 
 
@@ -403,12 +414,12 @@ namespace PrettyFormat
         | _ => return none
       return none
 
-  def stringToPPL (s:String) : PPL:=
-    s.split (fun c => c == '\n') |>.map (fun s => toPPL s) |>.foldl (fun acc p => acc <> p <> Doc.newline " ") (toPPL "")
+  def stringToPPL (s:String) : Doc:=
+    s.split (fun c => c == '\n') |>.foldl (fun acc p => acc <> p <> Doc.newline " ") (toDoc "")
 
   structure FormatResult where
     stx : Syntax
-    ppl : PPL
+    ppl : Doc
     opts : Options
     formattedPPL : String
     generatedSyntax : Except String Syntax
@@ -468,7 +479,7 @@ namespace PrettyFormat
 
   def nanosecondsToSeconds (ns : Nat) : Float :=
     ns.toFloat / 1_000_000_000.0
-  def debugReportAsPPL (res : FormatResult): PPL := Id.run do
+  def debugReportAsPPL (res : FormatResult): Doc := Id.run do
     let stx := res.stx
     let opts := res.opts
     let generatedSyntax := res.generatedSyntax
@@ -506,9 +517,9 @@ namespace PrettyFormat
       errString := errString ++ s!"\n---- timingPPL ----\ntimePF{nanosecondsToSeconds res.timePF}s\ntimeDoc{nanosecondsToSeconds res.timeDoc}s\ntimeReparse{nanosecondsToSeconds res.timeReparse}s"
 
     if errString.length > 0 then
-      return toPPL "/-FORMAT DEBUG:" <> Doc.newline " " <> stringToPPL errString <> Doc.newline " " <> toPPL "-/\n"
+      return toDoc "/-FORMAT DEBUG:" <> Doc.newline " " <> stringToPPL errString <> Doc.newline " " <> toDoc "-/\n"
     else
-      return toPPL ""
+      return toDoc ""
 
   -- Enable dot notation with an extension function
   def FormatResult.reportAsComment (res : FormatResult) : String :=
@@ -516,14 +527,14 @@ namespace PrettyFormat
     let formattedReport := debugReport.prettyPrint DefaultCost (col := 0) (widthLimit := PrettyFormat.getPFLineLength res.opts)
     formattedReport
 
-  def pfTopLevel (stx : Syntax) (formatters : List (Name → Option Rule)) (options : Options) : (PPL × FormatState) :=
+  def pfTopLevel (stx : Syntax) (formatters : List (Name → Option Rule)) (options : Options) : (Doc × FormatState) :=
     let introduceContext := pf formatters stx
     let introduceState := introduceContext.run {nextId := 0, diagnostic:= {failures := [], missingFormatters := Std.HashMap.empty}}
     introduceState.run
 
 
 
-partial def someComputation (sum:Nat) (n : Nat):IO Nat :=
+partial def someComputation (sum:Nat) (n : Nat) : IO Nat :=
   if n == 0 then
     return sum
   else
@@ -630,17 +641,17 @@ initialize formattedCode : IO.Ref String ← IO.mkRef "initialString"
 --     else
 --       return ppl <> sep
 
-def formatThen [ToPPL a] [ToPPL b] (sep : a) (ppl : b) : PPL :=
-  let p := toPPL ppl
+def formatThen [ToDoc a] [ToDoc b] (sep : a) (ppl : b) : Doc :=
+  let p := toDoc ppl
   if isEmpty p then
-    toPPL ""
+    toDoc ""
   else
     p <> sep
 
-def formatBefore [ToPPL a] [ToPPL b] (sep : a) (ppl : b) : PPL :=
-  let p := toPPL ppl
+def formatBefore [ToDoc a] [ToDoc b] (sep : a) (ppl : b) : Doc :=
+  let p := toDoc ppl
   if isEmpty p then
-    toPPL ""
+    toDoc ""
   else
     sep <> p
 

@@ -189,8 +189,8 @@ def repeatString (s : String) (n : Nat) : String :=
 
 
 
-partial def prettyPrint  (ppl : PPL) : String :=
-  prettyPrint' 0 ppl.d
+partial def prettyPrint  (ppl : Doc) : String :=
+  prettyPrint' 0 ppl
 where
   prettyPrint' (indent:Nat): (ppl : Doc) → String
   -- | spacing spacing =>
@@ -198,25 +198,25 @@ where
   --   | PPLSpacing.space => " "
   --   | PPLSpacing.newline => "\n"
   --   | PPLSpacing.either => "\n"
-  | .fail s => "\n" ++ s ++ " "
-  | .text s => s
-  | .newline _ => "\n" ++ repeatString " " indent
-  | .choice left right => prettyPrint' indent left.d ++ " | " ++ prettyPrint' indent right.d
-  | .flatten inner => prettyPrint' indent inner.d
-  | .align inner => prettyPrint' indent inner.d
-  | .nest n inner => prettyPrint' (indent + n) inner.d
-  | .concat left right => prettyPrint' indent left.d ++ prettyPrint' indent right.d
-  | .stx stx => s!"stx {stx}"
-  | .bubbleComment s => s!"bubbleComment {s}"
-  | .endOfLineComment s => s!"endOfLineComment {s}"
-  | .reset s => s!"reset {prettyPrint' 0 s.d}"
-  | .rule name s => s!"rule {name} {prettyPrint' indent s.d}"
-  | .provide s => s!"provide {s}"
-  | .expect s => s!"expect {s}"
+  | .fail s _ => "\n" ++ s ++ " "
+  | .text s _ => s
+  | .newline _ _ => "\n" ++ repeatString " " indent
+  | .choice left right _ => prettyPrint' indent left ++ " | " ++ prettyPrint' indent right
+  | .flatten inner _ => prettyPrint' indent inner
+  | .align inner _ => prettyPrint' indent inner
+  | .nest n inner _ => prettyPrint' (indent + n) inner
+  | .concat left right _ => prettyPrint' indent left ++ prettyPrint' indent right
+  | .stx stx _ => s!"stx {stx}"
+  | .bubbleComment s _ => s!"bubbleComment {s}"
+  | .endOfLineComment s _ => s!"endOfLineComment {s}"
+  | .reset s _ => s!"reset {prettyPrint' 0 s}"
+  | .rule name s _ => s!"rule {name} {prettyPrint' indent s}"
+  | .provide s _ => s!"provide {s}"
+  | .expect s _ => s!"expect {s}"
 
 
-partial def output (ppl:PPL) : String :=
-  output' 0 ppl.d
+partial def output (ppl:Doc) : String :=
+  output' 0 ppl
 where
   output' (indent : Nat) : Doc → String
   -- | .optionalSpace spacing =>
@@ -224,21 +224,21 @@ where
   --   | PPLSpacing.space => s!"text \" \""
   --   | PPLSpacing.newline => "nl"
   --   | PPLSpacing.either => s!"text \" \""
-  | .fail s => s!"error {s}"
-  | .text s => s!"text \"{s}\""
-  | .newline _ => "nl"
-  | .choice left right => s!"({output' indent left.d})<|>({output' indent right.d}){newline indent}"
-  | .flatten inner => s!"flatten ({output' indent inner.d})"
-  | .align inner => s!"align ({output' indent inner.d})"
-  | .nest n inner => s!"nest {n} ({output' indent inner.d})"
-  | .concat left right => s!"({output' indent left.d}) <> ({output' indent right.d})"
-  | .stx stx => "stx\n"
-  | .bubbleComment s => s!"bubbleComment \"{s}\""
-  | .endOfLineComment s => s!"endOfLine \"{s}\""
-  | .rule name s => s!"rule {name} {newline indent} ({output' (indent + 2) s.d}) {newline indent}"
-  | .reset s => s!"reset ({output' indent s.d})"
-  | .provide s => s!"provide {s}"
-  | .expect s => s!"expect {s}"
+  | .fail s _ => s!"error {s}"
+  | .text s _ => s!"text \"{s}\""
+  | .newline _ _ => "nl"
+  | .choice left right _ => s!"({output' indent left})<|>({output' indent right}){newline indent}"
+  | .flatten inner _ => s!"flatten ({output' indent inner})"
+  | .align inner _ => s!"align ({output' indent inner})"
+  | .nest n inner _ => s!"nest {n} ({output' indent inner})"
+  | .concat left right _ => s!"({output' indent left}) <> ({output' indent right})"
+  | .stx stx _ => "stx\n"
+  | .bubbleComment s _ => s!"bubbleComment \"{s}\""
+  | .endOfLineComment s _ => s!"endOfLine \"{s}\""
+  | .rule name s _ => s!"rule {name} {newline indent} ({output' (indent + 2) s}) {newline indent}"
+  | .reset s _ => s!"reset ({output' indent s})"
+  | .provide s _ => s!"provide {s}"
+  | .expect s _ => s!"expect {s}"
   newline indent := "\n" ++ repeatString " " indent
 
 def escapeQuotes (s : String) : String :=
@@ -276,8 +276,8 @@ structure CommentFix where
   vars: Std.HashMap String PPL
 
 
-instance : Inhabited PPL where
-  default := PPL.mk (Doc.fail "default error")
+-- instance : Inhabited Doc where
+--   default := Doc.fail "default error"
 
 -- instance : Inhabited CommentFix where
 --   default := { flatten := false, startedComment := false, vars := {} }
@@ -447,11 +447,11 @@ instance : Inhabited PPL where
 
   abbrev FormatM a := (StateM FormatState) a
   abbrev RuleM a := ExceptT FormatError FormatM a
-  abbrev RuleRec := (Syntax → FormatM PPL)
+  abbrev RuleRec := (Syntax → FormatM Doc)
   -- abbrev Rule := RuleRec → Array Syntax → (RuleM PPL)
 
   -- abbrev RuleCtx := ReaderT RuleRec RuleM PPL
-  abbrev Rule := Array Syntax → RuleM PPL
+  abbrev Rule := Array Syntax → RuleM Doc
 
   abbrev Formatter := (Name → Option Rule)
   abbrev Formatters := List (Formatter)

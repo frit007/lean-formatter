@@ -260,6 +260,6 @@ def testSyntax : IO Bool := do
 
   let _ ← IO.println s!"{repr (a)}"
 
-  return isEmpty (toPPL a)
+  return isEmpty (toDoc a)
 
 #eval testSyntax

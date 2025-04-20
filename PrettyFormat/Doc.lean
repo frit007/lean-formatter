@@ -7,8 +7,10 @@ abbrev Bridge := UInt32
 
 def bridgeEmpty :Bridge := 0
 def bridgeFlex :Bridge := 1
-def bridgeNl :Bridge := 2
-def bridgeHardNl :Bridge := 4
+def bridgeSpaceNl :Bridge := 2 -- flattens to a space
+def bridgeHardNl :Bridge := 4 -- flattens to fail
+-- If you allow a newline, you should also be compatible with HardNl
+def bridgeNl :Bridge := bridgeSpaceNl ||| bridgeHardNl
 def bridgeSpace :Bridge := 8
 def bridgeImmediate :Bridge := 16
 def bridgeNone :Bridge := 32
@@ -19,6 +21,9 @@ def Bridge.subset (l r: Bridge) : Bool :=
 
 def Bridge.contains (l r: Bridge) : Bool :=
   l &&& r == l
+
+def Bridge.overlapsWith (l r: Bridge) : Bool :=
+  l &&& r != 0
 
 def Bridge.lessThan (lhs rhs: Bridge) :=
   lhs.subset rhs
@@ -100,7 +105,13 @@ instance : Cost DefaultCost where
 
 def cacheLimit := 6
 
-mutual
+structure DocMeta where
+  leftBridge : Bridge := bridgeFlex
+  id : Nat := 0
+  cacheWeight : Nat := 0
+  shouldCache : Bool := false
+deriving Inhabited, Repr
+
 /--
 A decision tree for rendering a document. If a `Doc` does not contain a `Doc.choice`
 constructor we call it "choice free". Usually we view a `Doc` in a rendering
@@ -113,11 +124,11 @@ inductive Doc where
 /--
 Render a `String` that does not contain newlines.
 -/
-| text (s : String)
+| text (s : String) (meta : DocMeta := {})
 /--
 Render a newline. Also contains an alternative rendering for the newline for `Doc.flatten`.
 -/
-| newline (s : String)
+| newline (s : String) (meta : DocMeta := {})
 /--
 Concatenate two documents unaligned. If `l` is the chars that we get from `lhs`
 and `r` from `rhs` they will render as:
@@ -127,29 +138,29 @@ lllllrrrrrrrr
 rrrrrr
 ```
 -/
-| concat (lhs rhs : PPL)
+| concat (lhs rhs : Doc) (meta : DocMeta := {})
 /--
 Render `doc` width the indentation level increased by `nesting`.
 -/
-| nest (nesting : Nat) (doc : PPL)
+| nest (nesting : Nat) (doc : Doc) (meta : DocMeta := {})
 /--
 Render `doc` with the indentation level set to the column position.
 -/
-| align (doc : PPL)
+| align (doc : Doc) (meta : DocMeta := {})
 /--
 Make a choice between rendering either `lhs` or `rhs` by picking the prettier variant.
 If one of the sides `fail`, then other side is chosen. If both sides `fail`, then the result is also `fail`
 -/
-| choice (lhs rhs : PPL)
+| choice (lhs rhs : Doc) (meta : DocMeta := {})
 
 /--
 Reset the indentation level to 0.
 -/
-| reset (doc : PPL)
+| reset (doc : Doc) (meta : DocMeta := {})
 /--
 The comment will be placed after the last newline before this line
 -/
-| bubbleComment (comment : String)
+| bubbleComment (comment : String) (meta : DocMeta := {})
 /--
 These comments have been placed at the end of the line
 This is enforced by failing any document, where the next character is not a newLine
@@ -158,12 +169,12 @@ Technically we know that these comments are legal syntax, because we were able t
 But to follow the style of the library author we will only allow the comment if a newline is possible
 The main reason for this is to respect the decision made by flatten. The intended use is to combine both comments (bubbleComment c <^> endOfLineComment c)
 -/
-| endOfLineComment (comment : String)
+| endOfLineComment (comment : String) (meta : DocMeta := {})
 /--
 Fail will never be rendered.
 This error will propagate until the next choice, where branches containing errors are eliminated.
 -/
-| fail (err : String)
+| fail (err : String) (meta : DocMeta := {})
 /--
 The special spacing options are
 - `space` which is a single space
@@ -177,19 +188,19 @@ do/by notation use `assignValue` to handle this scenario so they can place their
 
 provide can be chained to narrow the options to overlap between the two sets
 -/
-| provide (spacing : Bridge)
+| provide (spacing : Bridge) (meta : DocMeta := {})
 /--
 expect must be preceded by a `provide` and will fail if the provided spacing does not contain the expected spacing
 -/
-| expect (spacing : Bridge)
+| expect (spacing : Bridge) (meta : DocMeta := {})
 -- TODO: Think about adding the cost constructor. It does however make type inference much harder
-| rule (r : String) (doc : PPL)
-| stx (s : Lean.Syntax)
-| flatten (inner : PPL)
+| rule (r : String) (doc : Doc) (meta : DocMeta := {})
+| stx (s : Lean.Syntax) (meta : DocMeta := {})
+| flatten (inner : Doc) (meta : DocMeta := {})
 deriving Inhabited, Repr
 
-inductive PPL where
-| mk (d : Doc) (leftBridge : Bridge := bridgeFlex) (id : Nat := 0) (cacheWeight : Nat := 0) (shouldCache : Bool := false)
+-- inductive PPL where
+-- | mk (d : Doc) (leftBridge : Bridge := bridgeFlex) (id : Nat := 0) (cacheWeight : Nat := 0) (shouldCache : Bool := false)
 -- structure PPL where
 --   d : Doc PPL
 --   leftBridge : Bridge := bridgeFlex
@@ -206,18 +217,49 @@ inductive PPL where
 --   cacheWeight : Nat := 0
 --   shouldCache : Bool := false
 
-end
+def Doc.meta : Doc → DocMeta
+  | .text _ meta => meta
+  | .newline _ meta => meta
+  | .concat _ _ meta => meta
+  | .nest _ _ meta => meta
+  | .align _ meta => meta
+  | .choice _ _ meta => meta
+  | .reset _ meta => meta
+  | .bubbleComment _ meta => meta
+  | .endOfLineComment _ meta => meta
+  | .fail _ meta => meta
+  | .provide _ meta => meta
+  | .expect _ meta => meta
+  | .rule _ _ meta => meta
+  | .stx _ meta => meta
+  | .flatten _ docMeta => docMeta
 
-def PPL.d : PPL → Doc
-  | ⟨d, _, _, _, _⟩ => d
-def PPL.leftBridge : PPL → Bridge
-  | ⟨_, leftBridge, _, _, _⟩ => leftBridge
-def PPL.id : PPL → Nat
-  | ⟨_, _, id, _, _⟩ => id
-def PPL.cacheWeight : PPL → Nat
-  | ⟨_, _, _, cacheWeight, _⟩ => cacheWeight
-def PPL.shouldCache : PPL → Bool
-  | ⟨_, _, _, _, shouldCache⟩ => shouldCache
+def Doc.setMeta (doc : Doc) (meta : DocMeta) : Doc :=
+  match doc with
+  | .text s _ => .text s meta
+  | .newline s _ => .newline s meta
+  | .concat l r _ => .concat l r meta
+  | .nest n d _ => .nest n d meta
+  | .align d _ => .align d meta
+  | .choice l r _ => .choice l r meta
+  | .reset d _ => .reset d meta
+  | .bubbleComment c _ => .bubbleComment c meta
+  | .endOfLineComment c _ => .endOfLineComment c meta
+  | .fail err _ => .fail err meta
+  | .provide s _ => .provide s meta
+  | .expect s _ => .expect s meta
+  | .rule r d _ => .rule r d meta
+  | .stx s _ => .stx s meta
+  | .flatten inner _ => .flatten inner meta
+
+-- def PPL.leftBridge : Doc → Bridge
+--   | ⟨_, leftBridge, _, _, _⟩ => leftBridge
+-- def PPL.id : Doc → Nat
+--   | ⟨_, _, id, _, _⟩ => id
+-- def PPL.cacheWeight : Doc → Nat
+--   | ⟨_, _, _, cacheWeight, _⟩ => cacheWeight
+-- def PPL.shouldCache : Doc → Bool
+--   | ⟨_, _, _, _, shouldCache⟩ => shouldCache
 
 
 /--
@@ -292,6 +334,7 @@ def Measure.concat [Cost χ] (lhs rhs : Measure χ) :Measure χ :=
   | (none, some r) => Measure.mkFail rhs.cost r
   | (some l, some r) => Measure.mkFail lhs.cost (l ++ r)
   | _ => { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), spacingR := rhs.spacingR, fail := none }
+
   -- _ (none, _) => { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), forcedNewLine := rhs.forcedNewLine, startsWithNewLine := lhs.startsWithNewLine, fail := false }
   -- Do I want to just call mergeList?
 
@@ -398,7 +441,6 @@ structure TaintedState where
   -- expectSpacing : Bridge
 
 
-mutual
 -- instance [Cost χ] : Append ((Measure χ)) where
 --   append := Measure.concat
 
@@ -438,13 +480,12 @@ structure MeasureSet (χ : Type) where
 
 
 inductive TaintedTrunk (χ : Type) where
-| leftTainted (left: List (TaintedTrunk χ)) (doc: PPL) (state : TaintedState)
+| leftTainted (left: List (TaintedTrunk χ)) (doc: Doc) (state : TaintedState)
 | rightTainted (left : Measure χ) (right:List (TaintedTrunk χ)) (state : TaintedState)
-| center (doc : PPL) (state : TaintedState)
+| center (doc : Doc) (state : TaintedState)
 -- try lhs, if it satisfied all wanted bridges, then stop
 -- | merge (lhs rhs: TaintedTrunk χ) (state : TaintedState)
 
-end
 
 
 abbrev MeasureGroups (χ : Type) := (List (MeasureSet χ) × List (TaintedTrunk χ))
@@ -479,23 +520,21 @@ abbrev MeasureResult χ := StateT (CacheStore χ) Id
 
 initialize cache : IO.Ref (Nat × Array (List (Cache DefaultCost))) ← IO.mkRef (0, #[])
 
-class ToPPL (α : Type u) where
-  toPPL : α → PPL
+class ToDoc (α : Type u) where
+  toDoc : α → Doc
 
-instance : ToPPL PPL where
-  toPPL ppl:= ppl
-instance : ToPPL Doc where
-  toPPL d:= PPL.mk d
+instance : ToDoc Doc where
+  toDoc ppl:= ppl
 
-instance : ToPPL Lean.Syntax where
+instance : ToDoc Lean.Syntax where
   -- note that syntax is placed as a placeholder and will be expanded later
-  toPPL stx:= Doc.stx stx |> PPL.mk
-instance : ToPPL (Lean.TSyntax a) where
-  toPPL tstx:= Doc.stx tstx.raw |> PPL.mk
-instance : ToPPL String where
-  toPPL text:= Doc.text text |> PPL.mk
+  toDoc stx:= Doc.stx stx
+instance : ToDoc (Lean.TSyntax a) where
+  toDoc tstx:= Doc.stx tstx.raw
+instance : ToDoc String where
+  toDoc text:= Doc.text text
 
-export ToPPL (toPPL)
+export ToDoc (toDoc)
 
 partial def isSyntaxEmpty (stx : Lean.Syntax) : Bool :=
   match stx with
@@ -507,69 +546,69 @@ partial def isSyntaxEmpty (stx : Lean.Syntax) : Bool :=
   | .ident  _ (rawVal : Substring) _ _ =>
     (toString rawVal).trim.length == 0
 
-partial def isEmpty [ToPPL a] (ppl : a) : Bool :=
-  isEmpty' (toPPL ppl).d
+partial def isEmpty [ToDoc α] (ppl : α) : Bool :=
+  isEmpty' (toDoc ppl)
 where
-  isEmpty' : (ppl : Doc) → Bool
-  | .fail s => false
-  | .text s => s.length == 0
-  | .newline _ => false
-  | .choice left right => isEmpty' left.d && isEmpty' right.d
-  | .flatten inner => isEmpty' inner.d
-  | .align inner => isEmpty' inner.d
-  | .nest n inner => isEmpty' inner.d
-  | .concat left right => isEmpty' left.d && isEmpty' right.d
-  | .stx s => isSyntaxEmpty s
-  | .bubbleComment s => s.length == 0
-  | .endOfLineComment s => false
-  | .reset inner => isEmpty' inner.d
-  | .rule _ inner => isEmpty' inner.d
-  | .provide _ => false
-  | .expect _ => false
+  isEmpty' : Doc → Bool
+  | .fail _ _=> false
+  | .text s _=> s.length == 0
+  | .newline _ _=> false
+  | .choice left right _=> isEmpty' left && isEmpty' right
+  | .flatten inner _=> isEmpty' inner
+  | .align inner _=> isEmpty' inner
+  | .nest _ inner _=> isEmpty' inner
+  | .concat left right _=> isEmpty' left && isEmpty' right
+  | .stx s _=> isSyntaxEmpty s
+  | .bubbleComment s _=> s.length == 0
+  | .endOfLineComment _ _=> false
+  | .reset inner _=> isEmpty' inner
+  | .rule _ inner _=> isEmpty' inner
+  | .provide _ _=> false
+  | .expect _ _=> false
 
-def concat [ToPPL a] [ToPPL b] (l : a) (r : b) : PPL :=
-  if isEmpty l then toPPL r
-  else if isEmpty r then toPPL l
+def concat [ToDoc a] [ToDoc b] (l : a) (r : b) : Doc :=
+  if isEmpty l then toDoc r
+  else if isEmpty r then toDoc l
   else
-    let ld := toPPL l
-    let rd := toPPL r
-    PPL.mk (Doc.concat ld rd)
+    let ld := toDoc l
+    let rd := toDoc r
+    Doc.concat ld rd
 
 infixl:40 " <> " => fun l r => concat l r
 
 
 
-infixl:39 " <$$> " => fun l r => (toPPL l) <> Doc.provide (bridgeNl ||| bridgeHardNl) <> (toPPL r)
-infixl:38 " <$$$> " => fun l r => (toPPL l) <> Doc.provide bridgeHardNl <> (toPPL r)
-infixl:37 " <**> " => fun l r => (toPPL l) <> Doc.provide bridgeAny <> (toPPL r)
-infixl:36 " <_> " => fun l r => (toPPL l) <> Doc.provide bridgeSpace <> (toPPL r)
+infixl:39 " <$$> " => fun l r => (toDoc l) <> Doc.provide (bridgeNl ||| bridgeHardNl) <> (toDoc r)
+infixl:38 " <$$$> " => fun l r => (toDoc l) <> Doc.provide bridgeHardNl <> (toDoc r)
+infixl:37 " <**> " => fun l r => (toDoc l) <> Doc.provide bridgeAny <> (toDoc r)
+infixl:36 " <_> " => fun l r => (toDoc l) <> Doc.provide bridgeSpace <> (toDoc r)
 
 
-infixl:40 " <+> " => fun l r => (toPPL l) <> Doc.align (toPPL r)
-infixl:45 " !> " => fun l r => (Doc.provide l) <> (toPPL r)
-infixl:45 " <! " => fun l r => (Doc.expect l) <> (toPPL r)
+infixl:40 " <+> " => fun l r => (toDoc l) <> Doc.align (toDoc r)
+infixl:45 " !> " => fun l r => (Doc.provide l) <> (toDoc r)
+infixl:45 " <! " => fun l r => (Doc.expect l) <> (toDoc r)
 
-infixl:34 " <^> " => fun l r => toPPL (Doc.choice (toPPL l) (toPPL r))
+infixl:34 " <^> " => fun l r => toDoc (Doc.choice (toDoc l) (toDoc r))
 
-def group [ToPPL α] (doc : α) : PPL :=
-  toPPL (doc <^> (Doc.flatten (toPPL doc)))
+def group [ToDoc α] (doc : α) : Doc :=
+  toDoc (doc <^> (Doc.flatten (toDoc doc)))
 
-def nl : PPL := PPL.mk (Doc.newline "")
+def nl : Doc := (Doc.newline "")
 
-def spacing (s : Bridge) : PPL := PPL.mk (Doc.provide s)
-def expect (s : Bridge) : PPL := PPL.mk (Doc.expect s)
+def spacing (s : Bridge) : Doc := (Doc.provide s)
+def expect (s : Bridge) : Doc := (Doc.expect s)
 
-def align [ToPPL α] (s: α): PPL:=
-  PPL.mk (Doc.align (toPPL s))
+def align [ToDoc α] (s: α): Doc:=
+  (Doc.align (toDoc s))
 
 
-def PPL.flatten (s: PPL): PPL:=
-  PPL.mk (Doc.flatten (toPPL s))
+def PPL.flatten (s: Doc): Doc:=
+  (Doc.flatten (toDoc s))
 
-def Doc.nl : PPL := PPL.mk (Doc.newline "")
+def Doc.nl : Doc := (Doc.newline "")
 
-def flattenPPL [ToPPL α] (s: α): PPL:=
-  PPL.mk (Doc.flatten (toPPL s))
+def flattenPPL [ToDoc α] (s: α): Doc:=
+  (Doc.flatten (toDoc s))
 -- tainted result is sorted by the bridge
 abbrev TaintedResult (χ : Type) := List (Bridge × Measure χ)
 
@@ -577,11 +616,11 @@ abbrev TaintedResult (χ : Type) := List (Bridge × Measure χ)
 Aligned concatenation, joins two sub-layouts horizontally, aligning the whole right sub-layout at the
 column where it is to be placed in. Aka the `<+>` operator.
 -/
-def Doc.alignedConcat [ToPPL α] [ToPPL β] (lhs : α) (rhs : β) : PPL := (toPPL lhs) <> Doc.align (toPPL rhs)
+def Doc.alignedConcat [ToDoc α] [ToDoc β] (lhs : α) (rhs : β) : Doc := (toDoc lhs) <> Doc.align (toDoc rhs)
 -- /--
 -- TODO: Better name
 -- -/
-def Doc.flattenedAlignedConcat [ToPPL α] [ToPPL β] (lhs : α) (rhs : β) : PPL := Doc.alignedConcat (Doc.flatten (toPPL lhs)) rhs
+def Doc.flattenedAlignedConcat [ToDoc α] [ToDoc β] (lhs : α) (rhs : β) : Doc := Doc.alignedConcat (Doc.flatten (toDoc lhs)) rhs
 
 
 end PrettyFormat
