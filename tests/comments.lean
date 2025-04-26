@@ -5,10 +5,10 @@ import Lean
 
 open Lean
 
+
 /--
 info:
-def ofList (l : List Name) : NameSet :=
-  l.foldl (fun s n => s.insert n) {} -- end Of LineComment
+def ofList (l : List Name) : NameSet := l.foldl (fun s n => s.insert n) {} -- end Of LineComment
 -/
 #guard_msgs in
 #format

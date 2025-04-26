@@ -165,17 +165,12 @@ def formatCmdCodeAction : CommandCodeAction := fun p _ info node => do
         | none => r.start
       let tail := r.stop
 
-
       let formatters ← getFormatters info.env
 
       let result ← pfTopLevelWithDebug (stx) info.env formatters opts p.textDocument.uri
 
       let newText := result.reportAsComment ++ result.formattedPPL
 
-
-
-      -- let newText := toDoc ppl |>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := 100)
-      -- let newText := "newText"
       pure { eager with
         edit? := some <|.ofTextEdit doc.versionedIdentifier {
           range := doc.meta.text.utf8RangeToLspRange ⟨start, tail⟩

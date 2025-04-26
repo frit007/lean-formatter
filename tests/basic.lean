@@ -3,7 +3,8 @@ import LSPformat
 import Lean
 
 
-open Lean
+open Lean PrettyFormat
+
 
 
 /--
@@ -70,7 +71,7 @@ set_option pf.lineLength 70 -- Test that the code will be folded if the line len
 info:
 instance : Inter NameSet where
   inter := fun s t =>
-    s.fold (fun r n => if t.contains n then r.insert n else r) {}
+      s.fold (fun r n => if t.contains n then r.insert n else r) {}
 -/
 #guard_msgs in
 #format
@@ -86,61 +87,62 @@ open Lean Elab Parser.Command
 open Lean Elab Parser.Command
 
 
-/--
-info:
-inductive AliasInfo where
-  /-- Plain alias -/
-  | plain (n : Name)
-  /-- Forward direction of an iff alias -/
-  | forward (n : Name)
-  /-- Reverse direction of an iff alias -/
-  | reverse (n : Name)
-deriving Inhabited
--/
-#guard_msgs in
-#format
-inductive AliasInfo where
-  /-- Plain alias -/
-  | plain (n : Name)
-  /-- Forward direction of an iff alias -/
-  | forward (n : Name)
-  /-- Reverse direction of an iff alias -/
-  | reverse (n : Name)
-deriving Inhabited
-
-/--
-info:
-def matchNat (nat : Nat) : Nat :=
-  match nat with
-  | 0 => 99
-  | numWithWidth => numWithWidth * 2
--/
-#guard_msgs in
-#format
-def matchNat (nat : Nat) : Nat :=
-  match nat with
-  | 0 => 99
-  | numWithWidth => numWithWidth * 2
-
-/--
-info:
-def double (n : Nat) := go n
-where
-  go: Nat → Nat
-  | n => n * 2
--/
-#guard_msgs in
-#format
-def double (n : Nat) := go n
-where
-  go: Nat → Nat
-  | n => n * 2
-
-set_option pf.debugSyntax true
-set_option pf.debugMissingFormatters true
-set_option pf.lineLength 100
--- set_option pf.debugDoc true
 set_option pf.debugPPL true
+#fmt Lean.Parser.Command.inductive fun
+| #[inductiveAtom, decl, optDeclSig, whereContainer, terms, unknown1, derive] => do
+  assumeMissing unknown1
+  return (combine (.<_>.) #[toDoc inductiveAtom, toDoc decl, toDoc optDeclSig, combine (.<_>.) whereContainer.getArgs])
+    <> (Doc.nest 2 ("" <$$> combine (.<$$>.) terms.getArgs <> ("" <$$> "" <? derive)))
+| _ => failure
+
+/--
+info:
+inductive AliasInfo where
+  /--  Plain alias -/
+  | plain (n : Name)
+  /--  Forward direction of an iff alias -/
+  | forward (n : Name)
+  /--  Reverse direction of an iff alias -/
+  | reverse (n : Name)
+  deriving Inhabited
+-/
+#guard_msgs in
+#formatinductive AliasInfo where
+  /--  Plain alias -/
+  | plain (n : Name)
+  /--  Forward direction of an iff alias -/
+  | forward (n : Name)
+  /--  Reverse direction of an iff alias -/
+  | reverse (n : Name)
+  deriving Inhabited
+
+/--
+info:
+def matchNat (nat : Nat) : Nat :=
+  match nat with
+  | 0 => 99
+  | numWithWidth => numWithWidth * 2
+-/
+#guard_msgs in
+#format
+def matchNat (nat : Nat) : Nat :=
+  match nat with
+  | 0 => 99
+  | numWithWidth => numWithWidth * 2
+
+/--
+info:
+def double (n : Nat) := go n
+where
+  go : Nat → Nat
+  | n => n * 2
+-/
+#guard_msgs in
+#format
+def double (n : Nat) := go n
+where
+  go: Nat → Nat
+  | n => n * 2
 
 
 def double (n : Nat) := go n
@@ -154,9 +156,9 @@ def a : Nat := 2 * 3
 
 open PrettyFormat
 
-def formatPPL (p : PrettyFormat.PPL) : (PrettyFormat.PPL × Pfmt.Doc × String) :=
+def formatPPL (p : PrettyFormat.Doc) : (PrettyFormat.Doc × String) :=
   let d := PrettyFormat.toDoc p
-  (p, d, d|>.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := PrettyFormat.getPFLineLength {}))
+  (p, d, d|>.prettyPrint DefaultCost 0 (col := 0) (widthLimit := PrettyFormat.getPFLineLength {}))
 
 
 def badTest :PPL :=
@@ -246,7 +248,10 @@ def badTest2 :PPL :=
 
 
 
-#eval formatPPL (badTest2)
-
-
+-- set_option pf.debugLog true
+set_option pf.debugSyntax true
 set_option pf.debugPPL true
+
+instance : Inter NameSet where
+    inter := fun s t =>
+        s.fold (fun r n => if t.contains n then r.insert n else r) {}

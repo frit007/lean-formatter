@@ -302,8 +302,8 @@ partial def pfDeclId : Rule
   return (Doc.nest 2 (assignAtom <> ((("" <_> (flattenPPL value))
   <^> ("" <$$> value))))
   <^> assignAtom <> bridgeImmediate !> value)
-  <> (nl <? suffix)
-  <>(nl <? whereDecls)
+  <> (Doc.nl <? suffix)
+  <>(Doc.nl <? whereDecls)
 | _ => failure
 
 -- #coreFmt Lean.Parser.Command.declValSimple fun
@@ -384,7 +384,12 @@ def termOperator : Rule := fun
 
 
 
-#coreFmt Lean.Parser.Command.whereStructInst combine' (.<$$>.)
+-- #coreFmt Lean.Parser.Command.whereStructInst combine' (.<$$>.)
+#coreFmt Lean.Parser.Command.whereStructInst fun
+| #[whereAtom, structInst, unknown1] => do
+  assumeMissing unknown1
+  return whereAtom <> (Doc.nest 2 ("" <$$> structInst))
+| _ => failure
 
 #coreFmt Lean.Parser.Term.structInstFieldDef fun
 | args => return Doc.nest 2 <| combine (.<**>.) args
@@ -393,6 +398,7 @@ def termOperator : Rule := fun
 -- #coreFmt Lean.Parser.Term.fun combine' (" " <^> PPL.nl)
 #coreFmt Lean.Parser.Term.fun fun
 | #[funAtom, content] => do
+  let content ← formatStx content
   return (funAtom <**> content)
     -- pass through immediately value
     <^> (bridgeImmediate <! " " <> funAtom <> bridgeImmediate !> content)
@@ -404,6 +410,7 @@ def termOperator : Rule := fun
 -- TODO: Fix double space issue
 #coreFmt Lean.Parser.Term.basicFun fun
 | #[args, typeDecl, arrowAtom, content] => do
+  let myContent ← formatStx content
   -- assumeMissing unknown1
   let argsFormatted := combine (· <_> ·) args.getArgs
   return (bridgeImmediate <! combine (. <_> .) #[argsFormatted, flattenPPL (toDoc typeDecl), toDoc arrowAtom] <> (Doc.nl <> content))
@@ -432,7 +439,7 @@ def termOperator : Rule := fun
     let comments := val.replace "-/" "" |>.trim |>.split (fun f => f == '\n') |>.map String.trim
       |>.foldl (fun (acc) (c:String) => acc <> Doc.nl <> c) (toDoc "")
 
-    return (flattenPPL (startAtom <_> comments <> " -/") <^> (startAtom <> comments <> Doc.nl <> "-/")) <> (Doc.provide bridgeHardNl)
+    return ((startAtom <_> flattenPPL (comments <> " -/") <^> (startAtom <> comments <> Doc.nl <> "-/")) <> (Doc.provide bridgeHardNl))
   | _ => failure
 | _ => failure
 
@@ -452,7 +459,11 @@ def termOperator : Rule := fun
 --     ppDedent(ppSpace) ppRealFill("else " term)) : term
 #coreFmt termIfThenElse fun
 | #[ifAtom, condition, thenAtom, positiveBody, elseAtom, negativeBody] => do
-  let content := ifAtom <> " " <> condition <> " " <> thenAtom <> Doc.nest 2 (Doc.nl <> positiveBody) <> Doc.nl <> elseAtom <> Doc.nest 2 (Doc.nl <> negativeBody)
+  let condition ← formatStx condition
+  let positiveBody ← formatStx positiveBody
+  let negativeBody ← formatStx negativeBody
+
+  let content := ifAtom <> " " <> condition <> " " <> thenAtom <> Doc.nest 2 ("" <$$> positiveBody) <$$> elseAtom <> Doc.nest 2 ("" <$$> negativeBody)
   return (PPL.flatten content) <^> content
 | _ => failure
 
@@ -479,7 +490,7 @@ def termOperator : Rule := fun
 | #[byAtom, tactic] => do
   return (bridgeNl <! byAtom <> Doc.nest 2 (bridgeNl !> tactic)) <^>
   (bridgeSpace ||| bridgeNone <! byAtom <> (Doc.nest 2 (bridgeHardNl !> tactic) <^> PPL.flatten (bridgeSpace !> tactic))) <^>
-  (bridgeImmediate <! " " <> (Doc.nest 2 (byAtom <> nl <> tactic)))
+  (bridgeImmediate <! " " <> (Doc.nest 2 (byAtom <> Doc.nl <> tactic)))
 | _ => failure
 
 
@@ -756,10 +767,6 @@ def combineParenExpression [ToDoc a] [Inhabited a] (sep: Doc → Doc → Doc) (a
   return obtainAtom <> bridgeSpace !> cases <> bridgeSpace !> (combine (. <> Doc.provide (bridgeAny ||| bridgeImmediate) <> .) assign.getArgs)
 | _ => failure
 
-
-
-
-
 #coreFmt Lean.Parser.Tactic.rcasesPat.tuple fun
 | #[lpar, content, rpar] => do
   return lpar <> (addSpaceAfterCommas content.getArgs) <> rpar
@@ -838,7 +845,7 @@ def combineParenExpression [ToDoc a] [Inhabited a] (sep: Doc → Doc → Doc) (a
 #coreFmt Lean.Parser.Command.instance fun
 | #[kind, instanceAtom, declId, typeSpec, decl, whereStructInst] => do
   let declaration := Doc.nest 4 (combine (.<**>.) #[kind, instanceAtom, declId, typeSpec, decl])
-  let struct := Doc.nest 2 (toDoc whereStructInst)
+  let struct := (toDoc whereStructInst)
   return declaration <> bridgeAny !> struct
 | _ => failure
 
@@ -876,7 +883,7 @@ def combineParenExpression [ToDoc a] [Inhabited a] (sep: Doc → Doc → Doc) (a
 #coreFmt Lean.Parser.Command.inductive fun
 | #[inductiveAtom, decl, optDeclSig, whereContainer, terms, unknown1, derive] => do
   assumeMissing unknown1
-  return (combine (.<_>.) #[toDoc inductiveAtom, toDoc decl, toDoc optDeclSig, combine (.<_>.) whereContainer.getArgs])
+  return (combine (.<_>.) #[toDoc inductiveAtom, toDoc decl, toDoc optDeclSig, combine (.<>" ??? "<>.) whereContainer.getArgs])
     <> (Doc.nest 2 ("" <$$> combine (.<$$>.) terms.getArgs <> ("" <$$> "" <? derive)))
 | _ => failure
 
