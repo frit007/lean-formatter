@@ -69,10 +69,11 @@ partial def expandSyntax (r : RuleRec) (ppl : Doc) : FormatM Doc := do
     | _, .fail s =>
       return Doc.fail s
     | _, _ =>
-      let leftBridge := if isMetaConstruct left then
-        right.meta.leftBridge
-      else
-        left.meta.leftBridge
+      -- Note that in case of unknown we over estimate the bridges required
+      let leftBridge := match left.isMetaConstruct with
+      | .True => right.meta.leftBridge
+      | .False => left.meta.leftBridge
+      | .Unknown => right.meta.leftBridge ||| left.meta.leftBridge
 
       cachePPL (.concat left right) (max left.meta.cacheWeight right.meta.cacheWeight) (leftBridge)
   | .rule name inner _ =>
@@ -87,27 +88,6 @@ partial def expandSyntax (r : RuleRec) (ppl : Doc) : FormatM Doc := do
   | .require s _ => cachePPL (.require s) 0 s
   | .cost c _ => cachePPL (.cost c) 0 bridgeFlex
 where
-  /--
-  We are trying to solve the problem where the left side does not affect the bridge for example
-  (""<>Doc.provide bridgeNl)
-  since the left side is empty the bridge is still bridgeNl
-  -/
-  isMetaConstruct : Doc → Bool
-  | .cost _ _ => true
-  | .bubbleComment _ _ => true
-  | .newline _ _ => false
-  | .text s _ => s == ""
-  | .flatten inner _ => isMetaConstruct inner
-  | .align inner _ => isMetaConstruct inner
-  | .nest _ inner _ => isMetaConstruct inner
-  | .concat left right _ => isMetaConstruct left && isMetaConstruct right
-  | .choice left right _ => isMetaConstruct left && isMetaConstruct right
-  | .rule _ inner _ => isMetaConstruct inner
-  | .stx _ _ => false
-  | .provide _ _ => false
-  | .require _ _ => false
-  | .reset inner _ => isMetaConstruct inner
-  | .fail _ _ => false
 
   cachePPL (doc:Doc) (childCacheWeight:Nat) (leftBridge:Bridge := bridgeFlex): FormatM Doc := do
     if childCacheWeight >= cacheLimit then

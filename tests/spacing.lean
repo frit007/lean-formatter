@@ -61,18 +61,21 @@ partial def markCachedObject (doc:FormatM Doc) : (Doc × FormatState) :=
 
 
 
+
+
 -- it takes a second without caching
 #eval do
-  let (doc, cache) := markCachedObject (nchoice 13)
+  let (doc, cache) := markCachedObject (nchoice 19)
 
   IO.println s!"{cache.nextId}"
 
   let (out, timeDoc) ← measureTime (fun _ => do
-    let out ← Doc.prettyPrintLog DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) doc
+    let out ← Doc.prettyPrintLog DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) doc
     return out
   )
 
-  IO.println s!"Time: {timeDoc.toFloat / 1000000000.0}s \n{out} the doc\n{doc.toString}"
+  -- IO.println s!"Time: {timeDoc.toFloat / 1000000000.0}s \n{out} the doc\n{doc.toString}"
+  IO.println s!"Time: {timeDoc.toFloat / 1000000000.0}s \n{out} the "
 
 
 -- #eval

@@ -7,7 +7,7 @@ abbrev Bridge := UInt32
 
 
 
-def bridgeEmpty :Bridge := 0
+def bridgeNull :Bridge := 0
 def bridgeFlex :Bridge := 1
 def bridgeSpaceNl :Bridge := 2 -- flattens to a space
 def bridgeHardNl :Bridge := 4 -- flattens to fail
@@ -18,14 +18,17 @@ def bridgeImmediate :Bridge := 16
 def bridgeNone :Bridge := 32
 def bridgeAny := bridgeSpace ||| bridgeNl ||| bridgeHardNl
 
-def Bridge.subset (l r: Bridge) : Bool :=
-  l &&& r == r
+def Bridge.subsetOf (l r: Bridge) : Bool :=
+  (l &&& r) == r
+
+def Bridge.contains (l r: Bridge) : Bool :=
+  (l &&& r) == l
 
 def Bridge.overlapsWith (l r: Bridge) : Bool :=
   l &&& r != 0
 
 def Bridge.lessThan (lhs rhs: Bridge) :=
-  lhs.subset rhs
+  lhs.subsetOf rhs
 
 def Bridge.erase (lhs rhs: Bridge) :=
   lhs &&& (~~~ rhs)
@@ -44,6 +47,14 @@ def Bridge.isEmpty (b : Bridge) : Bool :=
 
 def Bridge.smallerThan (lhs rhs: Bridge) : Bool :=
   lhs < rhs
+
+def Bridge.canHandle (lhs rhs: Bridge) : Bool :=
+  if lhs == bridgeFlex then
+    (bridgeFlex ||| bridgeAny ||| bridgeNone).subsetOf rhs
+  else
+    lhs.subsetOf lhs
+
+#eval bridgeFlex.canHandle (bridgeImmediate)
 
 /--
 like LE but for `Bool`, due to my lack of knowledge regarding proofs
@@ -234,6 +245,40 @@ def Doc.setMeta (doc : Doc) (meta : DocMeta) : Doc :=
   | .cost c _ => .cost c meta
 
 
+inductive Trilean
+| True
+| False
+| Unknown
+deriving Repr, DecidableEq
+
+def Trilean.and : Trilean → Trilean→  Trilean
+| .True, .True => .True
+| .False, .False => .False
+| _, _ => .Unknown
+
+/--
+We are trying to solve the problem where the left side does not affect the bridge for example
+(""<>Doc.provide bridgeNl)
+since the left side is empty the bridge is still bridgeNl
+-/
+def Doc.isMetaConstruct : Doc → Trilean
+  | .cost _ _ => Trilean.True
+  | .bubbleComment _ _ => Trilean.True
+  | .newline _ _ => Trilean.False
+  | .text s _ => if s == "" then Trilean.True else Trilean.False
+  | .flatten inner _ => isMetaConstruct inner
+  | .align inner _ => isMetaConstruct inner
+  | .nest _ inner _ => isMetaConstruct inner
+  | .concat left right _ => isMetaConstruct left |>.and (isMetaConstruct right)
+  | .choice left right _ => isMetaConstruct left |>.and (isMetaConstruct right)
+  | .rule _ inner _ => isMetaConstruct inner
+  | .stx _ _ => Trilean.Unknown
+  | .provide _ _ => Trilean.False
+  | .require _ _ => Trilean.False
+  | .reset inner _ => isMetaConstruct inner
+  | .fail _ _ => Trilean.False
+
+
 /--
 A `Measure` contains a `Doc` along with meta information from the rendering process.
 We use it in `MeasureSet`s to find the prettiest document.
@@ -301,9 +346,13 @@ structure TaintedState where
   widthLimit : Nat
   flatten : Bool
   leftBridge : Bridge
+  expectBridge : Bridge
 
 structure MeasureSet (χ : Type) where
-  bridge : Bridge
+  /--
+
+  -/
+  rightBridge : Bridge
   /--
   A list of `Measure`s that form a Pareto front for our rendering problem.
   This list is ordered by the last line length in strict ascending order.
@@ -320,6 +369,11 @@ inductive TaintedTrunk (χ : Type) where
 -- try lhs, if it satisfied all wanted bridges, then stop
 -- | merge (lhs rhs: TaintedTrunk χ) (state : TaintedState)
 
+def TaintedTrunk.cacheInfo (trunk : TaintedTrunk χ) : Option (TaintedState × Nat) :=
+  match trunk with
+  | .leftTainted _ _ s id => some (s, id)
+  | .rightTainted _ _ s id => some (s, id)
+  | .center _ _ => none
 
 
 abbrev MeasureGroups (χ : Type) := (List (MeasureSet χ) × List (TaintedTrunk χ))
@@ -333,6 +387,10 @@ structure Cache (χ : Type) where
   indent : Nat
   flatten: Bool --
   column: Nat --
+  -- if the result is tainted, do not allow using it in a non tainted context
+  -- The idea is that we can momentarily be in a tainted context (and accept any ugly solution),
+  -- but when we reach the next line we should try to find the pretties solution again. However to avoid recalculations
+  isTainted: Bool
 
   /-
   In the future we could add maxWidth to allow caching across different indents as long as indent-newIndent+maxWidth < maxWidth
@@ -352,6 +410,7 @@ structure CacheStore (χ : Type) where
   content : Array (List (Cache χ))
 
 abbrev MeasureResult χ := StateT (CacheStore χ) Id
+
 
 
 def cacheLog (message : Unit → String): (MeasureResult χ) Unit := do
@@ -475,30 +534,30 @@ def Doc.flattenedAlignedConcat [ToDoc α] [ToDoc β] (lhs : α) (rhs : β) : Doc
 partial def Bridge.str (b : Bridge) : String := Id.run do
   let mut str := []
   let mut bridge : Bridge := b
-  if bridgeEmpty == bridge then
+  if bridgeNull == bridge then
     return "bridgeEmpty"
-  if bridge.subset bridgeAny then
+  if bridge.subsetOf bridgeAny then
     str := str ++ ["bridgeAny"]
     bridge := bridge.erase bridgeAny
-  if bridge.subset bridgeNl then
+  if bridge.subsetOf bridgeNl then
     str := str ++ ["bridgeNl"]
     bridge := bridge.erase bridgeNl
-  if bridge.subset bridgeHardNl then
+  if bridge.subsetOf bridgeHardNl then
     str := str ++ ["bridgeHardNl"]
     bridge := bridge.erase bridgeHardNl
-  if bridge.subset bridgeSpaceNl then
+  if bridge.subsetOf bridgeSpaceNl then
     str := str ++ ["bridgeSpaceNl"]
     bridge := bridge.erase bridgeSpaceNl
-  if bridge.subset bridgeSpace then
+  if bridge.subsetOf bridgeSpace then
     str := str ++ ["bridgeSpace"]
     bridge := bridge.erase bridgeSpace
-  if bridge.subset bridgeImmediate then
+  if bridge.subsetOf bridgeImmediate then
     str := str ++ ["bridgeImmediate"]
     bridge := bridge.erase bridgeImmediate
-  if bridge.subset bridgeNone then
+  if bridge.subsetOf bridgeNone then
     str := str ++ ["bridgeNone"]
     bridge := bridge.erase bridgeNone
-  if bridge.subset bridgeFlex then
+  if bridge.subsetOf bridgeFlex then
     str := str ++ ["bridgeFlex"]
     bridge := bridge.erase bridgeFlex
   if bridge != 0 then
@@ -508,8 +567,6 @@ partial def Bridge.str (b : Bridge) : String := Id.run do
     return String.join (str.intersperse "|||")
   else
     return s!"({String.join (str.intersperse "|||")})"
-
-#eval (bridgeNone).str
 
 partial def Doc.toString (ppl:Doc) : String :=
   output' 0 ppl

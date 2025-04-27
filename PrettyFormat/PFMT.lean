@@ -53,13 +53,13 @@ def shallowSummary (mss : List (MeasureSet χ)) : String := Id.run do
   for ms in mss do
     match ms.set with
     | [] =>
-      res := s!"{res}\n\n{readableBridge ms.bridge} ==> impossible"
+      res := s!"{res}\n\n{readableBridge ms.rightBridge} ==> impossible"
     | x::_ =>
       if x.fail.isSome then
-        res := s!"{res}\n\n{readableBridge ms.bridge} ==> {x.fail.get!}"
+        res := s!"{res}\n\n{readableBridge ms.rightBridge} ==> {x.fail.get!}"
       else
         let formatted := String.join (x.layout []).reverse
-        res := s!"{res}\n\n{readableBridge ms.bridge} => {formatted}"
+        res := s!"{res}\n\n{readableBridge ms.rightBridge} => {formatted}"
   return res
 
 
@@ -76,12 +76,12 @@ def MeasureSet.merge [Cost χ] (lhs rhs : MeasureSet χ) : MeasureSet χ :=
       | .none => acc
 
     {
-      bridge := lhs.bridge
+      rightBridge := lhs.rightBridge
       set := [Measure.mkFail (Cost.text 0 0 0) (lhs.set.foldl addErrors <| rhs.set.foldl addErrors [])]
     }
   else
     {
-      bridge := lhs.bridge
+      rightBridge := lhs.rightBridge
       set := mergeSet lhs' rhs'
     }
 
@@ -162,8 +162,8 @@ where
   | [], rs => rs
   | ls, [] => ls
   | l::ls, r::rs =>
-    let lbridge : Bridge := l.bridge
-    let rbridge : Bridge := r.bridge
+    let lbridge : Bridge := l.rightBridge
+    let rbridge : Bridge := r.rightBridge
 
     if lbridge < rbridge then
       r :: combineInner (l::ls) rs
@@ -181,14 +181,14 @@ partial def combineMeasureSetGroupsExpand [Cost χ] (l : MeasureGroups χ) (r : 
 
   for ms in ml do
     for m in ms.set do
-      let result ← r ms.bridge m
+      let result ← r ms.rightBridge m
       res := combineMeasureSetGroups res result
 
   return res
 
 partial def orderMeasureGroup [Cost χ] : MeasureGroups χ → MeasureGroups χ
   | (m,t) =>
-    (m.mergeSort (fun a b => a.bridge > b.bridge), t)
+    (m.mergeSort (fun a b => a.rightBridge > b.rightBridge), t)
 
 partial def getId (id:Nat) (flatten:Bool) (cacheCount:Nat): Nat:=
   if flatten then
@@ -196,11 +196,11 @@ partial def getId (id:Nat) (flatten:Bool) (cacheCount:Nat): Nat:=
   else
     id
 
-partial def getCached [Inhabited χ] [Cost χ] (doc : Doc) (indent col: Nat) (bridges : Bridge) (flatten : Bool) : MeasureResult χ (MeasureGroups χ × Bridge) := do
+partial def getCached [Inhabited χ] [Cost χ] (id indent col: Nat) (bridges : Bridge) (flatten : Bool) (allowTainted : Bool): MeasureResult χ (MeasureGroups χ × Bridge) := do
   let cacheStore ← get
-  let bucket := cacheStore.content.get! (getId doc.meta.id flatten cacheStore.size)
-  cacheLog (fun () => s!"Bucket size {bucket.length} the id {doc.meta.id}")
-  let (caches, bridges) := foundSolutions indent col [] bridges bridges (bucket)
+  let bucket := cacheStore.content.get! (getId id flatten cacheStore.size)
+  cacheLog (fun () => s!"Bucket size {bucket.length} the id {id}")
+  let (caches, bridges) := foundSolutions indent col [] bridges allowTainted bridges (bucket)
 
   let measureSets := caches |>.foldl (fun (acc : MeasureGroups χ) (cache : Cache χ) =>
       combineMeasureSetGroups acc cache.results
@@ -210,26 +210,26 @@ where
   -- TODO: consider optimizing by considering previous results, if their maxWidth does not exceed the widthLimit
   -- Note: we need the original bridge here to check for the following scenario:
   --  - We have caches for 110 and 011, and are looking for 111 but when we find 110 we can erase 011 and therefore can't find 011, since it is not a subset of 001
-  foundSolutions (indent col: Nat) (acc : List (Cache χ)) (originalBridge : Bridge): Bridge → List (Cache χ) → (List (Cache χ) × Bridge)
+  foundSolutions (indent col: Nat) (acc : List (Cache χ)) (originalBridge : Bridge) (forceTainted : Bool): Bridge → List (Cache χ) → (List (Cache χ) × Bridge)
   | 0, _ => (acc, 0)
   | bridges, [] => (acc, bridges)
   | bridges, c::rest =>
-    if c.leftBridge.subset originalBridge && c.indent == indent && c.column == col then
-      foundSolutions indent col (c::acc) originalBridge (bridges.erase c.leftBridge) rest
+    if (c.leftBridge.subsetOf originalBridge && c.column == col) && ((c.indent == indent && !c.isTainted) || (!forceTainted || c.indent >= indent)) then
+      foundSolutions indent col (c::acc) originalBridge forceTainted (bridges.erase c.leftBridge) rest
     else
-      foundSolutions indent col acc originalBridge bridges rest
+      foundSolutions indent col acc originalBridge forceTainted bridges rest
 
-def addToCache [Inhabited χ] [Cost χ] (doc : Doc) (indent column: Nat) (flatten:Bool)(bridges : Bridge) (results:MeasureGroups χ): MeasureResult χ Unit := do
+def addToCache [Inhabited χ] [Cost χ] (id indent column: Nat) (flatten:Bool) (isTainted : Bool) (leftBridges : Bridge) (results:MeasureGroups χ): MeasureResult χ Unit := do
   modify (fun cacheStore =>
-    let updatedCache := cacheStore.content.modify (getId doc.meta.id flatten cacheStore.size) (fun caches =>
-      {leftBridge:=bridges, indent := indent, column := column, flatten, results := results}::caches
+    let updatedCache := cacheStore.content.modify (getId id flatten cacheStore.size) (fun caches =>
+      {leftBridge:=leftBridges, indent := indent, column := column, flatten, isTainted := isTainted, results := results}::caches
     )
     {cacheStore with content := updatedCache}
   )
 
 def leafSet [Inhabited χ] [Cost χ] (m : Measure χ): MeasureResult χ (MeasureGroups χ) :=
   let measureSet : MeasureSet χ := {
-    bridge := m.spacingR
+    rightBridge := m.spacingR
     set := [m]
   }
   return ([measureSet], [])
@@ -238,9 +238,14 @@ def leafSet [Inhabited χ] [Cost χ] (m : Measure χ): MeasureResult χ (Measure
 This function efficiently computes a Pareto front for the problem of rendering
 a `Doc` at a certain column position with a certain indentation level and width limit.
 
+leftBridge: the bridges before this document, these limit the types of documents we can create
+rightBridge: the bridges after this document, these limit the types of documents that can follow this document
+ - rightBridge is primarily used in a tainted context where we want to provide any legal answer.
+ - but to accomplish this safely we must ensure that we provide legal answers to all possible right bridges.
+   - This comes with the issue that if there are no solutions for all rightbridges, then we will try all of the solutions
 forceExpand: When evaluating tainted
 -/
-partial def Doc.resolve [Inhabited χ] [Cost χ] (ppl : Doc) (trace : List String) (col indent widthLimit : Nat) (lBridge : Bridge) (flatten forceTainted: Bool) : MeasureResult χ (MeasureGroups χ) := do
+partial def Doc.resolve [Inhabited χ] [Cost χ] (ppl : Doc) (trace : List String) (col indent widthLimit : Nat) (leftBridge rightBridge: Bridge) (flatten forceTainted: Bool) : MeasureResult χ (MeasureGroups χ) := do
   -- if (← get).giveUp == 0 then
   --   cacheLog fun _ => (s!"Cache::giveup {ppl.meta.id} {trace.length} {col} {indent} {widthLimit}")
   --   return ← leafSet {
@@ -249,14 +254,14 @@ partial def Doc.resolve [Inhabited χ] [Cost χ] (ppl : Doc) (trace : List Strin
   --     layout := fun ss => "(giveup)"::ss
   --     spacingR := bridgeFlex
   --   }
-  modify (fun cacheStore =>
-    {cacheStore with giveUp := cacheStore.giveUp - 1}
-  )
+  -- modify (fun cacheStore =>
+  --   {cacheStore with giveUp := cacheStore.giveUp - 1}
+  -- )
   -- If we were to exceed the widthLimit we delay any attempt to optimize
-  -- the layout of `doc` in hopes that another branch of this function finds
+  -- the layout of `doc1` in hopes that another branch of this function finds
   -- a non tainted `MeasureSet`.
   if ppl.meta.shouldBeCached then
-    let (measureResults, remainingBridges) ← getCached ppl indent col lBridge flatten
+    let (measureResults, remainingBridges) ← getCached ppl.meta.id indent col leftBridge flatten forceTainted
     if remainingBridges.isEmpty then
       cacheLog fun _ => (s!"Cache::hit for {ppl.meta.id} with {remainingBridges.str} remaining bridges")
       -- if the cache found results for all ingoing bridges then return existing result
@@ -264,23 +269,23 @@ partial def Doc.resolve [Inhabited χ] [Cost χ] (ppl : Doc) (trace : List Strin
     else
       cacheLog fun _ => (s!"Cache::miss for {ppl.meta.id} with {remainingBridges.str} remaining bridges (got {measureResults.fst.length} results)")
       -- only check the bridges that have not already been checked yet
-      let value ← exceedCheck ppl trace col indent widthLimit remainingBridges flatten forceTainted
-      addToCache ppl indent col flatten remainingBridges value
+      let value ← exceedCheck ppl trace col indent widthLimit remainingBridges rightBridge flatten forceTainted
+      addToCache ppl.meta.id indent col flatten (!forceTainted) remainingBridges value
       return value
   else
-    exceedCheck ppl trace col indent widthLimit lBridge flatten forceTainted
+    exceedCheck ppl trace col indent widthLimit leftBridge rightBridge flatten forceTainted
 where
-  exceedCheck (ppl : Doc) (trace : List String) (col indent widthLimit : Nat) (leftBridge: Bridge) (flatten forceTainted: Bool) : MeasureResult χ (MeasureGroups χ) := do
+  exceedCheck (ppl : Doc) (trace : List String) (col indent widthLimit : Nat) (leftBridge rightBridge: Bridge) (flatten forceTainted: Bool) : MeasureResult χ (MeasureGroups χ) := do
     let exceeds :=
       match ppl with
       | .text s _ => indent > widthLimit || col + s.length > widthLimit
       | _ => indent > widthLimit || col > widthLimit
     if exceeds && !forceTainted then
-      let state :TaintedState := {trace:=trace, col:=col, indent:=indent, widthLimit:=widthLimit, leftBridge:=leftBridge, flatten:=flatten}
+      let state :TaintedState := {trace:=trace, col:=col, indent:=indent, widthLimit:=widthLimit, leftBridge := rightBridge, expectBridge:=rightBridge, flatten:=flatten}
       let tainted := (TaintedTrunk.center ppl state)
       return ([], [tainted])
     else
-      return orderMeasureGroup (← core ppl trace col indent widthLimit lBridge flatten forceTainted)
+      return orderMeasureGroup (← core ppl trace col indent widthLimit leftBridge flatten forceTainted)
   /-
   The core resolver that actually computes the `MeasureSet`s that result from rendering `doc`
   in the given context.
@@ -328,20 +333,25 @@ where
       else
         core (possibilitiesToDoc leftBridge flatten false <> (nl)) trace col indent widthLimit bridgeFlex flatten forceExpand
     | .concat lhs rhs m =>
-      let left ← (lhs.resolve trace col indent widthLimit leftBridge flatten forceExpand)
+      let expectedBridge := match rhs.isMetaConstruct with
+      | Trilean.True => rightBridge
+      | Trilean.False => rhs.meta.leftBridge
+      | Trilean.Unknown => rhs.meta.leftBridge ||| rightBridge
+
+      let left ← (lhs.resolve trace col indent widthLimit leftBridge expectedBridge flatten forceExpand)
       cacheLog fun _ => (s!"CONCAT: left ? {shallowSummary left.fst} tainted ??{left.snd.length}")
-      let taintedState : TaintedState := {trace:=trace, col:=col, indent:=indent, widthLimit:=widthLimit, leftBridge:=leftBridge, flatten:=flatten}
+      let taintedState : TaintedState := {trace:=trace, col:=col, indent:=indent, widthLimit:=widthLimit, leftBridge := leftBridge, expectBridge:=rightBridge, flatten:=flatten}
       processConcatGroups left rhs forceExpand taintedState m.id
       -- processConcatList (lhs.resolve trace col indent widthLimit leftBridge flatten forceExpand) trace (fun l newSpacing => rhs.resolve trace l.last indent widthLimit newSpacing flatten forceExpand)
     | .choice lhs rhs _ => do
-      let left ← (lhs.resolve trace col indent widthLimit leftBridge flatten forceExpand)
-      let right ← (rhs.resolve trace col indent widthLimit leftBridge flatten forceExpand)
+      let left ← (lhs.resolve trace col indent widthLimit leftBridge rightBridge flatten forceExpand)
+      let right ← (rhs.resolve trace col indent widthLimit leftBridge rightBridge flatten forceExpand)
       let combined := combineMeasureSetGroups left right
       -- cacheLog (s!"TODO: combine left ({shallowSummary left.fst}) right ({shallowSummary right.fst}) combined ({shallowSummary combined.fst})")
       return combined
-    | .nest indentOffset doc _ => doc.resolve trace col (indent + indentOffset) widthLimit leftBridge flatten forceExpand
-    | .align doc _ => doc.resolve trace col col widthLimit leftBridge flatten forceExpand
-    | .reset doc _ => doc.resolve trace col 0 widthLimit leftBridge flatten forceExpand
+    | .nest indentOffset doc _ => doc.resolve trace col (indent + indentOffset) widthLimit leftBridge rightBridge flatten forceExpand
+    | .align doc _ => doc.resolve trace col col widthLimit leftBridge rightBridge flatten forceExpand
+    | .reset doc _ => doc.resolve trace col 0 widthLimit leftBridge rightBridge flatten forceExpand
     | .bubbleComment comment _ => leafSet {
       last := col
       -- prioritize placing comments where they were placed by the user
@@ -377,15 +387,15 @@ where
     | .require s _ =>
       if leftBridge == bridgeFlex then
         let fail : Doc := Doc.fail "require given no bridges"
-        fail.resolve trace col indent widthLimit bridgeFlex flatten forceExpand
+        fail.resolve trace col indent widthLimit bridgeFlex rightBridge flatten forceExpand
       else
         let possibilities := leftBridge.intersection s
         let choices := (possibilitiesToDoc possibilities flatten true)
-        choices.resolve trace col indent widthLimit bridgeFlex flatten forceExpand
+        choices.resolve trace col indent widthLimit bridgeFlex rightBridge flatten forceExpand
       | .rule s doc _ =>
-        doc.resolve (s::trace) col indent widthLimit leftBridge flatten forceExpand
+        doc.resolve (s::trace) col indent widthLimit leftBridge rightBridge flatten forceExpand
       | .flatten doc _ =>
-        doc.resolve trace col indent widthLimit leftBridge true forceExpand
+        doc.resolve trace col indent widthLimit leftBridge rightBridge true forceExpand
       | .stx _ _ =>
         panic! "Syntax should be expanded before reaching this point"
       | .cost c _ => leafSet {
@@ -416,10 +426,15 @@ where
             dedup rights (currentBest :: result) current
 
       -- let rights := processRight l (l.spacingR)
-      let (rightResults, rightTainted) ← right.resolve state.trace l.last state.indent state.widthLimit (l.spacingR) state.flatten forceExpand
+      let (rightResults, rightTainted) ← right.resolve state.trace l.last state.indent state.widthLimit (l.spacingR) state.expectBridge state.flatten forceExpand
       -- return (rightResults, rightTainted)
-      cacheLog fun _ => s!"I saw the left layout???? {l.layout []} rightDoc:{right.toString}"
-      let mut res : MeasureGroups χ := ([], [TaintedTrunk.rightTainted l rightTainted state concatId])
+      -- cacheLog fun _ => s!"CONCAT::LEFT  {l.layout []} rightDoc:{right.toString}"
+      cacheLog fun _ => s!"CONCAT::LEFT  {l.layout []} "
+      let tainted := if rightTainted.length > 0 then
+          [TaintedTrunk.rightTainted l rightTainted state concatId]
+        else
+          []
+      let mut res : MeasureGroups χ := ([], tainted)
       -- panic! s!"TODO: remove this panic {rightResults.length}"
       for rightSets in rightResults do
         -- dedup like pretty expressive
@@ -439,9 +454,9 @@ where
             | none => acc
             | some err => acc ++ err) [])}]
 
-        let a : List (MeasureSet χ):= [{bridge := rightSets.bridge, set := measureSets}]
+        -- let a : List (MeasureSet χ):= [{rightBridge := rightSets.rightBridge, set := measureSets}]
         -- panic! s!"TODO: arientso {shallowSummary (a)} ??? {shallowSummary (res.fst)}"
-        res := combineMeasureSetGroups res ([{bridge := rightSets.bridge, set := measureSets}], [])
+        res := combineMeasureSetGroups res ([{rightBridge := rightSets.rightBridge, set := measureSets}], [])
 
       return res
     let (ml, taintedLeft) := left
@@ -453,14 +468,81 @@ where
     let (t, taintedRight) ← combineMeasureSetGroupsExpand (ml, []) (fun _ m =>
       concatOneWithRight m
     )
+    let tainted := if taintedLeft.length > 0 then
+      taintedRight.append [TaintedTrunk.leftTainted taintedLeft right state concatId]
+    else
+      taintedRight
 
-    return (t, taintedRight.append [TaintedTrunk.leftTainted taintedLeft right state concatId])
+    return (t, tainted)
 
 
--- when expanding tainted we take the first solution that does not fail to speed up computation
-partial def expandTainted [Inhabited χ] [Cost χ] : TaintedTrunk χ → MeasureResult χ (TaintedResult χ)
+-- When we are in a tainted state we no longer guarantee that we find the best solution
+-- instead we just try to find any solution as fast as possible
+-- Therefore as soon as we a solution we will return it
+-- This is complicated by bridges, because we need to find a solution for all bridges that the right side expects
+-- Therefore we will return as soon as we find a solution to all of the expected bridges
+
+-- for this to work I must pass the expected bridge through the entire program
+--  - I don' necessarily have an expected bridge which would be bridgeFlex
+partial def expandTainted [Inhabited χ] [Cost χ] (trunk :TaintedTrunk χ): MeasureResult χ (TaintedResult χ) := do
+  -- We are able to give up once we provide a solution to any bridge the right side expects
+  --
+  -- When we are in a tainted state do we want to combine all the results?
+  -- (getCached) will we ever run the algorithm normally once we have begun processing tainted?
+  -- I think we should always run the algorithm normally once we have begun processing tainted
+  --  - The reason is that this allows us to find a good solution even if the first line is too long
+  -- We could reset tainted when indent is below the width limit
+  --  - This introduces the mixed cache problem: we could mark the cache as a tainted result
+  --     - and then we would have to check if the cache is tainted or not
+  --  - is it cleaner to keep tainted cache separate?
+  --     - If we keep tainted cache separate then the core of the algorithm is easier to prove
+  --     - the tainted cache can use the normal cache to find the best solution, if available
+  --       - when tainted it does not have to care about the indentation of the cache, since we accept any solution anyway
+  match trunk.cacheInfo with
+  | some (state, id) =>
+    if id != 0 then
+      let (result, _) ← getCached id state.col state.indent state.leftBridge state.flatten true
+      let mut cachedResults : TaintedResult χ := []
+      let mut remainingBridges := state.expectBridge
+      -- let a := result.fst
+      for right in result.fst do
+        match right.set with
+        | [] => cachedResults := cachedResults
+        | cachedResult :: _ =>
+          cachedResults := mergeTaintedMeasures (right.rightBridge, cachedResult) cachedResults
+
+      if remainingBridges == bridgeNull then
+        cacheLog (fun _ => s!"Tainted::cache::hit::{id}")
+        return cachedResults
+      cacheLog (fun _ => s!"Tainted::cache::miss::{id} missing {remainingBridges.str} originally {state.expectBridge.str}")
+      let foundResults ← expandTainted' remainingBridges trunk
+      let foundBridges := foundResults.foldl (fun acc b => acc ||| b.fst) 0
+
+      if foundResults.length > 0 then
+
+        let measureGroups := taintedMeasureToMeasureGroups foundResults
+        cacheLog (fun _ => s!"Tainted::cache::add::{id} for bridges {foundBridges.str} ({foundResults.length})")
+        addToCache id state.indent state.col state.flatten true state.leftBridge measureGroups
+      else
+        cacheLog (fun _ => s!"Tainted::cache::fail did not expand to anything")
+      return foundResults
+    else
+      expandTainted' state.expectBridge trunk
+  | none =>
+    expandTainted' bridgeFlex trunk
+  where
+  taintedMeasureToMeasureGroups (res:TaintedResult χ) : MeasureGroups χ:= Id.run do
+    let mut measureSet := ([], [])
+
+    for (rightBridge, result) in res do
+      measureSet := combineMeasureSetGroups ([{set:=[result], rightBridge := rightBridge}],[]) measureSet
+
+    return measureSet
+
+  expandTainted' (rightBridge : Bridge): TaintedTrunk χ → MeasureResult χ (TaintedResult χ)
   | .leftTainted (left : List (TaintedTrunk χ)) (right:Doc) (state:TaintedState) (id:Nat) => do
     let mut result : TaintedResult χ := []
+    let mut coveredBridges := bridgeNull
     if id != 0 then
       cacheLog fun _ => (s!"Tainted::Left::cache::{id}")
 
@@ -469,78 +551,89 @@ partial def expandTainted [Inhabited χ] [Cost χ] : TaintedTrunk χ → Measure
       let leftExpanded ← expandTainted l
       cacheLog fun _ => (s!"Tainted::Left::{id} expanded to {leftExpanded.length} options")
       for (leftBridge, leftMeasure) in leftExpanded do
+        if rightBridge.contains coveredBridges then
+          return result -- we have found a possible solution to all bridges the next item requires
         cacheLog fun _ => (s!"Tainted::Left::{id} left measure: {leftMeasure.layout []} last:{leftMeasure.last}")
 
-        let (rights, tainted) ← right.resolve state.trace leftMeasure.last state.indent state.widthLimit leftBridge state.flatten true
+        let (rights, tainted) ← right.resolve state.trace leftMeasure.last state.indent state.widthLimit leftBridge rightBridge state.flatten true
         for t in tainted do
-
+          if rightBridge.contains coveredBridges then
+            return result
           -- cacheLog (s!"Tainted::Left tainted left {t} last:{t.last}")
           for (rightBridge, rightMeasure) in (← expandTainted t) do
+            coveredBridges := coveredBridges ||| rightBridge
             -- cacheLog (s!"Tainted::Left tainted left {leftMeasure.layout []} last:{leftMeasure.last} right {rightMeasure.layout []} last:{rightMeasure.last}")
             result := mergeTaintedMeasures (rightBridge, leftMeasure.concat rightMeasure) result
         cacheLog fun _ => (s!"Tainted::Left::{id} found rights: {rights.length} options")
         for right in rights do
+          coveredBridges := coveredBridges ||| right.rightBridge
           -- take the first valid options
           match right.set with
-          | [] => result :=  result
+          | [] => result := result
           | rightMeasure :: _ =>
             cacheLog fun _ => (s!"Tainted::Left::{id} previous left {rightMeasure.layout []} combined with {(leftMeasure.concat rightMeasure).layout []} ")
-            result := mergeTaintedMeasures (right.bridge, leftMeasure.concat rightMeasure) result
+            result := mergeTaintedMeasures (right.rightBridge, leftMeasure.concat rightMeasure) result
 
     return result
-  | .rightTainted left rights _ (id:Nat) => do
+  | .rightTainted left rights s (id:Nat) => do
     if id != 0 then
-      cacheLog fun _ => (s!"Tainted::Left::cache::{id}")
-    cacheLog fun _ => (s!"Tainted::Right::{id} tainted Right layout :{left.layout []} last:{left.last}")
+      cacheLog fun _ => (s!"Tainted::Right::cache::{id}")
+    cacheLog fun _ => (s!"Tainted::Right::{id} tainted Right layout :{left.layout []} last:{left.last} rightOptions:{rights.length}")
     let mut result : TaintedResult χ := []
+    let mut coveredBridges := bridgeNull
 
     for right in rights do
-      for (rightBridge, rightMeasure) in (← expandTainted right) do
+      if rightBridge.contains coveredBridges then
+        cacheLog (fun _ => s!"Tainted::Right we have found enough bridges wanted:{s.expectBridge} have {coveredBridges}")
+        return result -- we have found a possible solution to all bridges the next item requires
+      let expanded ← expandTainted right
+      cacheLog (fun _ => s!"Tainted::Right expanded to {expanded.length}")
+      for (rightBridge, rightMeasure) in expanded do
         let combined := left.concat rightMeasure
+        cacheLog (fun _ => s!"Tainted::Right a solution? {combined.layout []}")
         result := mergeTaintedMeasures (rightBridge, combined) result
 
     return result
   | .center doc state => do
     let mut result : TaintedResult χ := []
-    let (resolved, tainted) ← doc.resolve state.trace state.col state.indent state.widthLimit state.leftBridge state.flatten true
-    cacheLog fun _ => (s!"Tainted::Center tainted center?? and return... {resolved.length}")
+    let (resolved, tainted) ← doc.resolve state.trace state.col state.indent state.widthLimit state.expectBridge state.expectBridge state.flatten true
+    cacheLog fun _ => (s!"Tainted::Center and return... {resolved.length}")
     for t in tainted do
       result := mergeTaintedResults (← expandTainted t) result
     for ms in resolved do
       for m in ms.set do
-        result := mergeTaintedMeasures (ms.bridge, m) result
+        result := mergeTaintedMeasures (ms.rightBridge, m) result
     return result
 
-  -- .center (doc : PPL) (state : TaintedState)
-where
-mergeTaintedMeasures : (Bridge × Measure χ) → TaintedResult χ → TaintedResult χ
-| (b, m), [] => [(b, m)]
-| (b, m), (b', m')::xs =>
-  if m.fail.isSome then
-    (b', m')::xs
-  else if m'.fail.isSome then
-    (b', m')::xs
-  else
+  mergeTaintedMeasures : (Bridge × Measure χ) → TaintedResult χ → TaintedResult χ
+  | (b, m), [] => [(b, m)]
+  | (b, m), (b', m')::xs =>
+    if m.fail.isSome then
+      (b', m')::xs
+    else if m'.fail.isSome then
+      (b', m')::xs
+    else
+      match compare b b' with
+      | Ordering.lt => (b, m)::(b', m')::xs
+      | Ordering.gt => (b', m')::(mergeTaintedMeasures (b, m) xs)
+      | Ordering.eq =>
+        if LEB.leq m m' then
+          (b, m)::xs
+        else
+          (b', m')::(mergeTaintedMeasures (b, m) xs)
+
+  mergeTaintedResults : TaintedResult χ → TaintedResult χ → TaintedResult χ
+  | xs, [] => xs
+  | [], xs => xs
+  | (b, m)::xs, (b', m')::xs' =>
     match compare b b' with
-    | Ordering.lt => (b, m)::(b', m')::xs
-    | Ordering.gt => (b', m')::(mergeTaintedMeasures (b, m) xs)
+    | Ordering.lt => (b, m)::(mergeTaintedResults xs ((b', m')::xs'))
+    | Ordering.gt => (b', m')::(mergeTaintedResults ((b, m)::xs) xs')
     | Ordering.eq =>
       if LEB.leq m m' then
-        (b, m)::xs
+        (b, m)::(mergeTaintedResults xs xs')
       else
-        (b', m')::(mergeTaintedMeasures (b, m) xs)
-mergeTaintedResults : TaintedResult χ → TaintedResult χ → TaintedResult χ
-| xs, [] => xs
-| [], xs => xs
-| (b, m)::xs, (b', m')::xs' =>
-  match compare b b' with
-  | Ordering.lt => (b, m)::(mergeTaintedResults xs ((b', m')::xs'))
-  | Ordering.gt => (b', m')::(mergeTaintedResults ((b, m)::xs) xs')
-  | Ordering.eq =>
-    if LEB.leq m m' then
-      (b, m)::(mergeTaintedResults xs xs')
-    else
-      (b', m')::(mergeTaintedResults xs xs')
+        (b', m')::(mergeTaintedResults xs xs')
 
 
 
@@ -562,7 +655,7 @@ inductive IntermediateResult (χ : Type) where
 Find an optimal layout for a document and render it.
 -/
 partial def Doc.print (χ : Type) [Inhabited χ] [Cost χ] (doc : Doc) (cacheSize col widthLimit : Nat) (log : Option (List String)): PrintResult χ :=
-  let (preferredGroups, cache) := ((doc.resolve (χ := χ) [] col 0 widthLimit bridgeFlex false false).run (initCache cacheSize log)).run
+  let (preferredGroups, cache) := ((doc.resolve (χ := χ) [] col 0 widthLimit bridgeFlex bridgeFlex false false).run (initCache cacheSize log)).run
   let (goodSolution, solutions, tainted) := removeEndingBridges preferredGroups
   if goodSolution then
     printMeasureSet false solutions cache.log
@@ -591,14 +684,15 @@ partial def Doc.print (χ : Type) [Inhabited χ] [Cost χ] (doc : Doc) (cacheSiz
   --   return {measureSet with log := cache.log ++ [s!"\n\n best?{measureSet.layout} tainted{tainted.length}"]}
 where
   initCache (n:Nat) (log : Option (List String)): CacheStore χ :=
-    {size := n, content := Array.mkArray n [], log := log, giveUp := 1000}
+    -- allocate twice the space needed, so flatten is separated into its own category
+    {size := n, content := Array.mkArray (n*2) [], log := log, giveUp := 1000}
 
   -- after the function is done
   removeEndingBridges (measures : MeasureGroups χ) : (Bool × MeasureSet χ × List (TaintedTrunk χ)) := Id.run do
     let (ms,t) := measures
     let mut res : MeasureGroups χ:= ([], t)
     for m in ms do
-      let removedBridge := {m with bridge := bridgeFlex}
+      let removedBridge := {m with rightBridge := bridgeFlex}
       res := combineMeasureSetGroups res ([removedBridge], [])
     match res with
     | (m::_, t) =>
@@ -612,7 +706,7 @@ where
         return (false, bestSet, t)
         -- return IntermediateResult.idealSolution bestSet
     | ([], t) =>
-      return (false, {bridge := bridgeFlex, set := []}, t)
+      return (false, {rightBridge := bridgeFlex, set := []}, t)
 
 
 
