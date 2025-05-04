@@ -11,10 +11,10 @@ set_option pf.debugLog true
   let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 10) d
   out
 
-/-- info: "def he\n  : too tll\n  more" -/
+/-- info: "def he\n  : too tl\n  more" -/
 #guard_msgs in
 #eval
-  let d := Doc.nest 2 ("def he" <> (" : " <^> Doc.nl <> ": " ) <> "too tll" <> (" " <^> Doc.nl) <> "more")
+  let d := Doc.nest 2 ("def he" <> (" : " <^> Doc.nl <> ": " ) <> "too tl" <> (" " <^> Doc.nl) <> "more")
   let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 10) d
   out
 

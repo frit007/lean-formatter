@@ -2,41 +2,157 @@ import PFMT
 import BaseFormatter
 
 open PrettyFormat
+-- this functions assumes that there are no Syntax objects in the doc
+partial def markCachedObject (doc:FormatM Doc) : (Doc × FormatState) :=
+  let (doc, cache) := doc.run {formattingFunction := fun _ _ _ _ =>
+    (toDoc "_", 0, {})}
+  (doc, cache)
 
--- #eval
---   let d := Doc.concat (Doc.provide bridgeSpace) (Doc.choice (Doc.concat (Doc.provide bridgeSpace)  (Doc.text "b")) (Doc.concat (Doc.provide bridgeSpaceNl) (Doc.text "a")))
---   let out := Doc.prettyPrint DefaultCost (col := 0) (widthLimit := 20) d
---   out
+-- choose space bridge
+/-- info:  b -/
+#guard_msgs in
+#eval do
+  let d := "" <_> ("" <_> "b" <^> "" <$$> "a")
+  let (d, cache) := markCachedObject (do return d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) d
+  IO.println s!"{out}"
 
--- #eval
---   let d := Doc.concat (Doc.provide bridgeSpaceNl) (Doc.choice (Doc.concat (Doc.provide bridgeSpace)  (Doc.text "b")) (Doc.concat (Doc.provide bridgeSpaceNl) (Doc.text "a")))
---   let out := Doc.prettyPrint DefaultCost (col := 0) (widthLimit := 20) d
---   out
+-- choose newline bridge
+/--
+info:
+a
+-/
+#guard_msgs in
+#eval do
+  let d := "" <$$> ("" <_> "b" <^> "" <$$> "a")
+  let (d, cache) := markCachedObject (do return d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) d
+  IO.println s!"{out}"
 
--- #eval
---   let d := Doc.concat (Doc.provide bridgeAny) (Doc.choice (Doc.concat (Doc.provide bridgeSpace)  (Doc.text "bbbbbbbbbbbbbbbbbbbb")) (Doc.concat (Doc.provide bridgeSpaceNl) (Doc.text "a")))
---   let out := Doc.prettyPrint DefaultCost (col := 0) (widthLimit := 20) d
---   out
+-- prefer newline over too long string
+/--
+info:
+a
+-/
+#guard_msgs in
+#eval do
+  let d := "" <**> ("" <_> "bbbbbbbbbbbbbbbbbbbb" <^> "" <$$> "a")
+  let (d, cache) := markCachedObject (do return d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) d
+  IO.println s!"{out}"
 
--- #eval
---   let d := Doc.concat (Doc.provide bridgeImmediate) (Doc.choice (Doc.concat (Doc.require bridgeImmediate)  (Doc.text "bbbbbbbbbbbbbbbbbbbb")) (Doc.concat (Doc.provide bridgeSpaceNl) (Doc.text "a")))
---   let out := Doc.prettyPrint DefaultCost (col := 0) (widthLimit := 20) d
---   out
+-- Choose tainted over an impossible option
+/-- info: bbbbbbbbbbbbbbbbbbbb -/
+#guard_msgs in
+#eval do
+  let d := Doc.provide bridgeImmediate <> (bridgeImmediate <! "bbbbbbbbbbbbbbbbbbbb" <^> "" <$$> "a")
+  let (d, cache) := markCachedObject (do return d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) d
+  IO.println s!"{out}"
 
--- #eval
---   let d := (Doc.provide bridgeImmediate) <> (((Doc.require bridgeImmediate) <> (Doc.text "bbbbbbbbbbbbbbbbbbbbbb")) <^> ((Doc.provide bridgeSpaceNl) <> (Doc.text "a")))
---   let out := Doc.prettyPrint DefaultCost (col := 0) (widthLimit := 20) d
---   out
+-- Choose tainted over an impossible option (reversed order)
+/-- info: bbbbbbbbbbbbbbbbbbbb -/
+#guard_msgs in
+#eval do
+  let d := Doc.provide bridgeImmediate <> ( "" <$$> "a" <^> bridgeImmediate <! "bbbbbbbbbbbbbbbbbbbb")
+  let (d, cache) := markCachedObject (do return d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) d
+  IO.println s!"{out}"
 
--- #eval
---   let d := (Doc.provide bridgeImmediate) <> ((Doc.provide bridgeSpaceNl) <> (Doc.text "a") <^> ((Doc.require bridgeImmediate) <> (Doc.text "bbbbbbbbbbbbbbbbbbaabbb")))
---   let out := Doc.prettyPrintLog DefaultCost (col := 0) (widthLimit := 20) d
---   out
 
--- #eval
---   let d := "aaa" <> Doc.rule "a" (toDoc "bbb") <> "ccc"
---   let out := Doc.prettyPrintLog DefaultCost (col := 0) (widthLimit := 1) d
---   out
+-- do we still find all options if we start in a tainted context?
+/-- info: aaacorrect -/
+#guard_msgs in
+#eval do
+  let d := "aaa" <> Doc.provide bridgeImmediate <> ( "none" <^> bridgeImmediate<!"correct" <^> (Doc.provide bridgeSpace))
+  let (d, cache) := markCachedObject (do return d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
+  IO.println s!"{out}"
+
+-- bridgeAny with tainted
+/--
+info: aaa
+b
+-/
+#guard_msgs in
+#eval do
+  let d := "aaa" <> Doc.provide bridgeAny <> "b"
+  let (d, cache) := markCachedObject (do return d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
+  IO.println s!"{out}"
+
+/-- info: aaa none -/
+#guard_msgs in
+#eval do
+  let d := "aaa" <> Doc.provide bridgeSpace <> ( "none" <^> bridgeImmediate<!"correct")
+  let (d, cache) := markCachedObject (do return d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
+  IO.println s!"{out}"
+
+/-- info: aaa space  after -/
+#guard_msgs in
+#eval do  
+  let d := "aaa" <> ((Doc.provide bridgeHardNl <^> " space " <_> "")) <> flattenDoc ("after")
+  -- IO.println s!"{d.toString}"
+  let (d, cache) := markCachedObject (do return d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
+  IO.println s!"{out}"
+
+/--
+info:  let ⟨ih₁, ih₂⟩ := merge' ht₁ ht₂
+  exact ⟨⟨Nat.le_succ_of_le hr₁, this, ih₁.of_rankGT (ih₂ (iff_of_false hl₁ hl₂))⟩, fun _=>Nat.lt_succ_of_le hr₁⟩
+-/
+#guard_msgs in
+#eval do
+  let d := (Doc.nest 2 ((Doc.provide bridgeSpace) <> (Doc.rule "Lean.Parser.Tactic.tacticSeq"
+                     (Doc.rule "Lean.Parser.Tactic.tacticSeq1Indented"
+                       (((Doc.rule "Lean.Parser.Tactic.tacticLet_"
+                         (((Doc.text "let") <> (Doc.provide bridgeSpace)) <> (Doc.rule "Lean.Parser.Term.letDecl"
+                           (Doc.rule "Lean.Parser.Term.letPatDecl"
+                             (/-152-/ (((Doc.rule "Lean.Parser.Term.anonymousCtor"
+                               ((/-150-/ (Doc.text "⟨") <> ((((Doc.text "ih₁") <> (Doc.text ",")) <> (Doc.text " ")) <> (Doc.text "ih₂"))) <> (Doc.text "⟩"))
+                              ) <> (Doc.provide bridgeSpace)) <> (Doc.text ":=")) <> (Doc.nest 2 ((Doc.provide (bridgeSpaceNl|||bridgeSpace|||bridgeImmediate)) <> (Doc.rule "Lean.Parser.Term.app"
+                               (/-151-/ ((Doc.text "merge'") <> (Doc.provide bridgeSpace)) <> (((Doc.text "ht₁") <> (Doc.provide bridgeSpace)) <> (Doc.text "ht₂")))
+                              ))))
+                            )
+                          ))
+                        ) <> (Doc.provide bridgeHardNl)) <> (Doc.rule "Lean.Parser.Tactic.exact"
+                         (((Doc.text "exact") <> (Doc.provide bridgeSpace)) <> (Doc.rule "Lean.Parser.Term.anonymousCtor"
+                           ((/-161-/ (Doc.text "⟨") <> ((((Doc.rule "Lean.Parser.Term.anonymousCtor"
+                             (/-155-/ ((Doc.text "⟨") <> (((/-153-/ ((((Doc.rule "Lean.Parser.Term.app"
+                               (((Doc.text "Nat.le_succ_of_le") <> (Doc.provide bridgeSpace)) <> (Doc.text "hr₁"))
+                              ) <> (Doc.text ",")) <> (Doc.text " ")) <> (Doc.text "this")) <> (Doc.text ",")) <> (Doc.text " ")) <> (Doc.rule "Lean.Parser.Term.app"
+                               (((Doc.text "ih₁.of_rankGT") <> (Doc.provide bridgeSpace)) <> (Doc.rule "Lean.Parser.Term.paren"
+                                 (((Doc.text "(") <> (Doc.rule "Lean.Parser.Term.app"
+                                   (((Doc.text "ih₂") <> (Doc.provide bridgeSpace)) <> (Doc.rule "Lean.Parser.Term.paren"
+                                     (((Doc.text "(") <> (Doc.rule "Lean.Parser.Term.app"
+                                       (/-154-/ ((Doc.text "iff_of_false") <> (Doc.provide bridgeSpace)) <> (((Doc.text "hl₁") <> (Doc.provide bridgeSpace)) <> (Doc.text "hl₂")))
+                                      )) <> (Doc.text ")"))
+                                    ))
+                                  )) <> (Doc.text ")"))
+                                ))
+                              ))) <> (Doc.text "⟩"))
+                            ) <> (Doc.text ",")) <> (Doc.text " ")) <> (Doc.rule "Lean.Parser.Term.fun"
+                             (/-160-/ (((Doc.text "fun") <> (Doc.provide bridgeAny)) <> (/-157-/ Doc.rule "Lean.Parser.Term.basicFun"
+                               (((Doc.rule ""
+                                 (Doc.text "_")
+                                ) <> (Doc.text "=>")) <> (/-156-/ Doc.rule "Lean.Parser.Term.app"
+                                 (((Doc.text "Nat.lt_succ_of_le") <> (Doc.provide bridgeSpace)) <> (Doc.text "hr₁"))
+                                ))
+                              ))<^>(/-159-/ (((Doc.require bridgeImmediate) <> (Doc.text " ")) <> (Doc.text "fun")) <> ((Doc.provide bridgeImmediate) <> (/-158-/ Doc.rule "Lean.Parser.Term.basicFun"
+                               (((Doc.rule ""
+                                 (Doc.text "_")
+                                ) <> (Doc.text "=>")) <> (/-156-/ Doc.rule "Lean.Parser.Term.app"
+                                 (((Doc.text "Nat.lt_succ_of_le") <> (Doc.provide bridgeSpace)) <> (Doc.text "hr₁"))
+                                ))
+                              )))
+                              )
+                            ))) <> (Doc.text "⟩"))
+                          ))
+                        ))))))
+  let (d, cache) := markCachedObject (do return d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1000) d
+  IO.println s!"{out}"
 
 -- #eval
 --   let d := "#format" <> (bridgeSpace <> "rest")
@@ -51,11 +167,12 @@ partial def nchoice : Nat → FormatM Doc
   let next ← expandSyntax RuleRec.placeHolder (← nchoice n)
   return "a" <> next <^> "b" <> next
 
--- this functions assumes that there are no Syntax objects in the doc
-partial def markCachedObject (doc:FormatM Doc) : (Doc × FormatState) :=
-  let (doc, cache) := doc.run {formattingFunction := fun _ _ _ _ =>
-    (toDoc "_", 0, {})}
-  (doc, cache)
+partial def nchoicenl : Nat → FormatM Doc
+| 0 => return toDoc "!end!"
+| n + 1 => do
+  let next ← expandSyntax RuleRec.placeHolder (← nchoicenl n)
+  return "a" <_> next <^> "b" <$$> next
+
 
 -- #eval (bridgeSpaceNl ||| bridgeHardNl).toString
 
@@ -64,18 +181,20 @@ partial def markCachedObject (doc:FormatM Doc) : (Doc × FormatState) :=
 
 
 -- it takes a second without caching
+
+
 #eval do
-  let (doc, cache) := markCachedObject (nchoice 19)
+  let (doc, cache) := markCachedObject (nchoicenl 599)
 
   IO.println s!"{cache.nextId}"
 
   let (out, timeDoc) ← measureTime (fun _ => do
-    let out ← Doc.prettyPrintLog DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) doc
+    let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) doc
     return out
   )
 
   -- IO.println s!"Time: {timeDoc.toFloat / 1000000000.0}s \n{out} the doc\n{doc.toString}"
-  IO.println s!"Time: {timeDoc.toFloat / 1000000000.0}s \n{out} the "
+  IO.println s!"Time: {timeDoc.toFloat / 1000000000.0}s \n{out} the"
 
 
 -- #eval

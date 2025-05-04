@@ -70,7 +70,7 @@ partial def expandSyntax (r : RuleRec) (ppl : Doc) : FormatM Doc := do
       return Doc.fail s
     | _, _ =>
       -- Note that in case of unknown we over estimate the bridges required
-      let leftBridge := match left.isMetaConstruct with
+      let leftBridge := match left.meta.isMetaConstruct with
       | .True => right.meta.leftBridge
       | .False => left.meta.leftBridge
       | .Unknown => right.meta.leftBridge ||| left.meta.leftBridge
@@ -96,12 +96,14 @@ where
         cacheWeight := 0,
         leftBridge := leftBridge,
         id := ← FormatM.genId,
+        isMetaConstruct := doc.calcMetaConstruct
       }
     else
       return doc.setMeta {
         cacheWeight := childCacheWeight + 1,
         leftBridge := leftBridge,
         id := 0,
+        isMetaConstruct := doc.calcMetaConstruct
       }
 
 
@@ -521,11 +523,7 @@ partial def someComputation (sum:Nat) (n : Nat) : IO Nat :=
   else
     someComputation (sum * 3) (n-1)
 
-partial def measureTime (f : Unit → IO α) : IO (α × Nat):= do
-  let before ← IO.monoNanosNow
-  let res ← f ()
-  let after ← IO.monoNanosNow
-  return (res, after - before)
+
 -- Also fallback to standard syntax if formatting fails
 partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters : List (Name → Option Rule)) (opts : Options) (fileName:String): IO FormatResult := do
   let ((ppl, state), timePF) ← measureTime (fun _ => do
@@ -535,7 +533,8 @@ partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters :
     if getDebugLog opts then
       ppl.prettyPrintLog DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
     else
-      return ppl.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
+      -- return ppl.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
+      ppl.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
   )
 
   let (generatedSyntax, timeReparse) ← measureTime ( fun _ => do
@@ -819,7 +818,7 @@ unsafe def parseModule (input : String) (fileName : String) (opts : Options := {
   let inputCtx := Parser.mkInputContext input fileName
   let (header, parserState, messages) ← Parser.parseHeader inputCtx
 
-  let _ ← Lean.enableInitializersExecution
+  Lean.enableInitializersExecution
 
   -- IO.println s!"{prettyPrintSyntax header}"
   -- printall error messages and exit

@@ -13,13 +13,25 @@ lake exe Format -file ../batteries/Batteries/Data/List/Perm.lean -include ../bat
 lake exe Format -folder ../batteries/Batteries -include ../batteries/.lake/build/lib
 
 
+lake exe Format -folder ../batteries/Batteries -include ../batteries/.lake/build/lib  -include .lake/build/lib -filesPrWorker 1 -workers 16
+
+#### hard
+".lake/build/bin/Format.exe" "-file" "../batteries/Batteries/CodeAction/Misc.lean" "-include" "../batteries/.lake/build/lib" "-include" ".lake/build/lib"
+
+".lake/build/bin/Format.exe" "-file" "../batteries/Batteries/Tactic/Case.lean" "-include" "../batteries/.lake/build/lib" "-include" ".lake/build/lib"
+
+".lake/build/bin/Format.exe" "-file" "../batteries/Batteries/Data/RBMap/Lemmas.lean" "-include" "../batteries/.lake/build/lib" "-include" ".lake/build/lib"
+
+".lake/build/bin/Format.exe" "-file" "../batteries/Batteries/Data/String/Lemmas.lean" "-include" "../batteries/.lake/build/lib" "-include" ".lake/build/lib"
+
+
 lake exe Format -file ../batteries/Batteries/Data/Array/Match.lean -include ../batteries/.lake/build/lib
 
 lake exe Format -file ../batteries/Batteries/Logic.lean -include ../batteries/.lake/build/lib
 
 lake exe Format -file ../batteries/Batteries/Control/ForInStep/Basic.lean -include ../batteries/.lake/build/lib
 
-
+lake exe Format -file ../batteries/Batteries/Tactic/Case.lean -include ../batteries/.lake/build/lib
 
 lake exe Format -file ../batteries/Batteries/Data/NameSet.lean -include ../batteries/.lake/build/lib
 ## Files

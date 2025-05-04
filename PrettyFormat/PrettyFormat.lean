@@ -104,6 +104,36 @@ where
       timeReparse := a.timeReparse + b.timeReparse
     }
 
+  def FormatReport.serialize (r : FormatReport) : String :=
+    s!"{r.totalCommands},{r.formattedCommands},{r.timePF},{r.timeDoc},{r.timeReadAndParse},{r.timeReparse},{r.missingFormatters.keys |>.map (fun x => x.toString) |>.intersperse ";:;:;" |> String.join}"
+
+  def splitOn (s : String) (sep : String) : List String :=
+    let rec go (acc : List String) (remaining : String) : List String :=
+      match remaining.splitOn sep with
+      | []        => acc.reverse
+      | x :: xs   => acc.reverse ++ (x :: xs)  -- because splitOn already returns all parts
+    go [] s
+
+  def FormatReport.deserialize (s : String) : FormatReport :=
+    match s.split (fun c => c == ',') with
+    | totalCommands :: formattedCommands :: timePF :: timeDoc :: timeReadAndParse :: timeReparse :: rest =>
+      let keys := rest.intersperse "," |> String.join |> splitOn ";:;:;"
+      let missingFormatters : Std.HashMap Name Nat := keys.foldl (fun acc x => acc.insert x.toName 1) {}
+      match (totalCommands.toNat?, formattedCommands.toNat?, timePF.toNat?, timeDoc.toNat?, timeReadAndParse.toNat?, timeReparse.toNat?) with
+      | (some totalCommands, some formattedCommands, some timePF, some timeDoc, some timeReadAndParse, some timeReparse) =>
+        {
+          totalCommands := totalCommands
+          formattedCommands := formattedCommands
+          timePF := timePF
+          timeDoc := timeDoc
+          timeReadAndParse := timeReadAndParse
+          timeReparse := timeReparse
+          missingFormatters := missingFormatters
+        }
+      | _ => {}
+    | _ => {}
+
+
   structure FormatState where
     options: Options := {}
     nextId : Nat := 0 -- used to generate ids
@@ -228,6 +258,12 @@ register_option pf.debugLog : Bool := {
     defValue := false
     group    := "pf"
     descr    := "(pretty format) Debug logging"
+}
+
+register_option pf.debugBadNeighbors : Bool := {
+    defValue := false
+    group    := "pf"
+    descr    := "(pretty format) Debug bad neighbors"
 }
 
 def getPFLineLength (o : Options) : Nat := o.get pf.lineLength.name pf.lineLength.defValue

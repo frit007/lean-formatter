@@ -117,12 +117,19 @@ instance : Cost DefaultCost where
   nl := DefaultCost.nl
 
 -- cache every n elements
-def cacheLimit := 2
+def cacheLimit := 3
+
+inductive Trilean
+| True
+| False
+| Unknown
+deriving Repr, DecidableEq, Inhabited
 
 structure DocMeta where
   leftBridge : Bridge := bridgeFlex
   id : Nat := 0
   cacheWeight : Nat := 0
+  isMetaConstruct : Trilean := Trilean.Unknown
 deriving Inhabited, Repr
 
 def DocMeta.hasBeenExpanded (meta : DocMeta) : Bool :=
@@ -245,13 +252,8 @@ def Doc.setMeta (doc : Doc) (meta : DocMeta) : Doc :=
   | .cost c _ => .cost c meta
 
 
-inductive Trilean
-| True
-| False
-| Unknown
-deriving Repr, DecidableEq
 
-def Trilean.and : Trilean → Trilean→  Trilean
+def Trilean.and : Trilean → Trilean →  Trilean
 | .True, .True => .True
 | .False, .False => .False
 | _, _ => .Unknown
@@ -260,22 +262,28 @@ def Trilean.and : Trilean → Trilean→  Trilean
 We are trying to solve the problem where the left side does not affect the bridge for example
 (""<>Doc.provide bridgeNl)
 since the left side is empty the bridge is still bridgeNl
+
+Unknown describes a scenario
 -/
-def Doc.isMetaConstruct : Doc → Trilean
+def Doc.calcMetaConstruct : Doc → Trilean
   | .cost _ _ => Trilean.True
   | .bubbleComment _ _ => Trilean.True
   | .newline _ _ => Trilean.False
   | .text s _ => if s == "" then Trilean.True else Trilean.False
-  | .flatten inner _ => isMetaConstruct inner
-  | .align inner _ => isMetaConstruct inner
-  | .nest _ inner _ => isMetaConstruct inner
-  | .concat left right _ => isMetaConstruct left |>.and (isMetaConstruct right)
-  | .choice left right _ => isMetaConstruct left |>.and (isMetaConstruct right)
-  | .rule _ inner _ => isMetaConstruct inner
+  | .flatten inner _ => inner.meta.isMetaConstruct
+  | .align inner _ => inner.meta.isMetaConstruct
+  | .nest _ inner _ => inner.meta.isMetaConstruct
+  | .concat left right _ =>
+    match left.meta.isMetaConstruct with
+    | .True => Trilean.True
+    | .False => right.meta.isMetaConstruct
+    | .Unknown => Trilean.Unknown
+  | .choice left right _ => left.meta.isMetaConstruct.and right.meta.isMetaConstruct
+  | .rule _ inner _ => inner.meta.isMetaConstruct
   | .stx _ _ => Trilean.Unknown
   | .provide _ _ => Trilean.False
   | .require _ _ => Trilean.False
-  | .reset inner _ => isMetaConstruct inner
+  | .reset inner _ => inner.meta.isMetaConstruct
   | .fail _ _ => Trilean.False
 
 
@@ -406,10 +414,11 @@ structure Cache (χ : Type) where
 structure CacheStore (χ : Type) where
   log : Option (List (String))
   giveUp : Nat -- give up if we reach zero
+  lastMeasurement : Nat -- the last time we took a measurement
   size:Nat
   content : Array (List (Cache χ))
 
-abbrev MeasureResult χ := StateT (CacheStore χ) Id
+abbrev MeasureResult χ := StateT (CacheStore χ) IO
 
 
 
@@ -499,8 +508,10 @@ infixl:45 " <! " => fun l r => (Doc.require l) <> (toDoc r)
 
 infixl:34 " <^> " => fun l r => toDoc (Doc.choice (toDoc l) (toDoc r))
 
-def group [ToDoc α] (doc : α) : Doc :=
-  toDoc (doc <^> (Doc.flatten (toDoc doc)))
+
+
+def Doc.group (doc : Doc) : Doc :=
+  toDoc (doc <^> (Doc.flatten doc))
 
 def spacing (s : Bridge) : Doc := (Doc.provide s)
 def expect (s : Bridge) : Doc := (Doc.require s)
@@ -508,14 +519,10 @@ def expect (s : Bridge) : Doc := (Doc.require s)
 def align [ToDoc α] (s: α): Doc:=
   (Doc.align (toDoc s))
 
-
-def PPL.flatten (s: Doc): Doc:=
-  (Doc.flatten (toDoc s))
-
 def Doc.nl : Doc := (Doc.newline (some " "))
 def Doc.hardNl : Doc := (Doc.newline none)
 
-def flattenPPL [ToDoc α] (s: α): Doc:=
+def flattenDoc [ToDoc α] (s: α): Doc:=
   (Doc.flatten (toDoc s))
 -- tainted result is sorted by the bridge
 abbrev TaintedResult (χ : Type) := List (Bridge × Measure χ)
@@ -531,7 +538,7 @@ def Doc.alignedConcat [ToDoc α] [ToDoc β] (lhs : α) (rhs : β) : Doc := (toDo
 def Doc.flattenedAlignedConcat [ToDoc α] [ToDoc β] (lhs : α) (rhs : β) : Doc := Doc.alignedConcat (Doc.flatten (toDoc lhs)) rhs
 
 
-partial def Bridge.str (b : Bridge) : String := Id.run do
+def Bridge.str (b : Bridge) : String := Id.run do
   let mut str := []
   let mut bridge : Bridge := b
   if bridgeNull == bridge then
@@ -568,7 +575,7 @@ partial def Bridge.str (b : Bridge) : String := Id.run do
   else
     return s!"({String.join (str.intersperse "|||")})"
 
-partial def Doc.toString (ppl:Doc) : String :=
+def Doc.toString (ppl:Doc) : String :=
   output' 0 ppl
 where
   output' (indent : Nat) (d:Doc): String :=
@@ -586,7 +593,7 @@ where
   | .rule name s _ => s!"Doc.rule \"{name}\" {newline indent} ({output' (indent + 2) s}) {newline indent}"
   | .reset s _ => s!"Doc.reset ({output' indent s})"
   | .provide b _ => s!"Doc.provide {b.str}"
-  | .require b _ => s!"Doc.expect {b.str}"
+  | .require b _ => s!"Doc.require {b.str}"
   | .cost n _ => s!"Doc.cost {n}"
   if d.meta.id != 0 then
     s!"/-{d.meta.id}-/ {inner}"
@@ -597,6 +604,34 @@ where
   | none => "none"
   | some s => s!"(some \"{s}\")"
 
+def Doc.kind : Doc → String
+  | .fail _ _ => "fail"
+  | .text s _ => s!"text {s}"
+  | .newline s _ => s!"Doc.newline {s}"
+  | .choice _ _ _ => s!"choice"
+  | .flatten _ _ => s!"flatten"
+  | .align _ _ => s!"align"
+  | .nest _ _ _ => s!"nest"
+  | .concat _ _ _ => s!"concat"
+  | .stx _ _ => "stx\n"
+  | .bubbleComment s _ => s!"bubbleComment \"{s}\""
+  | .rule _ _ _ => s!"rule"
+  | .reset _ _ => s!"reset"
+  | .provide _ _ => s!"provide"
+  | .require _ _ => s!"expect"
+  | .cost _ _ => s!"cost"
 
+def measureTime (f : Unit → IO α) : IO (α × Nat):= do
+  let before ← IO.monoNanosNow
+  let res ← f ()
+  let after ← IO.monoNanosNow
+  return (res, after - before)
+
+def measureDiff (str:String): MeasureResult χ Unit := do
+  return () -- TODO: remove
+  -- let now ← IO.monoNanosNow
+  -- let s ← get
+  -- set {s with lastMeasurement := now}
+  -- IO.println s!"{str}::PERF {(now - s.lastMeasurement).toFloat / 1000000000.0} ({now})"
 
 end PrettyFormat

@@ -71,7 +71,7 @@ set_option pf.lineLength 70 -- Test that the code will be folded if the line len
 info:
 instance : Inter NameSet where
   inter := fun s t =>
-      s.fold (fun r n => if t.contains n then r.insert n else r) {}
+    s.fold (fun r n => if t.contains n then r.insert n else r) {}
 -/
 #guard_msgs in
 #format
@@ -87,32 +87,35 @@ open Lean Elab Parser.Command
 open Lean Elab Parser.Command
 
 
-set_option pf.debugPPL true
+
 #fmt Lean.Parser.Command.inductive fun
-| #[inductiveAtom, decl, optDeclSig, whereContainer, terms, unknown1, derive] => do
-  assumeMissing unknown1
-  return (combine (.<_>.) #[toDoc inductiveAtom, toDoc decl, toDoc optDeclSig, combine (.<_>.) whereContainer.getArgs])
-    <> (Doc.nest 2 ("" <$$> combine (.<$$>.) terms.getArgs <> ("" <$$> "" <? derive)))
+| #[inductiveAtom,decl,optDeclSig,whereContainer,terms,unknown1,derive ] =>
+  do
+    assumeMissing unknown1
+    return (combine (.<_>.)
+      #[toDoc inductiveAtom,toDoc decl,toDoc optDeclSig,combine (.<_>.)
+      whereContainer.getArgs])<>(Doc.nest 2 (""<$$>combine (.<$$>.)
+      terms.getArgs<>(""<$$>""<?derive)))
 | _ => failure
 
 /--
 info:
 inductive AliasInfo where
-  /--  Plain alias -/
+  /-- Plain alias -/
   | plain (n : Name)
-  /--  Forward direction of an iff alias -/
+  /-- Forward direction of an iff alias -/
   | forward (n : Name)
-  /--  Reverse direction of an iff alias -/
+  /-- Reverse direction of an iff alias -/
   | reverse (n : Name)
   deriving Inhabited
 -/
 #guard_msgs in
 #formatinductive AliasInfo where
-  /--  Plain alias -/
+  /-- Plain alias -/
   | plain (n : Name)
-  /--  Forward direction of an iff alias -/
+  /-- Forward direction of an iff alias -/
   | forward (n : Name)
-  /--  Reverse direction of an iff alias -/
+  /-- Reverse direction of an iff alias -/
   | reverse (n : Name)
   deriving Inhabited
 
@@ -155,96 +158,6 @@ where
 def a : Nat := 2 * 3
 
 open PrettyFormat
-
-def formatPPL (p : PrettyFormat.Doc) : (PrettyFormat.Doc × String) :=
-  let d := PrettyFormat.toDoc p
-  (p, d, d|>.prettyPrint DefaultCost 0 (col := 0) (widthLimit := PrettyFormat.getPFLineLength {}))
-
-
-def badTest :PPL :=
-  let last := ((PPL.provide [immediateValue]) <> (PPL.rule "«term_*_»"
-       ((((((PPL.rule "num"
-         (text "2")
-        ) <> (PPL.provide [space, spaceNl, spaceHardNl])) <> (text "*")) <> (" ")) <> (PPL.rule "num"
-         (text "3")
-        ))<^>(((PPL.rule "num"
-         (text "2")
-        ) <> (" ")) <> ((text "*") <> ((PPL.provide [immediateValue]) <> (PPL.rule "num"
-         (text "3")
-        ))))
-        )
-      ))
-  (PPL.rule "Lean.Parser.Command.declaration"
-  (PPL.rule "Lean.Parser.Command.definition"
-    ((((text "def") <> (PPL.nest 2 ((" ") <> (((PPL.rule "Lean.Parser.Command.declId"
-      ((text "a") <> (PPL.provide [space, spaceNl, spaceHardNl]))
-      ) <> (PPL.provide [space, spaceNl, spaceHardNl])) <> (PPL.rule "Lean.Parser.Command.optDeclSig"
-      (PPL.rule "Lean.Parser.Term.typeSpec"
-        (((text ":") <> (" ")) <> (text "Nat"))
-        )
-      ))))) <> (PPL.provide [space, spaceNl, spaceHardNl])) <> (PPL.rule "Lean.Parser.Command.declValSimple"
-      (PPL.nest 2 ((text ":=") <> ((((" ") <> (PPL.flatten (PPL.rule "«term_*_»"
-        ((((((PPL.rule "num"
-          (text "2")
-          ) <> (PPL.provide [space, spaceNl, spaceHardNl])) <> (text "*")) <> (" ")) <> (PPL.rule "num"
-          (text "3")
-          ))<^>(((PPL.rule "num"
-          (text "2")
-          ) <> (" ")) <> ((text "*") <> ((PPL.provide [immediateValue]) <> (PPL.rule "num"
-          (text "3")
-          ))))
-          )
-        )))<^>((PPL.provide [spaceHardNl]) <> (PPL.rule "«term_*_»"
-        ((((((PPL.rule "num" (text "2")
-          ) <> (PPL.provide [space, spaceNl, spaceHardNl])) <> (text "*")) <> (" ")) <> (PPL.rule "num"
-          (text "3")
-          ))<^>(((PPL.rule "num"
-          (text "2")
-          ) <> (" ")) <> ((text "*") <> ((PPL.provide [immediateValue]) <> (PPL.rule "num"
-          (text "3")
-          ))))
-          )
-        ))
-        )
-        <^> last
-        )))
-      ))
-    ))
-
-def badTest2 :PPL :=
-  let last := ((PPL.provide [immediateValue]) <> (PPL.rule "«term_*_»"
-       ((((((PPL.rule "num"
-         (text "2")
-        ) <> (PPL.provide [space, spaceNl, spaceHardNl])) <> (text "*")) <> (" ")) <> (PPL.rule "num"
-         (text "3")
-        ))<^>(((PPL.rule "num"
-         (text "2")
-        ) <> (" ")) <> ((text "*") <> ((PPL.provide [immediateValue]) <> (PPL.rule "num"
-         (text "3")
-        ))))
-        )
-      ))
-  -- ("start" <> (" " <^> PPL.nl) <>
-  --     (PPL.nest 2 ((text ":=") <> ((((" ") <> (PPL.flatten (((((
-  --         (text "2")
-  --         <> (" " <^> PPL.nl)) <> (text "*")) <> (" ")) <> text "3")
-  --         )
-  --       )) <^> ((PPL.nl) <>
-  --       ((((( (text "2")
-  --          <> (PPL.nl <^> " ")) <> (text "*")) <> (" ")) <> (text "3")
-  --         )
-  --         )
-  --       ))
-
-  --       )))
-  --     )
-    let first := " " <> PPL.flatten ((" ") <>" 3")
-    let second := PPL.nl <> ((" " <^> PPL.nl) <>" 3")
-
-    ("s" <> ((PPL.nl) <^> " ") <>
-      (PPL.nest 2 ((text ":=") <> ( first <^> second
-
-        ))))
 
 
 
