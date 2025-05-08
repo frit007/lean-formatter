@@ -53,7 +53,7 @@ partial def expandSyntax (r : RuleRec) (ppl : Doc) : FormatM Doc := do
       cachePPL (.choice left right) (max left.meta.cacheWeight right.meta.cacheWeight) (left.meta.leftBridge ||| right.meta.leftBridge)
   | .flatten inner _ =>
     let inner ← expandSyntax r inner
-    cachePPL (.flatten inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
+    cachePPL (.flatten inner) (inner.meta.cacheWeight) (inner.meta.leftBridge.flatten)
   | .align inner _ =>
     let inner ← expandSyntax r inner
     cachePPL (.align inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
@@ -90,7 +90,7 @@ partial def expandSyntax (r : RuleRec) (ppl : Doc) : FormatM Doc := do
 where
 
   cachePPL (doc:Doc) (childCacheWeight:Nat) (leftBridge:Bridge := bridgeFlex): FormatM Doc := do
-    if childCacheWeight >= cacheLimit then
+    if childCacheWeight >= (← get).cacheDistance then
       -- return doc leftBridge (← FormatM.genId) 0 true
       return doc.setMeta {
         cacheWeight := 0,

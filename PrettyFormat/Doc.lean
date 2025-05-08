@@ -14,15 +14,20 @@ def bridgeHardNl :Bridge := 4 -- flattens to fail
 -- If you allow a newline, you should also be compatible with HardNl
 def bridgeNl :Bridge := bridgeSpaceNl ||| bridgeHardNl
 def bridgeSpace :Bridge := 8
-def bridgeImmediate :Bridge := 16
-def bridgeNone :Bridge := 32
+def bridgeNone :Bridge := 16
+def bridgeImmediate :Bridge := 32
 def bridgeAny := bridgeSpace ||| bridgeNl ||| bridgeHardNl
 
 def Bridge.subsetOf (l r: Bridge) : Bool :=
   (l &&& r) == r
 
 def Bridge.contains (l r: Bridge) : Bool :=
-  (l &&& r) == l
+  if l == r then
+    true
+  else if l == bridgeNull then
+    false
+  else
+    (l &&& r) == l
 
 def Bridge.overlapsWith (l r: Bridge) : Bool :=
   l &&& r != 0
@@ -48,14 +53,67 @@ def Bridge.isEmpty (b : Bridge) : Bool :=
 def Bridge.smallerThan (lhs rhs: Bridge) : Bool :=
   lhs < rhs
 
+-- The idea is that bridge flex will
 def Bridge.canHandle (lhs rhs: Bridge) : Bool :=
-  if lhs == bridgeFlex then
-    (bridgeFlex ||| bridgeAny ||| bridgeNone).subsetOf rhs
+  -- if we give the right side bridge flex it
+  let provided := if lhs.contains bridgeFlex then
+    lhs.add bridgeAny
+  else lhs
+
+  let canHandleFlex := !rhs.contains bridgeFlex || (provided.overlapsWith bridgeAny)
+
+  let required := rhs.erase bridgeFlex
+
+  provided.subsetOf required && canHandleFlex
+
+def Bridge.replaceIfExists (bridge old new : Bridge) :Bridge :=
+  if bridge.contains old then
+    (bridge.erase old) ||| new
   else
-    lhs.subsetOf lhs
+    bridge
 
+def Bridge.flatten (bridge : Bridge) : Bridge :=
+  bridge.replaceIfExists bridgeFlex (bridgeSpace ||| bridgeNone ||| bridgeSpaceNl)
+    |>.erase bridgeHardNl
+
+/-- info: true -/
+#guard_msgs in
+#eval bridgeFlex.canHandle (bridgeHardNl)
+/-- info: true -/
+#guard_msgs in
+#eval bridgeSpace.canHandle (bridgeSpace)
+/-- info: true -/
+#guard_msgs in
+#eval bridgeSpace.canHandle (bridgeFlex)
+/-- info: true -/
+#guard_msgs in
+#eval bridgeFlex.canHandle (bridgeFlex)
+/-- info: false -/
+#guard_msgs in
+#eval bridgeImmediate.canHandle (bridgeFlex)
+/-- info: true -/
+#guard_msgs in
+#eval (bridgeImmediate|||bridgeSpace).canHandle (bridgeFlex)
+/-- info: false -/
+#guard_msgs in
 #eval bridgeFlex.canHandle (bridgeImmediate)
+/-- info: false -/
+#guard_msgs in
+#eval bridgeFlex.canHandle (bridgeImmediate|||bridgeSpace)
+/-- info: false -/
+#guard_msgs in
+#eval bridgeSpace.canHandle (bridgeAny)
+/-- info: false -/
+#guard_msgs in
+#eval bridgeNull.canHandle (bridgeAny)
+/-- info: false -/
+#guard_msgs in
+#eval bridgeNull.canHandle (bridgeSpace)
+/-- info: false -/
+#guard_msgs in
+#eval bridgeNull.canHandle (bridgeNl)
 
+#eval bridgeNull.subsetOf bridgeSpace
 /--
 like LE but for `Bool`, due to my lack of knowledge regarding proofs
 -/
@@ -116,8 +174,6 @@ instance : Cost DefaultCost where
   text := DefaultCost.text
   nl := DefaultCost.nl
 
--- cache every n elements
-def cacheLimit := 3
 
 inductive Trilean
 | True
@@ -358,7 +414,7 @@ structure TaintedState where
 
 structure MeasureSet (χ : Type) where
   /--
-
+  A measureSet is grouped by the right bridge, because measures with non overlapping or partially overlapping bridges are not
   -/
   rightBridge : Bridge
   /--
@@ -542,7 +598,7 @@ def Bridge.str (b : Bridge) : String := Id.run do
   let mut str := []
   let mut bridge : Bridge := b
   if bridgeNull == bridge then
-    return "bridgeEmpty"
+    return "bridgeNull"
   if bridge.subsetOf bridgeAny then
     str := str ++ ["bridgeAny"]
     bridge := bridge.erase bridgeAny

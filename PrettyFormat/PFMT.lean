@@ -484,11 +484,7 @@ where
         -- TODO: test if dedup is worth it here
         let measureSets : List (Measure χ) := match rightSets.set |>.filter (fun m => m.fail.isNone) with
         | (r :: rights) =>
-          -- let llll := String.join (l.layout [])
-          -- let rrrr := String.join (r.layout [])
-          -- let combined := l.concat r
-          -- let cccc := String.join ((combined.layout [])|>.reverse)
-          -- panic! s!"TODO: remove this panic {llll} {rrrr} {cccc}"
+
           (dedup rights [] (l.concat r))
         | [] =>
           [{impossibleMeasure trace with fail := some (rightSets.set.foldl (
@@ -514,11 +510,25 @@ where
     )
 
     let __b ← IO.monoNanosNow
-    let tainted := if taintedLeft.length > 0 then
+
+    -- if we provide a solution to all required bridges then we can discard left tainted, because we already have a possible solution to all scenarios
+
+    -- all the edge cases
+    --  - flatten
+    --    - right side goes through flatten
+    --       -
+    let providedBridges := left.fst.foldl (fun acc ms => ms.rightBridge ||| acc) bridgeNull
+
+    let expected := if state.flatten then state.expectBridge.flatten else state.expectBridge
+
+    if (taintedLeft.length > 0 && !(providedBridges.canHandle expected)) != (taintedLeft.length > 0) then
+      cacheLog fun _ => s!"CONCAT::LEFT::TAINTED::SKIP::DIFF provided:{providedBridges.str} expected:{expected.str} unflattened {state.expectBridge.str}"
+    -- let providedBridges := if state.flatten then providedBridges.flatten else providedBridges
+    let tainted := if taintedLeft.length > 0 && !(providedBridges.canHandle expected) then
+    -- let tainted := if taintedLeft.length > 0 then
       taintedRight.append [TaintedTrunk.leftTainted taintedLeft right state concatId]
     else
       taintedRight
-
 
     return (t, tainted)
 
@@ -828,9 +838,9 @@ partial def Doc.prettyPrint (χ : Type) [Inhabited χ] [Cost χ] (doc : Doc) (ca
 partial def Doc.prettyPrintLog (χ : Type) [Inhabited χ] [Cost χ] (doc : Doc) (cacheSize col widthLimit : Nat) : IO String := do
   let l ← Doc.print χ doc cacheSize col widthLimit (some [])
   match l.log with
-  | none => return ""
+  | none => return l.layout
   | some log =>
-    IO.println (s!"Log: {String.join (log.intersperse "\n\n")}")
-  return l.layout
+    return (s!"Log: {String.join (log.intersperse "\n\n")} {l.layout}")
+  -- return l.layout
 
 end PrettyFormat

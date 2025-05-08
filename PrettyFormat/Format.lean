@@ -59,6 +59,7 @@ structure InputArguments where
   output : PPLOutput := PPLOutput.copy ".formatted" -- TODO: This must change to replace, when the formatter is reliable
   includeFolders : List String := []
   opts : Options := {}
+  serializedOutput : Bool := false
 
 def parseArguments (args:List String) : Except String InputArguments := do
   match args with
@@ -78,6 +79,9 @@ def parseArguments (args:List String) : Except String InputArguments := do
   | "-debugSyntaxAfter"::xs =>
     let res ← parseArguments xs
     return { res with  opts := (res.opts).setBool `pf.debugSyntaxAfter true }
+  | "-serializedOutput"::xs =>
+    let res ← parseArguments xs
+    return { res with serializedOutput := true }
   | "-debugErrors"::xs =>
     let res ← parseArguments xs
     return { res with  opts := (res.opts).setBool `pf.debugErrors true }
@@ -93,8 +97,19 @@ def parseArguments (args:List String) : Except String InputArguments := do
   | "-lineLength"::length::xs =>
     let res ← parseArguments xs
     match length.toNat? with
-    | some l => return { res with  opts := (res.opts).setInt `pf.lineLength l }
+    | some l =>
+      if l == 0 then
+        throw "lineLength must be positive"
+      return { res with  opts := (res.opts).setInt `pf.lineLength l }
     | none => throw "lineLength must be a number"
+  | "-cacheDistance"::distance ::xs =>
+    let res ← parseArguments xs
+    match distance.toNat? with
+    | some d =>
+      if d == 0 then
+        throw "cacheDistance must be positive"
+      return { res with  opts := (res.opts).setInt `pf.cacheDistance d }
+    | none => throw "cacheDistance must be a number"
   | "-include"::dir::xs =>
     let res ← parseArguments xs
     return { res with includeFolders := dir::res.includeFolders }
@@ -122,6 +137,19 @@ def parseArguments (args:List String) : Except String InputArguments := do
     return { (←  parseArguments xs) with filesPrWorker := filesPrWorker }
   | x::_ => throw s!"unknown argument: {x}"
 
+-- we want to pass on the arguments to the next process
+def cleanArguments (args : List String) : List String:= Id.run do
+  let removedParams := [("-workers",1), ("-filesPrWorker",1), ("-folder", 1)]
+  let mut newParams := []
+  let mut skipping := 0
+  for a in args do
+    if skipping > 0 then
+      skipping := skipping - 1
+    else
+      match removedParams.find? (fun (r,_) => r == a) with
+      | some (_, s) => skipping := s
+      | _ => newParams := a::newParams
+  return newParams.reverse
 
 
 -- unsafe def mainOutputPPL (args : List String) : MetaM (Array Syntax) := do
@@ -223,6 +251,7 @@ structure RunnerState where
   maxWorkers : Nat := 4
   filesPrWorker : Nat := 3
   includeFolders : List String := []
+  configArguments : List String
 
 
 partial def RunnerState.waitUntilAtLeastOneProcessIsDone (state : RunnerState) : IO RunnerState := do
@@ -245,7 +274,7 @@ partial def RunnerState.waitUntilAtLeastOneProcessIsDone (state : RunnerState) :
       -- p.process.kill
     else
       match ← child.tryWait with
-      | some _ =>
+      | some code =>
         -- IO.println "yay success"
         -- let output ← IO.asTask (IO.FS.Handle.readToEnd (child.stdout)) Task.Priority.dedicated
         -- let output ← IO.FS.Handle.readToEnd (child.stdout)
@@ -257,17 +286,18 @@ partial def RunnerState.waitUntilAtLeastOneProcessIsDone (state : RunnerState) :
           |>.filter (fun s => s.startsWith serializedString)
           |>.map (fun s => s.drop serializedString.length)
           |>.foldl (fun acc s => (FormatReport.deserialize s).combineReports acc) state.results
-        IO.println s!"sss:{output.split (fun c => c == '\n')
-          |>.filter (fun s => s.startsWith serializedString)}"
+        -- IO.println s!"sss:{output.split (fun c => c == '\n')
+          -- |>.filter (fun s => s.startsWith serializedString)}"
 
         let stderr ← IO.ofExcept p.errorStream.get
         -- let stderr ← child.stderr.readToEnd
-        IO.println s!"err: {stderr}"
-        IO.println s!"output: {output}"
+        if stderr != "" then
+          IO.println s!"err ({p.arguments})\n: {stderr}"
+        -- IO.println s!"output: {output}"
         -- let report := FormatReport.deserialize output
         state := { state with
           results := updatedResults
-          errs := stderr :: state.errs
+          errs := (if code != 0 then p.arguments :: state.errs else state.errs)
         }
         foundOne := true
       | none => stillRunning := p :: stillRunning
@@ -288,9 +318,11 @@ partial def RunnerState.startUpToNProcesses (state : RunnerState) : IO RunnerSta
 
     let args := state.remainingFiles.take state.filesPrWorker |>.flatMap (fun s => ["-file", s.replace "\\" "/"])
     let args := args.append (state.includeFolders.flatMap (fun s => ["-include", s]) )
+    let args := args.append state.configArguments
+    let args := "-serializedOutput"::args
 
     let arguments := s!".lake/build/bin/Format.exe {String.join (args|>.intersperse " ")}"
-    IO.println s!"command: {arguments}"
+    -- IO.println s!"command: {arguments}"
     -- let child :ChildI ← IO.Process.spawn {cmd := "lake", args := ("exe" :: "Format" :: args).toArray, stdout := .piped, stderr := .piped, stdin := .null}
     -- let child :ChildI ← IO.Process.spawn {cmd := "lake", args := ("exe" :: "Format" :: args).toArray, stdout := .piped, stderr := .piped, stdin := .null}
     -- let child :ChildI ← IO.Process.spawn {cmd := "cat", args := (args).toArray, stdout := .piped, stderr := .piped, stdin := .null}
@@ -301,12 +333,11 @@ partial def RunnerState.startUpToNProcesses (state : RunnerState) : IO RunnerSta
     -- Start reading the output from child processes, to avoid child processes being blocked by writing to a buffer that is not being cleared
     let readOutput ← IO.asTask (IO.FS.Handle.readToEnd (child.stdout)) Task.Priority.dedicated
     let readError ← IO.asTask (IO.FS.Handle.readToEnd (child.stderr)) Task.Priority.dedicated
-    IO.println "after"
 
     let state := {
       state with
       remainingFiles := state.remainingFiles.drop state.filesPrWorker
-      running := {process:=child, arguments := arguments, timeOutAtNs := (← IO.monoNanosNow) + 20 * 1000_000_000, outputStream := readOutput, errorStream := readError} :: state.running
+      running := {process:=child, arguments := arguments, timeOutAtNs := (← IO.monoNanosNow) + 300 * 1000_000_000, outputStream := readOutput, errorStream := readError} :: state.running
     }
 
     state.startUpToNProcesses
@@ -323,12 +354,9 @@ but primarily due to reducing the memory pressure caused by parsing files (Which
 -/
 partial def RunnerState.delegateWork (state : RunnerState) : IO RunnerState := do
   if state.isDone then
-    IO.println "done"
     return state
   else
-    IO.println s!"start enqueue ({state.running.length} running)"
     let state ← state.startUpToNProcesses
-    IO.println s!"wait one ({state.running.length} running)"
     let state ← state.waitUntilAtLeastOneProcessIsDone
     state.delegateWork
 
@@ -355,7 +383,7 @@ partial def RunnerState.delegateWork (state : RunnerState) : IO RunnerState := d
 
 -- #eval maina
 
-unsafe def formatFolder (folderName : String) (args : InputArguments)  : IO (List (FormatReport)) := do
+unsafe def formatFolder (folderName : String) (args : InputArguments) (cleanedArguments : List String) : IO (List (FormatReport)) := do
   let files ← findAllLeanFilesInProject folderName
   let before ← IO.monoNanosNow
   let r : RunnerState := {
@@ -363,10 +391,12 @@ unsafe def formatFolder (folderName : String) (args : InputArguments)  : IO (Lis
     filesPrWorker := args.filesPrWorker
     remainingFiles := files
     includeFolders := args.includeFolders
+    configArguments := cleanedArguments
   }
   let r ← r.delegateWork
   let after ← IO.monoNanosNow
   IO.println s!"Total time: {((after-before).toFloat / 1000_000_000)}s"
+  IO.println s!"error files: {r.errs |>.intersperse "\n" |> String.join}"
 
   return [r.results]
   -- let mut report' : FormatReport := {}
@@ -410,20 +440,20 @@ def printReport (report : FormatReport) : IO Unit := do
   let sortedList := report.missingFormatters.toArray |>.insertionSort (fun (_,a) (_,b) => a < b) |>.reverse
   for (formatter, count) in sortedList do
     IO.println s!"missing formatter for: {formatter} ({count})"
-  IO.println s!"serialized: {report.serialize}"
+
 
 def printUsage : IO Unit := do
   IO.println "Usage: reformat -file <file> -folder <folder> -o <outputFileName> -noWarnCST -debugSyntax -debugSyntaxAfter -debugErrors -debugMissingFormatters -debugPPL -warnMissingFormatters -lineLength <length>"
 
 -- #eval FormatReport.deserialize "22,22,924900,5504600,463198000,70178900,Lean.guardMsgsCmd;:;:;PrettyFormat.┬½term_<_>_┬╗;:;:;Lean.Parser.Term.letDecl;:;:;┬½term#[_,]┬╗;:;:;PrettyFormat.┬½term_<$$>_┬╗;:;:;str;:;:;Lean.Parser.Term.letRecDecl;:;:;Lean.Parser.Term.cdot;:;:;Lean.Parser.Command.eoi;:;:;┬½termΓêà┬╗;:;:;formatCmd;:;:;PrettyFormat.┬½term_<>_┬╗;:;:;Lean.Parser.Term.structInstLVal;:;:;PrettyFormat.┬½term_<?_┬╗"
 
-unsafe def main (args : List String) : IO (Unit) := do
+unsafe def main (originalArgs : List String) : IO (Unit) := do
   -- let (_,coreEnv) ← parseModule (← IO.FS.readFile "PrettyFormat/CoreFormatters.lean") "PrettyFormat/CoreFormatters.lean"
   -- let _ ← coreEnv.displayStats
   -- let a := pFormatAttr.getValues coreEnv `Lean.Parser.Command.declId
   -- IO.println s!"found formatters: {a.length}"
 
-  let inputArgs := parseArguments args
+  let inputArgs := parseArguments originalArgs
 
   -- initSearchPath (← findSysroot)
   match inputArgs with
@@ -438,13 +468,20 @@ unsafe def main (args : List String) : IO (Unit) := do
     | some files => do
       for file in files do
         let (_,report) ← (formatFile file args)
-        printReport report
+        if args.serializedOutput then
+          IO.println s!"serialized: {report.serialize}"
+        else
+          printReport report
+
     | none => match args.folder with
       | some folder => do
-        let reports ← formatFolder folder args
+        let reports ← formatFolder folder args (cleanArguments originalArgs)
         let combined := reports.foldl (fun acc report => report.combineReports acc) {}
-        -- for report in reports do
-        printReport combined
+
+        if args.serializedOutput then
+          IO.println s!"serialized: {combined.serialize}"
+        else
+          printReport combined
       | none =>
         IO.println "No file or folder specified"
         printUsage

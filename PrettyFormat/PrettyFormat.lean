@@ -105,20 +105,30 @@ where
     }
 
   def FormatReport.serialize (r : FormatReport) : String :=
-    s!"{r.totalCommands},{r.formattedCommands},{r.timePF},{r.timeDoc},{r.timeReadAndParse},{r.timeReparse},{r.missingFormatters.keys |>.map (fun x => x.toString) |>.intersperse ";:;:;" |> String.join}"
+    let formatters := r.missingFormatters.fold (fun acc key val =>
+      if acc != "" then
+        s!"{acc};:;:;{val};{key}"
+      else
+        s!"{val};{key}"
+    ) ""
+    s!"{r.totalCommands},{r.formattedCommands},{r.timePF},{r.timeDoc},{r.timeReadAndParse},{r.timeReparse},{formatters}"
 
-  def splitOn (s : String) (sep : String) : List String :=
-    let rec go (acc : List String) (remaining : String) : List String :=
-      match remaining.splitOn sep with
-      | []        => acc.reverse
-      | x :: xs   => acc.reverse ++ (x :: xs)  -- because splitOn already returns all parts
-    go [] s
+
 
   def FormatReport.deserialize (s : String) : FormatReport :=
     match s.split (fun c => c == ',') with
     | totalCommands :: formattedCommands :: timePF :: timeDoc :: timeReadAndParse :: timeReparse :: rest =>
-      let keys := rest.intersperse "," |> String.join |> splitOn ";:;:;"
-      let missingFormatters : Std.HashMap Name Nat := keys.foldl (fun acc x => acc.insert x.toName 1) {}
+      let formatters := rest.intersperse "," |> String.join |>.splitOn ";:;:;"
+      -- IO.println s!"{keys.length}"
+      let missingFormatters : Std.HashMap Name Nat := formatters.foldl (fun acc x =>
+        let count := x.takeWhile (fun c => c != ';')
+        let formatter := x.dropWhile (fun c => c != ';') |>.drop 1
+        match count.toNat? with
+        | some c =>
+          acc.insert formatter.toName c
+        | _ =>
+          acc.insert formatter.toName 1
+      ) {}
       match (totalCommands.toNat?, formattedCommands.toNat?, timePF.toNat?, timeDoc.toNat?, timeReadAndParse.toNat?, timeReparse.toNat?) with
       | (some totalCommands, some formattedCommands, some timePF, some timeDoc, some timeReadAndParse, some timeReparse) =>
         {
@@ -133,11 +143,11 @@ where
       | _ => {}
     | _ => {}
 
-
   structure FormatState where
     options: Options := {}
     nextId : Nat := 0 -- used to generate ids
     diagnostic: FormattingDiagnostic := {}
+    cacheDistance : Nat := 3
     stx : List Syntax := [] -- note that syntax is in reverse order for performance reasons
     formattingFunction : (Syntax → Nat → FormattingDiagnostic → List Syntax → (Doc × Nat × FormattingDiagnostic ))
   -- deriving Repr
@@ -260,10 +270,10 @@ register_option pf.debugLog : Bool := {
     descr    := "(pretty format) Debug logging"
 }
 
-register_option pf.debugBadNeighbors : Bool := {
-    defValue := false
+register_option pf.cacheDistance : Nat := {
+    defValue := 3
     group    := "pf"
-    descr    := "(pretty format) Debug bad neighbors"
+    descr    := "(pretty format) To reduce memory usage we do not have cache every element. A larger cache distance means fewer elements gets cached"
 }
 
 def getPFLineLength (o : Options) : Nat := o.get pf.lineLength.name pf.lineLength.defValue
@@ -277,6 +287,7 @@ def getDebugDoc (o : Options) : Bool := (o.get pf.debugDoc.name pf.debugDoc.defV
 def getWarnCSTmismatch (o : Options) : Bool := (o.get pf.warnCSTmismatch.name pf.warnCSTmismatch.defValue)
 def getDebugTime (o : Options) : Bool := (o.get pf.debugTime.name pf.debugTime.defValue)
 def getDebugLog (o : Options) : Bool := (o.get pf.debugLog.name pf.debugLog.defValue)
+def getCacheDistance (o : Options) : Nat := (o.get pf.cacheDistance.name pf.cacheDistance.defValue)
 
 initialize coreFormatters : IO.Ref (Std.HashMap Name (Rule)) ← IO.mkRef {}
 
