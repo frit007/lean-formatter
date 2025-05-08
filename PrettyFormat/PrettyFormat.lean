@@ -27,12 +27,12 @@ where
   | .nest n inner _ => prettyPrint' (indent + n) inner
   | .concat left right _ => prettyPrint' indent left ++ prettyPrint' indent right
   | .stx stx _ => s!"stx {stx}"
-  | .bubbleComment s _ => s!"bubbleComment {s}"
   | .reset s _ => s!"reset {prettyPrint' 0 s}"
   | .rule name s _ => s!"rule {name} {prettyPrint' indent s}"
   | .provide s _ => s!"provide {s}"
   | .require s _ => s!"require {s}"
-  | .cost s _ => s!"cost {s}"
+  | .cost s d _ => s!"cost {s} ({prettyPrint' indent d})"
+  | .bubbleComment s d _ => s!"bubbleComment {s} ({prettyPrint' indent d})"
 
   def escapeQuotes (s : String) : String :=
     s.replace "\"" "\\\""

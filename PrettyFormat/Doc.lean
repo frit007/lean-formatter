@@ -175,17 +175,10 @@ instance : Cost DefaultCost where
   nl := DefaultCost.nl
 
 
-inductive Trilean
-| True
-| False
-| Unknown
-deriving Repr, DecidableEq, Inhabited
-
 structure DocMeta where
   leftBridge : Bridge := bridgeFlex
   id : Nat := 0
   cacheWeight : Nat := 0
-  isMetaConstruct : Trilean := Trilean.Unknown
 deriving Inhabited, Repr
 
 def DocMeta.hasBeenExpanded (meta : DocMeta) : Bool :=
@@ -239,10 +232,6 @@ Reset the indentation level to 0.
 -/
 | reset (doc : Doc) (meta : DocMeta := {})
 /--
-The comment will be placed after the last newline before this line
--/
-| bubbleComment (comment : String) (meta : DocMeta := {})
-/--
 Fail will never be rendered.
 This error will propagate until the next choice, where branches containing errors are eliminated.
 -/
@@ -269,7 +258,11 @@ provide can be chained to narrow the options to overlap between the two sets
 | rule (r : String) (doc : Doc) (meta : DocMeta := {})
 | stx (s : Lean.Syntax) (meta : DocMeta := {})
 | flatten (inner : Doc) (meta : DocMeta := {})
-| cost (nl:Nat) (meta : DocMeta := {})
+| cost (nl:Nat) (inner : Doc) (meta : DocMeta := {})
+/--
+The comment will be placed after the last newline before this line
+-/
+| bubbleComment (comment : String) (inner : Doc)  (meta : DocMeta := {})
 deriving Inhabited, Repr
 
 def Doc.meta : Doc → DocMeta
@@ -280,14 +273,14 @@ def Doc.meta : Doc → DocMeta
   | .align _ meta => meta
   | .choice _ _ meta => meta
   | .reset _ meta => meta
-  | .bubbleComment _ meta => meta
   | .fail _ meta => meta
   | .provide _ meta => meta
   | require _ meta => meta
   | .rule _ _ meta => meta
   | .stx _ meta => meta
   | .flatten _ docMeta => docMeta
-  | .cost _ meta => meta
+  | .cost _ _ meta => meta
+  | .bubbleComment _ _ meta => meta
 
 def Doc.setMeta (doc : Doc) (meta : DocMeta) : Doc :=
   match doc with
@@ -298,50 +291,14 @@ def Doc.setMeta (doc : Doc) (meta : DocMeta) : Doc :=
   | .align d _ => .align d meta
   | .choice l r _ => .choice l r meta
   | .reset d _ => .reset d meta
-  | .bubbleComment c _ => .bubbleComment c meta
   | .fail err _ => .fail err meta
   | .provide s _ => .provide s meta
   | require s _ => require s meta
   | .rule r d _ => .rule r d meta
   | .stx s _ => .stx s meta
   | .flatten inner _ => .flatten inner meta
-  | .cost c _ => .cost c meta
-
-
-
-def Trilean.and : Trilean → Trilean →  Trilean
-| .True, .True => .True
-| .False, .False => .False
-| _, _ => .Unknown
-
-/--
-We are trying to solve the problem where the left side does not affect the bridge for example
-(""<>Doc.provide bridgeNl)
-since the left side is empty the bridge is still bridgeNl
-
-Unknown describes a scenario
--/
-def Doc.calcMetaConstruct : Doc → Trilean
-  | .cost _ _ => Trilean.True
-  | .bubbleComment _ _ => Trilean.True
-  | .newline _ _ => Trilean.False
-  | .text s _ => if s == "" then Trilean.True else Trilean.False
-  | .flatten inner _ => inner.meta.isMetaConstruct
-  | .align inner _ => inner.meta.isMetaConstruct
-  | .nest _ inner _ => inner.meta.isMetaConstruct
-  | .concat left right _ =>
-    match left.meta.isMetaConstruct with
-    | .True => Trilean.True
-    | .False => right.meta.isMetaConstruct
-    | .Unknown => Trilean.Unknown
-  | .choice left right _ => left.meta.isMetaConstruct.and right.meta.isMetaConstruct
-  | .rule _ inner _ => inner.meta.isMetaConstruct
-  | .stx _ _ => Trilean.Unknown
-  | .provide _ _ => Trilean.False
-  | .require _ _ => Trilean.False
-  | .reset inner _ => inner.meta.isMetaConstruct
-  | .fail _ _ => Trilean.False
-
+  | .cost c d _ => .cost c d meta
+  | .bubbleComment c d _ => .bubbleComment c d meta
 
 /--
 A `Measure` contains a `Doc` along with meta information from the rendering process.
@@ -403,6 +360,12 @@ def Measure.concat [Cost χ] (lhs rhs : Measure χ) :Measure χ :=
   | (some l, some r) => Measure.mkFail lhs.cost (l ++ r)
   | _ => { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), spacingR := rhs.spacingR, fail := none }
 
+def Measure.addCost [Cost χ] (m : Measure χ) (c : χ) : Measure χ :=
+  { m with cost := m.cost + c}
+
+def Measure.prependLayout [Cost χ] (m : Measure χ) (layoutFn : List String → List String) : Measure χ :=
+  { m with layout := fun ss => m.layout (layoutFn ss)}
+
 structure TaintedState where
   trace : List String
   col : Nat
@@ -429,6 +392,8 @@ inductive TaintedTrunk (χ : Type) where
 | leftTainted (left: List (TaintedTrunk χ)) (doc: Doc) (state : TaintedState) (id: Nat)
 | rightTainted (left : Measure χ) (right:List (TaintedTrunk χ)) (state : TaintedState) (id: Nat)
 | center (doc : Doc) (state : TaintedState)
+| cost (cost : Nat) (trunk : List (TaintedTrunk χ))
+| bubbleComment (bubleComment : String) (trunk : List (TaintedTrunk χ))
 -- | partialTainted (left right : List (MeasureSet χ))
 -- try lhs, if it satisfied all wanted bridges, then stop
 -- | merge (lhs rhs: TaintedTrunk χ) (state : TaintedState)
@@ -437,7 +402,7 @@ def TaintedTrunk.cacheInfo (trunk : TaintedTrunk χ) : Option (TaintedState × N
   match trunk with
   | .leftTainted _ _ s id => some (s, id)
   | .rightTainted _ _ s id => some (s, id)
-  | .center _ _ => none
+  | _ => none
 
 
 abbrev MeasureGroups (χ : Type) := (List (MeasureSet χ) × List (TaintedTrunk χ))
@@ -533,12 +498,15 @@ where
   | .nest _ inner _=> isEmpty' inner
   | .concat left right _=> isEmpty' left && isEmpty' right
   | .stx s _=> isSyntaxEmpty s
-  | .bubbleComment s _=> s.length == 0
   | .reset inner _=> isEmpty' inner
   | .rule _ inner _=> isEmpty' inner
   | .provide _ _=> false
   | .require _ _=> false
-  | .cost _ _=> false
+  /-
+  Note that this means that cost and bubble comments will be discarded if they are not attached to a relevant object
+  -/
+  | .bubbleComment _ d _=> isEmpty' d
+  | .cost _ d _=> isEmpty' d
 
 def concat [ToDoc a] [ToDoc b] (l : a) (r : b) : Doc :=
   if isEmpty l then toDoc r
@@ -645,12 +613,12 @@ where
   | .nest n inner _ => s!"Doc.nest {n} ({output' indent inner})"
   | .concat left right _ => s!"({output' indent left}) <> ({output' indent right})"
   | .stx _ _ => "stx\n"
-  | .bubbleComment s _ => s!"bubbleComment \"{s}\""
   | .rule name s _ => s!"Doc.rule \"{name}\" {newline indent} ({output' (indent + 2) s}) {newline indent}"
   | .reset s _ => s!"Doc.reset ({output' indent s})"
   | .provide b _ => s!"Doc.provide {b.str}"
   | .require b _ => s!"Doc.require {b.str}"
-  | .cost n _ => s!"Doc.cost {n}"
+  | .cost n d _ => s!"Doc.cost {n} ({output' indent d})"
+  | .bubbleComment s d _ => s!"bubbleComment \"{s}\" ({output' indent d})"
   if d.meta.id != 0 then
     s!"/-{d.meta.id}-/ {inner}"
   else
@@ -670,12 +638,12 @@ def Doc.kind : Doc → String
   | .nest _ _ _ => s!"nest"
   | .concat _ _ _ => s!"concat"
   | .stx _ _ => "stx\n"
-  | .bubbleComment s _ => s!"bubbleComment \"{s}\""
   | .rule _ _ _ => s!"rule"
   | .reset _ _ => s!"reset"
   | .provide _ _ => s!"provide"
   | .require _ _ => s!"expect"
-  | .cost _ _ => s!"cost"
+  | .bubbleComment s _ _ => s!"bubbleComment \"{s}\""
+  | .cost _ _ _ => s!"cost"
 
 def measureTime (f : Unit → IO α) : IO (α × Nat):= do
   let before ← IO.monoNanosNow

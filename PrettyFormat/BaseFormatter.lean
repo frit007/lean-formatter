@@ -70,23 +70,23 @@ partial def expandSyntax (r : RuleRec) (ppl : Doc) : FormatM Doc := do
       return Doc.fail s
     | _, _ =>
       -- Note that in case of unknown we over estimate the bridges required
-      let leftBridge := match left.meta.isMetaConstruct with
-      | .True => right.meta.leftBridge
-      | .False => left.meta.leftBridge
-      | .Unknown => right.meta.leftBridge ||| left.meta.leftBridge
-
-      cachePPL (.concat left right) (max left.meta.cacheWeight right.meta.cacheWeight) (leftBridge)
+      cachePPL (.concat left right) (max left.meta.cacheWeight right.meta.cacheWeight) (left.meta.leftBridge)
   | .rule name inner _ =>
     let inner ← expandSyntax r inner
     cachePPL (.rule name inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
-  | .bubbleComment s _ => return (.bubbleComment s)
+  | .bubbleComment s inner _ =>
+    let inner ← expandSyntax r inner
+    cachePPL (.bubbleComment s inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
   | .stx stx _ => return ← r stx
   | .reset inner _ =>
     let inner ← expandSyntax r inner
     cachePPL (.reset inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
   | .provide s _ => cachePPL (.provide s) 0 s
   | .require s _ => cachePPL (.require s) 0 s
-  | .cost c _ => cachePPL (.cost c) 0 bridgeFlex
+  | .cost c inner _ =>
+    let inner ← expandSyntax r inner
+    cachePPL (.cost c inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
+    -- cachePPL (.cost c) 0 bridgeFlex
 where
 
   cachePPL (doc:Doc) (childCacheWeight:Nat) (leftBridge:Bridge := bridgeFlex): FormatM Doc := do
@@ -95,15 +95,13 @@ where
       return doc.setMeta {
         cacheWeight := 0,
         leftBridge := leftBridge,
-        id := ← FormatM.genId,
-        isMetaConstruct := doc.calcMetaConstruct
+        id := ← FormatM.genId
       }
     else
       return doc.setMeta {
         cacheWeight := childCacheWeight + 1,
         leftBridge := leftBridge,
-        id := 0,
-        isMetaConstruct := doc.calcMetaConstruct
+        id := 0
       }
 
 
@@ -159,7 +157,7 @@ else
 
 partial def knownStringToPPL (s:String) (p: Doc) : Doc :=
   -- stringCommentsStr s |>.foldl (fun p' c => p' <> ((PPL.endOfLineComment (" " ++ c)) <^> PPL.bubbleComment c)) p
-  stringCommentsStr s |>.foldl (fun p' c => p' <> ((" " ++ c <> (Doc.provide bridgeHardNl)) <^> Doc.bubbleComment c)) p
+  stringCommentsStr s |>.foldl (fun p' c => ((p' <> " " ++ c <> (Doc.provide bridgeHardNl)) <^> Doc.bubbleComment c p')) p
 
 partial def surroundWithComments (info : SourceInfo) (p:Doc) (f : Doc → Doc): Doc:=
   match info with
@@ -180,16 +178,16 @@ def hasNewlineBeforeNonWhitespace (s : String) : Bool :=
 partial def unknownStringToPPL (s:String) (leading : Bool): Doc :=
   let comments := unknownStringCommentsStr s
   let bubbled := comments.foldl (fun p' c =>
-      p' <> Doc.bubbleComment (c)
+      Doc.bubbleComment (c) p'
   ) (toDoc "")
-  let endOfLine := comments.foldl (fun p' c => p' <> (((c) <> (Doc.provide bridgeHardNl)) <^> Doc.bubbleComment c)) (toDoc "")
+  let endOfLine := comments.foldl (fun p' c => p' <> c <> (Doc.provide bridgeHardNl)) (toDoc "")
   if comments.length == 0 then
     toDoc ""
   else
-    if leading || hasNewlineBeforeNonWhitespace s then
-      toDoc (bubbled <^> (bridgeHardNl !> endOfLine))
-    else
-      toDoc (bubbled <^> bridgeSpace !> endOfLine)
+    toDoc (bubbled <^> (bridgeHardNl !> endOfLine))
+    -- if leading || hasNewlineBeforeNonWhitespace s then
+    -- else
+    --   toDoc (bubbled <^> bridgeSpace !> endOfLine)
 
 -- if the value is unknown then we will try to keep the value the same as it was
 partial def unknownSurroundWithComments (info : SourceInfo) (p:Doc): Doc:=

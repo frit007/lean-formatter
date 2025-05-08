@@ -364,12 +364,8 @@ where
         core (possibilitiesToDoc leftBridge flatten false <> (nl)) trace col indent widthLimit bridgeFlex flatten forceExpand
     | .concat lhs rhs m =>
       measureDiff "before meta check"
-      let expectedBridge := match rhs.meta.isMetaConstruct with
-      | Trilean.True => rightBridge
-      | Trilean.False => rhs.meta.leftBridge
-      | Trilean.Unknown => rhs.meta.leftBridge ||| rightBridge
       measureDiff "after meta check"
-      let left ← (lhs.resolve trace col indent widthLimit leftBridge expectedBridge flatten forceExpand)
+      let left ← (lhs.resolve trace col indent widthLimit leftBridge rhs.meta.leftBridge flatten forceExpand)
       cacheLog fun _ => (s!"CONCAT: left ? {shallowSummary left.fst} tainted ??{left.snd.length}")
       let taintedState : TaintedState := {trace:=trace, col:=col, indent:=indent, widthLimit:=widthLimit, leftBridge := leftBridge, expectBridge:=rightBridge, flatten:=flatten}
       measureDiff "after concat left (before right)"
@@ -390,12 +386,6 @@ where
     | .nest indentOffset doc _ => doc.resolve trace col (indent + indentOffset) widthLimit leftBridge rightBridge flatten forceExpand
     | .align doc _ => doc.resolve trace col col widthLimit leftBridge rightBridge flatten forceExpand
     | .reset doc _ => doc.resolve trace col 0 widthLimit leftBridge rightBridge flatten forceExpand
-    | .bubbleComment comment _ => leafSet {
-      last := col
-      -- prioritize placing comments where they were placed by the user
-      cost := (Cost.text widthLimit (indent + widthLimit) comment.length) + Cost.nl indent
-      layout := placeComment 0 comment
-    }
     | .fail e _ => leafSet {
       last := 0
       cost := Cost.nl indent
@@ -439,12 +429,14 @@ where
         doc.resolve trace col indent widthLimit leftBridge rightBridge true forceExpand
       | .stx _ _ =>
         panic! "Syntax should be expanded before reaching this point"
-      | .cost c _ => leafSet {
-          last := col
-          cost := Cost.text widthLimit 0 0
-          layout := fun ss => ss
-          spacingR := leftBridge
-        }
+      | .cost c doc _ =>
+        let inner ← doc.resolve trace col indent widthLimit leftBridge rightBridge flatten forceExpand
+        let withCost := inner.fst.map (fun ms => {ms with set := ms.set.map (fun m => m.addCost (Cost.nl c))})
+        return (withCost, [TaintedTrunk.cost c inner.snd])
+      | .bubbleComment comment doc _ =>
+        let inner ← doc.resolve trace col indent widthLimit leftBridge rightBridge flatten forceExpand
+        let withComment := inner.fst.map (fun ms => {ms with set := ms.set.map (fun m => m.prependLayout (placeComment 0 comment))})
+        return (withComment, [TaintedTrunk.bubbleComment comment inner.snd])
 
   /-
   Compute the set that contains the concatenations of all possible lhs measures
@@ -665,6 +657,20 @@ partial def expandTainted [Inhabited χ] [Cost χ] (trunk :TaintedTrunk χ): Mea
       for m in ms.set do
         result := mergeTaintedMeasures (ms.rightBridge, m) result
     return result
+  | .cost c trunks => do
+    let mut result : TaintedResult χ := []
+
+    for t in trunks do
+      result := mergeTaintedResults (← expandTainted t) result
+
+    return result.map (fun m => (m.fst, m.snd.addCost (Cost.nl c)))
+  | .bubbleComment c trunks => do
+    let mut result : TaintedResult χ := []
+
+    for t in trunks do
+      result := mergeTaintedResults (← expandTainted t) result
+
+    return result.map (fun m => (m.fst, m.snd.prependLayout (placeComment 0 c)))
 
   mergeTaintedMeasures : (Bridge × Measure χ) → TaintedResult χ → TaintedResult χ
   | (b, m), [] => [(b, m)]

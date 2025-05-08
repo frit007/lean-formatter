@@ -457,8 +457,10 @@ def termOperator : Rule := fun
 #coreFmt Lean.Parser.Term.byTactic fun
 | #[byAtom, tactic] => do
   let tactic ← formatStx tactic
+
+  let content := byAtom <> (Doc.nest 2 (bridgeHardNl !> tactic) <^> Doc.flatten (bridgeSpace !> tactic))
   return (bridgeNl <! byAtom <> Doc.nest 2 (bridgeNl !> tactic)) <^>
-  ((Doc.require (bridgeSpace ||| bridgeNone) <^> Doc.cost 3 /-allow any bridge, but -/)<> byAtom <> (Doc.nest 2 (bridgeHardNl !> tactic) <^> Doc.flatten (bridgeSpace !> tactic))) <^>
+  ((Doc.require (bridgeSpace ||| bridgeNone) <> content <^> Doc.cost 3 content/-allow any bridge, but at a cost-/)) <^>
   (bridgeImmediate <! " " <> (Doc.nest 2 (byAtom <> Doc.nl <> tactic)))
 | _ => failure
 
