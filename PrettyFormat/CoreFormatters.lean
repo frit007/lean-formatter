@@ -610,7 +610,7 @@ def formatSimpleProof : Array Syntax → RuleM Doc
   let negativeTerm ← formatStx negativeTerm
   let statementTerm ← formatStx statementTerm
 
-  let multiline := ifAtom <> " " <> binder <> " " <> colonAtom <> " " <> (flattenDoc statementTerm) <> " " <> thenAtom
+  let multiline := ifAtom <_> binder <_> colonAtom <_> (flattenDoc statementTerm) <_> thenAtom
     <> Doc.nest 2 (bridgeHardNl !> (positiveTerm)) <> " "
   <> bridgeHardNl !> elseAtom
     <> Doc.nest 2 (bridgeHardNl !> (negativeTerm))
@@ -767,7 +767,7 @@ def combineParenExpression [ToDoc a] [Inhabited a] (sep: Doc → Doc → Doc) (a
 
 #coreFmt Lean.Parser.Tactic.tacticSuffices_ fun
 | #[sufficesAtom, decl] =>
-  return sufficesAtom <> Doc.nest 2 (bridgeAny !> decl)
+  return sufficesAtom <> Doc.nest 2 ("" <**> decl)
 | _ => failure
 
 #coreFmt Lean.Parser.Tactic.clear fun
@@ -777,7 +777,7 @@ def combineParenExpression [ToDoc a] [Inhabited a] (sep: Doc → Doc → Doc) (a
 
 #coreFmt «term∃_,_» fun
 | #[existsAtom, binders, commaAtom, val] =>
-  return existsAtom <> bridgeAny !> binders <> commaAtom <> bridgeSpace !> val
+  return existsAtom <**> binders <> commaAtom <> bridgeSpace !> val
 | _ => failure
 
 #coreFmt Lean.Parser.Tactic.tacDepIfThenElse fun
@@ -1409,10 +1409,6 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
   return docComment <$$> combine (· <**> .) #[attrKind, syntaxAtom] <**> Doc.nest 2 (combine (· <**> ·) #[combine (. <**> .) value.getArgs, toDoc colon, toDoc type])
 | _ => failure
 
-def linePrefix : List String → List Nat
-  | s :: xs =>
-    (s.length - s.trimLeft.length) :: linePrefix xs
-  | [] => []
 
 #coreFmt Lean.Parser.Command.docComment fun
 | #[startAtom, content] =>

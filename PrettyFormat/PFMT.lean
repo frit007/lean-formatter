@@ -3,8 +3,7 @@ import Doc
 
 open Std
 /-
-Originally created by Henrik Böving() based on pretty expressive (https://arxiv.org/abs/2310.01530),
-Frithjof added fail, endOfLineComment, and bubbleComment
+Based on the PFMT created by Henrik Böving(https://github.com/hargoniX/pfmt) based on pretty expressive (https://arxiv.org/abs/2310.01530),
 -/
 namespace PrettyFormat
 
@@ -203,7 +202,7 @@ def getId (id:Nat) (flatten:Bool) (cacheCount:Nat): Nat:=
   else
     id
 
-def getCached [Inhabited χ] [Cost χ] (id indent col: Nat) (bridges : Bridge) (flatten : Bool) (allowTainted : Bool): MeasureResult χ (MeasureGroups χ × Bridge) := do
+def getCached [Cost χ] (id indent col: Nat) (bridges : Bridge) (flatten : Bool) (allowTainted : Bool): MeasureResult χ (MeasureGroups χ × Bridge) := do
   let cacheStore ← get
   let bucket := cacheStore.content.get! (getId id flatten cacheStore.size)
   cacheLog (fun () => s!"Bucket size {bucket.length} the id {id}")
@@ -252,7 +251,7 @@ rightBridge: the bridges after this document, these limit the types of documents
    - This comes with the issue that if there are no solutions for all rightbridges, then we will try all of the solutions
 forceExpand: When evaluating tainted
 -/
-partial def Doc.resolve [Inhabited χ] [Cost χ] (doc : Doc) (trace : List String) (col indent widthLimit : Nat) (leftBridge rightBridge: Bridge) (flatten forceTainted: Bool) : MeasureResult χ (MeasureGroups χ) := do
+partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (trace : List String) (col indent widthLimit : Nat) (leftBridge rightBridge: Bridge) (flatten forceTainted: Bool) : MeasureResult χ (MeasureGroups χ) := do
   -- if (← get).giveUp == 0 then
   --   cacheLog fun _ => (s!"Cache::giveup {ppl.meta.id} {trace.length} {col} {indent} {widthLimit}")
   --   return ← leafSet {
@@ -431,7 +430,20 @@ where
         panic! "Syntax should be expanded before reaching this point"
       | .cost c doc _ =>
         let inner ← doc.resolve trace col indent widthLimit leftBridge rightBridge flatten forceExpand
-        let withCost := inner.fst.map (fun ms => {ms with set := ms.set.map (fun m => m.addCost (Cost.nl c))})
+        let lineCost : χ := (List.range c).foldl (fun (acc: χ) _ => acc + (Cost.nl 0)) (Cost.text 0 0 0)
+        let withCost := inner.fst.map (fun ms => {ms with set := ms.set.map (fun m => m.addCost (lineCost))})
+        cacheLog (fun _ => s!"cost:: {inner.snd.length}")
+        match withCost.head? with
+        | some ms =>
+          match ms.set.head? with
+          | some m =>
+            cacheLog (fun _ => s!"{repr m.cost}")
+          | _ =>
+            cacheLog (fun _ => "cost:: one")
+        | _ =>
+            cacheLog (fun _ => "cost:: two")
+
+        -- IO.println s!"withCost {repr withCost[0]!.set[0]!.cost}"
         return (withCost, [TaintedTrunk.cost c inner.snd])
       | .bubbleComment comment doc _ =>
         let inner ← doc.resolve trace col indent widthLimit leftBridge rightBridge flatten forceExpand
@@ -533,7 +545,7 @@ where
 
 -- for this to work I must pass the expected bridge through the entire program
 --  - I don' necessarily have an expected bridge which would be bridgeFlex
-partial def expandTainted [Inhabited χ] [Cost χ] (trunk :TaintedTrunk χ): MeasureResult χ (TaintedResult χ) := do
+partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrunk χ): MeasureResult χ (TaintedResult χ) := do
   -- We are able to give up once we provide a solution to any bridge the right side expects
   --
   -- When we are in a tainted state do we want to combine all the results?
@@ -663,7 +675,8 @@ partial def expandTainted [Inhabited χ] [Cost χ] (trunk :TaintedTrunk χ): Mea
     for t in trunks do
       result := mergeTaintedResults (← expandTainted t) result
 
-    return result.map (fun m => (m.fst, m.snd.addCost (Cost.nl c)))
+    let lineCost : χ := (List.range c).foldl (fun (acc: χ) _ => acc + (Cost.nl 0)) (Cost.text 0 0 0)
+    return result.map (fun m => (m.fst, m.snd.addCost (lineCost)))
   | .bubbleComment c trunks => do
     let mut result : TaintedResult χ := []
 
@@ -721,7 +734,7 @@ inductive IntermediateResult (χ : Type) where
 /--
 Find an optimal layout for a document and render it.
 -/
-partial def Doc.print (χ : Type) [Inhabited χ] [Cost χ] (doc : Doc) (cacheSize col widthLimit : Nat) (log : Option (List String)): IO (PrintResult χ) := do
+partial def Doc.print (χ : Type) [Inhabited χ] [Repr χ] [Cost χ] (doc : Doc) (cacheSize col widthLimit : Nat) (log : Option (List String)): IO (PrintResult χ) := do
   -- let (preferredGroups, cache) := ((doc.resolve (χ := χ) [] col 0 widthLimit bridgeFlex bridgeFlex false false).run (initCache cacheSize log)).run
   let (preferredGroups, cache) ← ((doc.resolve (χ := χ) [] col 0 widthLimit bridgeFlex bridgeFlex false false).run (initCache cacheSize log))
   let (goodSolution, solutions, tainted) := removeEndingBridges preferredGroups
@@ -838,10 +851,10 @@ where
 /--
 Find an optimal layout for a document and render it.
 -/
-partial def Doc.prettyPrint (χ : Type) [Inhabited χ] [Cost χ] (doc : Doc) (cacheSize col widthLimit : Nat) : IO String := do
+partial def Doc.prettyPrint (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit : Nat) : IO String := do
   return (← Doc.print χ doc cacheSize col widthLimit (none)) |>.layout
 
-partial def Doc.prettyPrintLog (χ : Type) [Inhabited χ] [Cost χ] (doc : Doc) (cacheSize col widthLimit : Nat) : IO String := do
+partial def Doc.prettyPrintLog (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit : Nat) : IO String := do
   let l ← Doc.print χ doc cacheSize col widthLimit (some [])
   match l.log with
   | none => return l.layout

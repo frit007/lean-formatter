@@ -147,15 +147,19 @@ where
   go: Nat → Nat
   | n => n * 2
 
-
+/--
+info:
+def double (n : Nat) := go n
+where
+  go : Nat → Nat
+  | n => n * 2 * 3 * 4 * 5 * 6
+-/
+#guard_msgs in
+#format
 def double (n : Nat) := go n
 where
   go: Nat → Nat
   | n => n * 2 * 3 * 4 * 5 * 6
-
-
-#format
-def a : Nat := 2 * 3
 
 open PrettyFormat
 

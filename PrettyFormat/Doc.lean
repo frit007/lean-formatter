@@ -126,7 +126,7 @@ This typeclass allows us to calculate the cost of a `Doc`. We use it to find
 the prettier document in `Doc.choice`. A valid `Cost` instance must satisfy
 the laws defined in `LawfulCost`.
 -/
-class Cost (χ : Type) extends LEB χ, Add χ where
+class Cost (χ : Type) extends LEB χ, Add χ, Repr χ, Inhabited χ where
   /--
   Compute the cost of a `String` of length `length`, rendered at `col` with a certain
   `widhLimit`.
@@ -136,6 +136,7 @@ class Cost (χ : Type) extends LEB χ, Add χ where
   Compute the cost of a new line.
   -/
   nl : (indent : Nat) → χ
+
 
 structure DefaultCost where
   widthCost : Nat
@@ -209,7 +210,7 @@ and `r` from `rhs` they will render as:
 ```
 llllllllll
 lllllrrrrrrrr
-rrrrrr
+rrrr
 ```
 -/
 | concat (lhs rhs : Doc) (meta : DocMeta := {})
@@ -258,6 +259,9 @@ provide can be chained to narrow the options to overlap between the two sets
 | rule (r : String) (doc : Doc) (meta : DocMeta := {})
 | stx (s : Lean.Syntax) (meta : DocMeta := {})
 | flatten (inner : Doc) (meta : DocMeta := {})
+/--
+Add cost equivalent to `nl` newlines
+-/
 | cost (nl:Nat) (inner : Doc) (meta : DocMeta := {})
 /--
 The comment will be placed after the last newline before this line
@@ -500,6 +504,11 @@ where
   | .stx s _=> isSyntaxEmpty s
   | .reset inner _=> isEmpty' inner
   | .rule _ inner _=> isEmpty' inner
+  -- directional
+  -- | .provideL _ _ => isEmpty' inner
+  -- | .provideR _ _ => isEmpty' inner
+  -- | .requireL _ _ => isEmpty' inner
+  -- | .requireR _ _ => isEmpty' inner
   | .provide _ _=> false
   | .require _ _=> false
   /-
@@ -508,13 +517,19 @@ where
   | .bubbleComment _ d _=> isEmpty' d
   | .cost _ d _=> isEmpty' d
 
+-- partial def moveRight (d:Doc): Doc → Doc
+-- -- when we reach a leaf return
+-- | .fail _ _ => d
+-- | .text _ _ => d
+-- | .newline _ _ => d
+
 def concat [ToDoc a] [ToDoc b] (l : a) (r : b) : Doc :=
-  if isEmpty l then toDoc r
-  else if isEmpty r then toDoc l
+  let l := toDoc l
+  let r := toDoc r
+  if isEmpty l then r
+  else if isEmpty r then l
   else
-    let ld := toDoc l
-    let rd := toDoc r
-    Doc.concat ld rd
+    Doc.concat l r
 
 infixl:40 " <> " => fun l r => concat l r
 
@@ -530,7 +545,7 @@ infixl:40 " <+> " => fun l r => (toDoc l) <> Doc.align (toDoc r)
 infixl:45 " !> " => fun l r => (Doc.provide l) <> (toDoc r)
 infixl:45 " <! " => fun l r => (Doc.require l) <> (toDoc r)
 
-infixl:34 " <^> " => fun l r => toDoc (Doc.choice (toDoc l) (toDoc r))
+infixl:34 " <^> " => fun l r => Doc.choice (toDoc l) (toDoc r)
 
 
 

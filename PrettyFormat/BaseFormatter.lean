@@ -29,6 +29,140 @@ partial def findPatternStartAux (s pattern : String) : Option String :=
 partial def findPatternStart (s pattern : String) : Option String :=
   findPatternStartAux s pattern
 
+structure FlattenCache where
+  flattenLeft : Bool
+  flattenRight : Bool
+  d : Doc
+
+structure FlattenState where
+  nextId : Nat
+  cached : Std.HashMap Nat (List FlattenCache)
+
+
+abbrev FlattenStateM a := (StateM FlattenState) a
+
+abbrev MetaMover := Option (Doc → Doc)
+
+/--
+does the order matter for decorators? yes because we can have a
+
+example :
+Provide bridgeAny "" <> Provide bridgeSpace "" <> "hello"
+should be transformed to
+Provide bridgeAny (Provide bridgeSpace "hello")
+-/
+partial def moveEmptyTextDecorators (mover : MetaMover) (doc : Doc) : (List (Doc × MetaMover)) :=
+  moveEmptyTextDecorators' ()
+where
+  moveEmptyTextDecorators' (mover : MetaMover) : Doc → (List (Doc × MetaMover))
+  | .fail s m => .fail s m
+  | .text s _=> s.length == 0
+  | .newline _ _=> false
+  | .choice left right _=> isEmpty' left && isEmpty' right
+  | .flatten inner _=> isEmpty' inner
+  | .align inner _=> isEmpty' inner
+  | .nest _ inner _=> isEmpty' inner
+  | .concat left right _=>
+    -- this would be exponential time
+    -- because if we miss on left and right then we have try combine all combinations
+    -- it is destroying caches...
+    isEmpty' left && isEmpty' right
+  | .stx s _=> isSyntaxEmpty s
+  | .reset inner _=> isEmpty' inner
+  | .rule _ inner _=> isEmpty' inner
+  | .provide _ _=> false
+  | .require _ _=> false
+  /-
+  Note that this means that cost and bubble comments will be discarded if they are not attached to a relevant object
+  -/
+  | .bubbleComment _ d _=> isEmpty' d
+  | .cost _ d _=> isEmpty' d
+  extendMover (mover: MetaMover) (newMover:Doc → Doc) :=
+    match mover with
+    | some existingMover =>
+      fun d =>
+        existingMover d |> newMover
+    | _ => newMover
+
+
+
+
+/-
+Funny sideNote: if we change provide bridgeNl to always be attached to a document it would be nicer to work with from the formatters point of view
+
+but the alternative is easier to write Syntax transformers for
+-/
+/--
+We choose to preprocess flatten to simplify formatting later
+
+Flatten converts all newlines to spaces
+
+The interaction between flatten and bridges is less obvious but the rule is:
+"flatten only flattens the bridges inside the flattened section"
+This was chosen to allow comments at the end of a flattened section
+example:
+"a" <**> flatten ("b" <**> "c" <> Provide bridgeNl) <**> "d"
+Is flattened to
+"a" <**> ("b" <_> "c" <> Provide bridgeNl) <**> "d"
+
+-/
+partial def flattenPreprocessor (flattenLeft flattenRight: Bool) (d :Doc) : FlattenStateM Doc := do
+  let meta := d.meta
+  if meta.shouldBeCached then
+    let state ← get
+    let existing := match state.cached.get? meta.id with
+    | some e => e.find? (fun (c:FlattenCache) => c.flattenLeft == flattenLeft && c.flattenRight == flattenRight)
+    | _ => none
+
+    match existing with
+    | some e => return e.d
+    | _ => flattenPreprocessor' flattenLeft flattenRight d
+  else
+    flattenPreprocessor' flattenLeft flattenRight d
+  -- TODO: update meta
+where
+  flattenPreprocessor' (flattenLeft flattenRight: Bool) : Doc → FlattenStateM (Doc × Bridge)
+    | .fail s m => return (.fail s m, m.leftBridge)
+    | .text s m => return (.text s m, m.leftBridge)
+    | .newline a m =>
+      match a with
+      | some s => return (.text s m, m.leftBridge)
+      | _ => return (.fail "cannot flatten" m, m.leftBridge)
+    | .choice left right _=> do
+      let l ← flattenPreprocessor flattenLeft flattenRight left
+      let r ← flattenPreprocessor flattenLeft flattenRight right
+      return (.choice l r, l.meta.leftBridge)
+    | .flatten inner _=> do
+      let i ← flattenPreprocessor flattenLeft flattenRight inner
+      return (i, i.meta.leftBridge)
+    | .align inner m => do
+      let i ← flattenPreprocessor flattenLeft flattenRight inner
+      return (.align i m, i.meta.leftBridge)
+    | .nest i inner m => do
+      let inner ← flattenPreprocessor flattenLeft flattenRight inner
+      return (.nest i inner m, inner.meta.leftBridge)
+    | .concat left right m =>
+      -- we could ask: contains text
+      -- not good enough because: uncertain if right side contains choice (and for that matter it is uncertain whether left side contains text)
+      -- leads to the expansion problem again...
+      -- the problem is require and provide?
+      -- Can I restructure provide and require to make it simpler
+      -- otherwise I must do rewrites
+      -- My problem is that I do not know whether I want provide right or left
+      -- I could split it into left provide and right provide
+      -- require is always left
+      -- I don't like that <_> <**> <$$> operators must check before applying to a side
+      -- however that is possible
+      -- I could keep the nodes and just move them to wrap the next non empty node (This is ruined by choice)
+
+      isEmpty' left && isEmpty' right
+    | .stx s _=> panic! "can't flatten syntax"
+    | .reset inner _=> isEmpty' inner
+    | .rule _ inner _=> isEmpty' inner
+    | .provide _ _=> false
+    | .require _ _=> false
+    | .bubbleComment _ d _=> isEmpty' d
+    | .cost _ d _=> isEmpty' d
 
 -- since the result might contain Syntax we expand it now
 -- At this point we also tag the syntax with Ids, bug only if they should be cached
@@ -133,15 +267,86 @@ def updateSyntaxTrail (stx : Syntax) (f:FormatM PPL) : FormatM PPL := do
   let _ ← modify (fun s => {s with stx := s.stx.tail})
   return v
 
+private structure CommentInfo where
+  isBlockComment : Bool
+  -- note that block comments still contain newlines
+  comment : String
+deriving Repr
 
-def stringCommentsStr (s:String) : List String :=
--- s.split (fun c => c == '\n')
--- |>.filterMap (fun s => findPatternStart s "--")
--- |>.filter (fun (s:String) => s.trim.length > 0)
--- |>.map (fun (s:String) => "-- " ++ s.trim)
-  s.split (fun c => c == '\n')
-  |>.map (fun s => s.trim)
-  |>.filter (fun s => s.length > 0)
+def linePrefix : List String → List Nat
+  | s :: xs =>
+    (s.length - s.trimLeft.length) :: linePrefix xs
+  | [] => []
+
+def commentInfoToStrings (c : CommentInfo): List String :=
+  if c.isBlockComment then
+    let parts := c.comment.split (fun c => c == '\n')
+    let removeFront:= parts.tail |> linePrefix |>.foldl Nat.min 1000000
+    let tail := parts.tail |>.map (fun s => s.drop removeFront)
+
+
+      -- |>.foldl (fun (acc) (c:String) => acc <> Doc.nl <> c) (toDoc "")
+
+    (parts.head! :: tail)
+  else
+    ["-- " ++ c.comment.trim]
+
+def commentInfoToEndOfLine (c : CommentInfo) : Doc :=
+  let comments := commentInfoToStrings c
+    |>.foldl (fun (acc:Doc) (c:String) =>
+      if isEmpty acc then
+        toDoc c
+      else
+        acc <> Doc.nl <> c
+    ) (toDoc "")
+  comments
+
+def CommentInfoToBubbleComment (c : CommentInfo) (p:Doc) : Doc :=
+  let comments := commentInfoToStrings c
+    |>.foldl (fun (acc) (c:String) => Doc.cost 3 (Doc.bubbleComment c acc)) (p)
+  comments
+
+-- def CommentInfo.toDocs (c : CommentInfo) : Doc :=
+
+
+partial def parseComments (comments:List CommentInfo): List Char → (List CommentInfo)
+| '-'::'-'::xs =>
+  let (comment, xs) := parseEndOfLineComment [] xs
+  parseComments ({isBlockComment := false, comment:=String.mk comment} :: comments) xs
+| '/'::'-'::xs =>
+  let (comment, xs) := parseMultilineComment ['-','/'] 0 xs
+  parseComments ({isBlockComment := true, comment:=String.mk comment} :: comments) xs
+| _::xs => parseComments comments xs
+| _ => comments
+where
+  parseEndOfLineComment (acc : List Char): List Char → (List Char × List Char)
+    | [] => (acc.reverse, [])
+    | '\n'::xs => (acc.reverse, xs)
+    | x::xs => parseEndOfLineComment (x::acc) xs
+  parseMultilineComment (acc : List Char): Nat → List Char → (List Char × List Char)
+    | n, '/'::'-'::xs => parseMultilineComment ('-'::'/'::acc) (n + 1) xs
+    | 0, '-'::'/'::xs => (('/'::'-'::acc).reverse, xs)
+    | _, [] => (acc.reverse, [])
+    | n, '-'::'/'::xs => parseMultilineComment ('/'::'-'::acc) (n - 1) xs
+    | n, x::xs => parseMultilineComment (x::acc) (n) xs
+
+/-- info: [{ isBlockComment := true, comment := "/-a comment-/" }] -/
+#guard_msgs in
+#eval parseComments [] "/-a comment-/".toList
+/--
+info: [{ isBlockComment := true, comment := "/-once-/" },
+ { isBlockComment := false, comment := "hello" },
+ { isBlockComment := false, comment := " one" }]
+-/
+#guard_msgs in
+#eval parseComments [] "-- one\n--hello\n/-once-/".toList
+/-- info: [{ isBlockComment := true, comment := "/-on\nce-/" }] -/
+#guard_msgs in
+#eval parseComments [] "/-on\nce-/".toList
+/-- info: [{ isBlockComment := true, comment := "/-on/- nested-/ ce-/" }] -/
+#guard_msgs in
+#eval parseComments [] "/-on/- nested-/ ce-/".toList
+
 
 partial def unknownStringCommentsStr (s:String) : List String :=
 if s.contains '\n' then
@@ -155,17 +360,6 @@ else
   else
     []
 
-partial def knownStringToPPL (s:String) (p: Doc) : Doc :=
-  -- stringCommentsStr s |>.foldl (fun p' c => p' <> ((PPL.endOfLineComment (" " ++ c)) <^> PPL.bubbleComment c)) p
-  stringCommentsStr s |>.foldl (fun p' c => ((p' <> " " ++ c <> (Doc.provide bridgeHardNl)) <^> Doc.bubbleComment c p')) p
-
-partial def surroundWithComments (info : SourceInfo) (p:Doc) (f : Doc → Doc): Doc:=
-  match info with
-  | .original (leading : Substring) _ (trailing : Substring) _ =>
-    knownStringToPPL leading.toString p
-    |> f
-    |> knownStringToPPL trailing.toString
-  | _ => f p
 
 def hasNewlineBeforeNonWhitespace (s : String) : Bool :=
   let chars := s.toList
@@ -175,26 +369,69 @@ def hasNewlineBeforeNonWhitespace (s : String) : Bool :=
     | c :: cs => if c.isWhitespace then check cs else false
   check chars
 
-partial def unknownStringToPPL (s:String) (leading : Bool): Doc :=
-  let comments := unknownStringCommentsStr s
-  let bubbled := comments.foldl (fun p' c =>
-      Doc.bubbleComment (c) p'
-  ) (toDoc "")
-  let endOfLine := comments.foldl (fun p' c => p' <> c <> (Doc.provide bridgeHardNl)) (toDoc "")
-  if comments.length == 0 then
-    toDoc ""
+/--
+We are considering the options
+newline followed by comments
+inline comment: /--/
+ - inline comments are allowed to
+multiline comment: /--/
+end of line comment: --
+-/
+partial def commentStringToPPL (s:String) (leading : Bool) (d : Doc): Doc :=
+  if s.length == 0 then
+    d
   else
-    toDoc (bubbled <^> (bridgeHardNl !> endOfLine))
-    -- if leading || hasNewlineBeforeNonWhitespace s then
-    -- else
-    --   toDoc (bubbled <^> bridgeSpace !> endOfLine)
+    let comments := parseComments [] s.toList |>.reverse
+
+    if hasNewlineBeforeNonWhitespace s then
+      /-
+      example:
+        def fun (a:Nat ) :=
+          -- a comment before our content
+          /- or a block comment -/
+          a
+      -/
+      let hardline := if leading then
+        "" <$$$> (combineEndOfLineComments comments) <$$$> d
+      else
+        d <$$$> ((combineEndOfLineComments comments)) <$$$> ""
+      hardline <^> comments.foldl (fun acc c => CommentInfoToBubbleComment c acc) d
+    else
+      let isInlineComment := comments.length == 1 && comments.all (fun c => c.isBlockComment)
+      if isInlineComment then
+        -- a single short comment can be placed any where
+        /-
+        example:
+
+        def fun (a:Nat /-An inline comment-/) := a
+        -/
+        let comment := comments.foldl (fun _ c => commentInfoToEndOfLine c) (toDoc "")
+        if leading then
+          comment <_> d
+        else
+          d <_> comment
+      else
+        let hardline := if leading then
+          (combineEndOfLineComments comments) <$$$> d <$$$> ""
+        else
+          d <_> (combineEndOfLineComments comments) <$$$> ""
+        hardline <^> comments.foldl (fun acc c => CommentInfoToBubbleComment c acc) d
+where
+combineEndOfLineComments (comments : List CommentInfo) : Doc :=
+  comments.foldl (fun acc c =>
+    if isEmpty acc then
+      commentInfoToEndOfLine c
+    else
+      acc <$$$> commentInfoToEndOfLine c
+  ) (toDoc "")
 
 -- if the value is unknown then we will try to keep the value the same as it was
-partial def unknownSurroundWithComments (info : SourceInfo) (p:Doc): Doc:=
+partial def surroundWithComments (info : SourceInfo) (p:Doc): Doc :=
   match info with
   | .original (leading : Substring) _ (trailing : Substring) _ =>
-    unknownStringToPPL leading.toString true
-    <> p <> unknownStringToPPL trailing.toString false
+    commentStringToPPL leading.toString true p |> commentStringToPPL trailing.toString false
+    -- commentStringToPPL leading.toString true
+    -- <> p <> commentStringToPPL trailing.toString false
   | _ => p
 
 partial def pfCombine (r: RuleRec) (stxArr : Array Syntax) : FormatM Doc := do
@@ -245,15 +482,11 @@ partial def pf (formatters : Formatters) (stx: Syntax): FormatM Doc := updateSyn
 
         return Doc.rule (toString kind) (← pfCombine formattingRule args)
   | .atom (info : SourceInfo) (val : String) =>
-    return (unknownSurroundWithComments info (toDoc val))
-    -- return text val
-    -- if state.unknown then
-    --   return
-    -- else
-    --   return (surroundWithComments info (text "")) (fun p => p <> text val)
+    return (surroundWithComments info (toDoc val))
+
 
   | .ident  (info : SourceInfo) (rawVal : Substring) _ _ =>
-    return (unknownSurroundWithComments info (toDoc rawVal.toString))
+    return (surroundWithComments info (toDoc rawVal.toString))
 
 
 def combine [ToDoc a] (sep: Doc → Doc → Doc) (stxArr : Array a) : Doc := Id.run do
@@ -267,6 +500,10 @@ def combine [ToDoc a] (sep: Doc → Doc → Doc) (stxArr : Array a) : Doc := Id.
     else
       combined := sep combined p'
   return combined
+
+
+def sep [ToDoc a] (stxs : Array a) : Doc :=
+  (combine (.<_>.) stxs) <^> (combine (.<$$>.) stxs)
 
 -- continue combining children if they are null arrays
 partial def nestedCombine (sep: Doc → Doc → Doc) (stxArr : Array Syntax) : Doc := Id.run do

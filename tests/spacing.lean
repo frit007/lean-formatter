@@ -91,8 +91,41 @@ b
 
 /-- info: aaa space  after -/
 #guard_msgs in
-#eval do  
+#eval do
   let d := "aaa" <> ((Doc.provide bridgeHardNl <^> " space " <_> "")) <> flattenDoc ("after")
+  -- IO.println s!"{d.toString}"
+  let (d, cache) := markCachedObject (do return d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
+  IO.println s!"{out}"
+
+/-- info: longer -/
+#guard_msgs in
+#eval do
+  let d := (Doc.cost 2 (toDoc "short")) <^> "longer"
+  -- IO.println s!"{d.toString}"
+  let (d, cache) := markCachedObject (do return d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
+  IO.println s!"{out}"
+
+/- We can add cost to -/
+/--
+info: longer
+b
+c
+-/
+#guard_msgs in
+#eval do
+  let d := (Doc.cost 2 (toDoc "short")) <^> ("longer" <$$> "b" <$$> "c")
+  -- IO.println s!"{d.toString}"
+  let (d, cache) := markCachedObject (do return d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
+  IO.println s!"{out}"
+
+/- cost does not really matter for tainted since in a tainted state-/
+/-- info: short -/
+#guard_msgs in
+#eval do
+  let d := (Doc.cost 2 (toDoc "short")) <^> "longer"
   -- IO.println s!"{d.toString}"
   let (d, cache) := markCachedObject (do return d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
