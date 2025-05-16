@@ -29,62 +29,6 @@ partial def findPatternStartAux (s pattern : String) : Option String :=
 partial def findPatternStart (s pattern : String) : Option String :=
   findPatternStartAux s pattern
 
-structure FlattenCache where
-  flattenLeft : Bool
-  flattenRight : Bool
-  d : Doc
-
-structure FlattenState where
-  nextId : Nat
-  cached : Std.HashMap Nat (List FlattenCache)
-
-
-abbrev FlattenStateM a := (StateM FlattenState) a
-
-abbrev MetaMover := Option (Doc → Doc)
-
-/--
-does the order matter for decorators? yes because we can have a
-
-example :
-Provide bridgeAny "" <> Provide bridgeSpace "" <> "hello"
-should be transformed to
-Provide bridgeAny (Provide bridgeSpace "hello")
--/
-partial def moveEmptyTextDecorators (mover : MetaMover) (doc : Doc) : (List (Doc × MetaMover)) :=
-  moveEmptyTextDecorators' ()
-where
-  moveEmptyTextDecorators' (mover : MetaMover) : Doc → (List (Doc × MetaMover))
-  | .fail s m => .fail s m
-  | .text s _=> s.length == 0
-  | .newline _ _=> false
-  | .choice left right _=> isEmpty' left && isEmpty' right
-  | .flatten inner _=> isEmpty' inner
-  | .align inner _=> isEmpty' inner
-  | .nest _ inner _=> isEmpty' inner
-  | .concat left right _=>
-    -- this would be exponential time
-    -- because if we miss on left and right then we have try combine all combinations
-    -- it is destroying caches...
-    isEmpty' left && isEmpty' right
-  | .stx s _=> isSyntaxEmpty s
-  | .reset inner _=> isEmpty' inner
-  | .rule _ inner _=> isEmpty' inner
-  | .provide _ _=> false
-  | .require _ _=> false
-  /-
-  Note that this means that cost and bubble comments will be discarded if they are not attached to a relevant object
-  -/
-  | .bubbleComment _ d _=> isEmpty' d
-  | .cost _ d _=> isEmpty' d
-  extendMover (mover: MetaMover) (newMover:Doc → Doc) :=
-    match mover with
-    | some existingMover =>
-      fun d =>
-        existingMover d |> newMover
-    | _ => newMover
-
-
 
 
 /-

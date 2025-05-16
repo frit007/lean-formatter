@@ -610,16 +610,20 @@ def formatSimpleProof : Array Syntax → RuleM Doc
   let negativeTerm ← formatStx negativeTerm
   let statementTerm ← formatStx statementTerm
 
-  let multiline := ifAtom <_> binder <_> colonAtom <_> (flattenDoc statementTerm) <_> thenAtom
-    <> Doc.nest 2 (bridgeHardNl !> (positiveTerm)) <> " "
-  <> bridgeHardNl !> elseAtom
-    <> Doc.nest 2 (bridgeHardNl !> (negativeTerm))
+  return ((ifAtom <_> binder <_> colonAtom <_> statementTerm.group <_> thenAtom
+    <$$> ((Doc.nest 2 positiveTerm <^> bridgeImmediate !> positiveTerm))
+    <$$> elseAtom).group <$$> (Doc.nest 2 negativeAtom <^> bridgeImmediate !> negativeTerm)).group-- better?
 
-  return ifAtom <> " " <> binder <> " " <> colonAtom <> " " <> (flattenDoc statementTerm) <> " " <> thenAtom
-    <> (bridgeSpace !> (flattenDoc positiveTerm)) <> " "
-  <> elseAtom
-    <> (bridgeSpace !> (flattenDoc negativeTerm)) <^>
-  ((bridgeNl <! multiline <^> bridgeImmediate <! Doc.nest 2 (Doc.nl <> multiline)))
+  -- let multiline := ifAtom <_> binder <_> colonAtom <_> (flattenDoc statementTerm) <_> thenAtom
+  --   <> Doc.nest 2 (bridgeHardNl !> (positiveTerm)) <> " "
+  -- <> bridgeHardNl !> elseAtom
+  --   <> Doc.nest 2 (bridgeHardNl !> (negativeTerm))
+
+  -- return ifAtom <> " " <> binder <> " " <> colonAtom <> " " <> (flattenDoc statementTerm) <> " " <> thenAtom
+  --   <> (bridgeSpace !> (flattenDoc positiveTerm)) <> " "
+  -- <> elseAtom
+  --   <> (bridgeSpace !> (flattenDoc negativeTerm)) <^>
+  -- ((bridgeNl <! multiline <^> bridgeImmediate <! Doc.nest 2 (Doc.nl <> multiline)))
 | _ => failure
 
 
@@ -1406,6 +1410,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
   assumeMissing unknown2
   assumeMissing unknown3
   assumeMissing unknown4
+  docComment <!!!> combine (· <!!!> .) #[attrKind, syntaxAtom] <!!!> Doc.nest 2 (combine (· <!!!> ·) #[combine (. <!!!> .) value.getArgs, toDoc colon, toDoc type])
   return docComment <$$> combine (· <**> .) #[attrKind, syntaxAtom] <**> Doc.nest 2 (combine (· <**> ·) #[combine (. <**> .) value.getArgs, toDoc colon, toDoc type])
 | _ => failure
 

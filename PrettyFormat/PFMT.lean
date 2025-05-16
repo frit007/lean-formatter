@@ -26,24 +26,118 @@ private partial def mergeSet [Cost χ] (lhs rhs : List ((Measure χ))) (acc : Li
     else
       mergeSet lhs rs (r :: acc)
 
-def readableBridge (bridge : Bridge) : String := Id.run do
-  let mut res := ""
-  if bridge.overlapsWith bridgeSpace then
-    res := s!"{res}space "
-  if bridge.overlapsWith bridgeNl then
-    res := s!"{res}newline "
+
+
+structure FlattenState where
+  nextId : Nat
+  cached : Std.HashMap (Nat × Bool × Bool × Bool) Doc
+
+abbrev FlattenStateM a := (StateM FlattenState) a
+
+
+def FlattenStateM.genId : FlattenStateM Nat := do
+  let state ← get
+  let _ ← set {state with nextId := state.nextId + 1}
+  return state.nextId
+
+/-
+Funny sideNote: if we change provide bridgeNl to always be attached to a document it would be nicer to work with from the formatters point of view
+
+but the alternative is easier to write Syntax transformers for
+-/
+/--
+We choose to preprocess flatten to simplify formatting later
+
+Flatten converts all newlines to spaces
+
+The interaction between flatten and bridges is less obvious but the rule is:
+"flatten only flattens the bridges inside the flattened section"
+This was chosen to allow comments at the end of a flattened section
+example:
+"a" <**> flatten ("b" <**> "c" <> Provide bridgeNl) <**> "d"
+Is flattened to
+"a" <**> ("b" <_> "c" <> Provide bridgeNl) <**> "d"
+
+-/
+partial def flattenPreprocessor (flattenLeft flattenInner flattenRight: Bool) (d :Doc) : FlattenStateM Doc := do
+  let meta := d.meta
+  if meta.shouldBeCached then
+    let state ← get
+    let key := (meta.id, flattenLeft, flattenInner, flattenRight)
+    match state.cached.get? key with
+    | some d => return d
+    | _ =>
+      let doc ← flattenPreprocessor' d
+      let newId ← FlattenStateM.genId
+      let m : DocMeta := doc.calcMeta
+      let doc := {m with id := newId} |> doc.setMeta
+      modify (fun s => {s with cached := s.cached.insert key doc})
+      return doc
   else
-    if bridge.overlapsWith bridgeSpaceNl then
-      res := s!"{res}spaceNl "
-    if bridge.overlapsWith bridgeHardNl then
-      res := s!"{res}hardNl "
-  if bridge.overlapsWith bridgeNone then
-    res := s!"{res}none "
-  if bridge.overlapsWith bridgeFlex then
-    res := s!"{res}flex "
-  if bridge.overlapsWith bridgeImmediate then
-    res := s!"{res}immediate "
-  return res ++ s!"({bridge})"
+    let doc ← flattenPreprocessor' d
+    let doc := doc.calcMeta |> doc.setMeta
+    return doc
+  -- TODO: update meta
+where
+  flattenPreprocessor'  : Doc → FlattenStateM (Doc)
+    | .fail s m => return (.fail s m)
+    | .text s m => return (.text s m)
+    | .newline a m =>
+      match a with
+      | some s => return .text s m
+      | _ => return .fail "cannot flatten" m
+    | .choice left right m=> do
+      let l ← flattenPreprocessor flattenLeft flattenInner flattenRight left
+      let r ← flattenPreprocessor flattenLeft flattenInner flattenRight right
+      return .choice l r m
+    | .flatten inner _=> do
+      let i ← flattenPreprocessor flattenLeft true flattenRight inner
+      return i
+    | .align inner m => do
+      let i ← flattenPreprocessor flattenLeft flattenInner flattenRight inner
+      return .align i m
+    | .nest i inner m => do
+      let inner ← flattenPreprocessor flattenLeft flattenInner flattenRight inner
+      return .nest i inner m
+    | .concat l r m => do
+      if flattenInner then
+        let l ← flattenPreprocessor flattenLeft true true l
+        let r ← flattenPreprocessor true true flattenRight r
+        return .concat l r m
+      else
+        let l ← flattenPreprocessor false false false l
+        let r ← flattenPreprocessor false false false r
+        return .concat l r m
+    | .stx s _=> panic! "can't flatten syntax"
+    | .reset inner m=> do
+      let inner ← flattenPreprocessor flattenLeft flattenInner flattenRight inner
+      return .reset inner m
+    | .rule r inner m => do
+      let inner ← flattenPreprocessor flattenLeft flattenInner flattenRight inner
+      return .rule r inner m
+    | .provideL b inner m=> do
+      let inner ← flattenPreprocessor flattenLeft flattenInner flattenRight inner
+      if flattenLeft then
+        return .provideL b.flatten inner m
+      else
+        return .provideL b inner m
+    | .provideR b inner m => do
+      let inner ← flattenPreprocessor flattenLeft flattenInner flattenRight inner
+      if flattenRight then
+        return .provideR b.flatten inner m
+      else
+        return .provideR b inner m
+    | .require b m =>
+      if flattenLeft then
+        return .require b.flatten m
+      else
+        return .require b m
+    | .bubbleComment c inner m => do
+      let inner ← flattenPreprocessor flattenLeft flattenInner flattenRight inner
+      return .bubbleComment c inner m
+    | .cost c inner m => do
+      let inner ← flattenPreprocessor flattenLeft flattenInner flattenRight inner
+      return .cost c inner m
 
 def shallowSummary (mss : List (MeasureSet χ)) : String := Id.run do
   let mut res := ""
@@ -52,13 +146,13 @@ def shallowSummary (mss : List (MeasureSet χ)) : String := Id.run do
   for ms in mss do
     match ms.set with
     | [] =>
-      res := s!"{res}\n\n{readableBridge ms.rightBridge} ==> impossible"
+      res := s!"{res}\n\n{ms.rightBridge.str} ==> impossible"
     | x::_ =>
       if x.fail.isSome then
-        res := s!"{res}\n\n{readableBridge ms.rightBridge} ==> {x.fail.get!}"
+        res := s!"{res}\n\n{ms.rightBridge.str} ==> {x.fail.get!}"
       else
         let formatted := String.join (x.layout []).reverse
-        res := s!"{res}\n\n{readableBridge ms.rightBridge} => {formatted}"
+        res := s!"{res}\n\n{ms.rightBridge.str} => {formatted}"
   return res
 
 
@@ -205,7 +299,6 @@ def getId (id:Nat) (flatten:Bool) (cacheCount:Nat): Nat:=
 def getCached [Cost χ] (id indent col: Nat) (bridges : Bridge) (flatten : Bool) (allowTainted : Bool): MeasureResult χ (MeasureGroups χ × Bridge) := do
   let cacheStore ← get
   let bucket := cacheStore.content.get! (getId id flatten cacheStore.size)
-  cacheLog (fun () => s!"Bucket size {bucket.length} the id {id}")
   let (caches, bridges) := foundSolutions indent col [] bridges allowTainted bridges (bucket)
 
   let measureSets := caches |>.foldl (fun (acc : MeasureGroups χ) (cache : Cache χ) =>
@@ -245,15 +338,15 @@ This function efficiently computes a Pareto front for the problem of rendering
 a `Doc` at a certain column position with a certain indentation level and width limit.
 
 leftBridge: the bridges before this document, these limit the types of documents we can create
-rightBridge: the bridges after this document, these limit the types of documents that can follow this document
- - rightBridge is primarily used in a tainted context where we want to provide any legal answer.
+rightBridge: the bridges after this document, these are the bridges that will be followed by leafNodes, they are created by provideR
+expectBridge: the bridges after this document, these limit the types of documents that can follow this document
+ - expectBridge is primarily used in a tainted context where we want to provide any legal answer.
  - but to accomplish this safely we must ensure that we provide legal answers to all possible right bridges.
-   - This comes with the issue that if there are no solutions for all rightbridges, then we will try all of the solutions
+   - This comes with the issue that if there are no solutions for all expectBridge, then we will try all of the solutions
 forceExpand: When evaluating tainted
 -/
-partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (trace : List String) (col indent widthLimit : Nat) (leftBridge rightBridge: Bridge) (flatten forceTainted: Bool) : MeasureResult χ (MeasureGroups χ) := do
+partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (trace : List String) (col indent widthLimit : Nat) (leftBridge NewRightBridge expectBridge: Bridge) (flatten forceTainted: Bool) : MeasureResult χ (MeasureGroups χ) := do
   -- if (← get).giveUp == 0 then
-  --   cacheLog fun _ => (s!"Cache::giveup {ppl.meta.id} {trace.length} {col} {indent} {widthLimit}")
   --   return ← leafSet {
   --     last := col
   --     cost := Cost.text widthLimit 0 0
@@ -266,84 +359,54 @@ partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (trace : 
   -- If we were to exceed the widthLimit we delay any attempt to optimize
   -- the layout of `doc1` in hopes that another branch of this function finds
   -- a non tainted `MeasureSet`.
-    let before ← IO.monoNanosNow
-    measureDiff s!"resolve {doc.kind}"
 
     if doc.meta.shouldBeCached then
-      let __a ← IO.monoNanosNow
       let (measureResults, remainingBridges) ← getCached doc.meta.id indent col leftBridge flatten forceTainted
       if remainingBridges.isEmpty then
-        let __b ← IO.monoNanosNow
-        cacheLog fun _ => (s!"Cache::hit for {doc.meta.id} with {remainingBridges.str} remaining bridges (cache took : {(__b - __a).toFloat / 1000000000.0}ns)")
         -- if the cache found results for all ingoing bridges then return existing result
         return measureResults
       else
-        cacheLog fun _ => (s!"Cache::miss for {doc.meta.id} with {remainingBridges.str} remaining bridges (got {measureResults.fst.length} results)")
         -- only check the bridges that have not already been checked yet
-      let __b ← IO.monoNanosNow
-      cacheLog fun _ => (s!"cache took : {(__b - __a).toFloat / 1000000000.0}ns")
 
-      let value ← exceedCheck doc trace col indent widthLimit remainingBridges rightBridge flatten forceTainted
-      let after ← IO.monoNanosNow
-      -- cacheLog fun _ => (s!"it took (cache) : {(after - before).toFloat / 1000000000.0}ns")
+      let value ← exceedCheck doc trace col indent widthLimit remainingBridges flatten forceTainted
       addToCache doc.meta.id indent col flatten (!forceTainted) remainingBridges value
-      let after2 ← IO.monoNanosNow
-      cacheLog fun _ => (s!"add cache took : {(after2 - after).toFloat / 1000000000.0}ns")
       return value
     else
-      let SIMPLIFY ← exceedCheck doc trace col indent widthLimit leftBridge rightBridge flatten forceTainted
-      let after ← IO.monoNanosNow
-      -- cacheLog fun _ => (s!"it took (no cache) : {(after - before).toFloat / 1000000000.0}ns")
+      let SIMPLIFY ← exceedCheck doc trace col indent widthLimit leftBridge flatten forceTainted
       return SIMPLIFY
 
 
 where
-  exceedCheck (doc : Doc) (trace : List String) (col indent widthLimit : Nat) (leftBridge rightBridge: Bridge) (flatten forceTainted: Bool) : MeasureResult χ (MeasureGroups χ) := do
-    measureDiff "start exceed check"
+  exceedCheck (doc : Doc) (trace : List String) (col indent widthLimit : Nat) (leftBridge : Bridge) (flatten forceTainted: Bool) : MeasureResult χ (MeasureGroups χ) := do
     let exceeds :=
       match doc with
       | .text s _ => indent > widthLimit || col + s.length > widthLimit
       | _ => indent > widthLimit || col > widthLimit
     if exceeds && !forceTainted then
-      let state :TaintedState := {trace:=trace, col:=col, indent:=indent, widthLimit:=widthLimit, leftBridge := rightBridge, expectBridge:=rightBridge, flatten:=flatten}
+      let state :TaintedState := {trace:=trace, col:=col, indent:=indent, widthLimit:=widthLimit, leftBridge := leftBridge, rightBridge := NewRightBridge, expectBridge:=expectBridge, flatten:=flatten}
       let tainted := (TaintedTrunk.center doc state)
-      measureDiff "end exceed check (tainted)"
       return ([], [tainted])
     else
-      measureDiff "end exceed check"
       return orderMeasureGroup (← core doc trace col indent widthLimit leftBridge flatten forceTainted)
   /-
   The core resolver that actually computes the `MeasureSet`s that result from rendering `doc`
   in the given context.
   -/
-  core (ppl : Doc) (trace : List String) (col indent widthLimit : Nat) (leftBridge : Bridge) (flatten forceExpand : Bool): MeasureResult χ (MeasureGroups χ) := do
+  core (ppl : Doc) (trace : List String) (col indent widthLimit : Nat) (leftBridge: Bridge) (flatten forceExpand : Bool): MeasureResult χ (MeasureGroups χ) := do
     -- If we end up in this function we know that this cannot exceed the widthLimit
     -- and can thus savely return a set in all cases except concat.
     match ppl with
     | .text s _ =>
-      measureDiff "start of text"
-      if s.length == 0 then
-        -- panic! s!"leftbridge do nothing {leftBridge} s:{s}"
+      if leftBridge == bridgeFlex then
         leafSet {
-          last := col + s.length,
-          cost := Cost.text widthLimit col s.length
-          layout := fun ss => s :: ss
-          spacingR := leftBridge
+            last := col + s.length,
+            cost := Cost.text widthLimit col s.length
+            layout := fun ss => s :: ss
+            spacingR := NewRightBridge
           }
       else
-        if leftBridge == bridgeFlex then
-          leafSet {
-              last := col + s.length,
-              cost := Cost.text widthLimit col s.length
-              layout := fun ss => s :: ss
-              spacingR := bridgeFlex
-            }
-        else
-          measureDiff "expandedBridgeStart"
-          let expandedBridge := possibilitiesToDoc leftBridge flatten false <> s
-          -- cacheLog (s!"TODO: expandBridge {leftBridge} => {expandedBridge.toString}}")
-          measureDiff "expandedBridgeEnd"
-          core expandedBridge trace col indent widthLimit bridgeFlex flatten forceExpand
+        let expandedBridge := possibilitiesToDoc leftBridge flatten false <> s
+        core expandedBridge trace col indent widthLimit bridgeFlex flatten forceExpand
     | .newline flattened _ =>
       if leftBridge == bridgeFlex then
         if flatten then
@@ -355,100 +418,72 @@ where
         else
           leafSet {
             last := indent,
-            cost := Cost.nl indent,
+            cost := Cost.nl,
             layout := fun ss =>  "".pushn ' ' indent :: "\n" :: ss
             spacingR := bridgeFlex
           }
       else
         core (possibilitiesToDoc leftBridge flatten false <> (nl)) trace col indent widthLimit bridgeFlex flatten forceExpand
     | .concat lhs rhs m =>
-      measureDiff "before meta check"
-      measureDiff "after meta check"
-      let left ← (lhs.resolve trace col indent widthLimit leftBridge rhs.meta.leftBridge flatten forceExpand)
-      cacheLog fun _ => (s!"CONCAT: left ? {shallowSummary left.fst} tainted ??{left.snd.length}")
-      let taintedState : TaintedState := {trace:=trace, col:=col, indent:=indent, widthLimit:=widthLimit, leftBridge := leftBridge, expectBridge:=rightBridge, flatten:=flatten}
-      measureDiff "after concat left (before right)"
+      let left ← (lhs.resolve trace col indent widthLimit leftBridge bridgeFlex rhs.meta.leftBridge flatten forceExpand)
+      let taintedState : TaintedState := {trace:=trace, col:=col, indent:=indent, widthLimit:=widthLimit, leftBridge := leftBridge, rightBridge:= NewRightBridge, expectBridge:=expectBridge, flatten:=flatten}
       processConcatGroups left rhs forceExpand taintedState m.id
       -- processConcatList (lhs.resolve trace col indent widthLimit leftBridge flatten forceExpand) trace (fun l newSpacing => rhs.resolve trace l.last indent widthLimit newSpacing flatten forceExpand)
     | .choice lhs rhs _ => do
-      measureDiff "choice before"
-      let left ← (lhs.resolve trace col indent widthLimit leftBridge rightBridge flatten forceExpand)
-      let right ← (rhs.resolve trace col indent widthLimit leftBridge rightBridge flatten forceExpand)
-      measureDiff "choice after"
-      let __a ← IO.monoNanosNow
+      let left ← (lhs.resolve trace col indent widthLimit leftBridge NewRightBridge expectBridge flatten forceExpand)
+      let right ← (rhs.resolve trace col indent widthLimit leftBridge NewRightBridge expectBridge flatten forceExpand)
       let combined := combineMeasureSetGroups left right
-      let __b ← IO.monoNanosNow
-      measureDiff "choice choice"
-      cacheLog fun _ => s!"choice: {(__b - __a).toFloat / 1000000000.0}s ({roughSizeOfMeasureSet combined})"
-      -- cacheLog (s!"TODO: combine left ({shallowSummary left.fst}) right ({shallowSummary right.fst}) combined ({shallowSummary combined.fst})")
       return combined
-    | .nest indentOffset doc _ => doc.resolve trace col (indent + indentOffset) widthLimit leftBridge rightBridge flatten forceExpand
-    | .align doc _ => doc.resolve trace col col widthLimit leftBridge rightBridge flatten forceExpand
-    | .reset doc _ => doc.resolve trace col 0 widthLimit leftBridge rightBridge flatten forceExpand
+    | .nest indentOffset doc _ => doc.resolve trace col (indent + indentOffset) widthLimit leftBridge NewRightBridge expectBridge flatten forceExpand
+    | .align doc _ => doc.resolve trace col col widthLimit leftBridge NewRightBridge expectBridge flatten forceExpand
+    | .reset doc _ => doc.resolve trace col 0 widthLimit leftBridge NewRightBridge expectBridge flatten forceExpand
     | .fail e _ => leafSet {
       last := 0
-      cost := Cost.nl indent
+      cost := Cost.nl
       layout := (fun _ => ["fail"])
       fail := [e::trace]
     }
     -- At the moment we can't narrow down the spacing options for a `spacing` document.
     -- this could be done by
     -- desugaring spacing to choice
-    | .provide s _ =>
-      if leftBridge == bridgeFlex then
-        leafSet {
-          last := col
-          cost := Cost.text widthLimit col 0
-          layout := fun ss => ss
-          spacingR := s
-        }
+    | .provideL b inner _ =>
+      let possibilities := leftBridge.provideIntersection b
+      if possibilities == bridgeNull then
+        (Doc.fail "impossible bridge").resolve trace col indent widthLimit bridgeFlex NewRightBridge (expectBridge.provideIntersection b) flatten forceExpand
       else
-        let possibilities := leftBridge.intersection s
-        if possibilities == bridgeNull then
-          (Doc.fail "impossible bridge").resolve trace col indent widthLimit bridgeFlex rightBridge flatten forceExpand
-        else
-          leafSet {
-            last := col
-            cost := Cost.text widthLimit col 0
-            layout := fun ss => ss
-            spacingR := possibilities
-          }
-
-    | .require s _ =>
+        inner.resolve trace col indent widthLimit possibilities NewRightBridge expectBridge flatten forceExpand
+    | .provideR b inner _ =>
+      let possibilities := NewRightBridge.provideIntersection b
+      if possibilities == bridgeNull then
+        (Doc.fail "impossible bridge").resolve trace col indent widthLimit bridgeFlex NewRightBridge (expectBridge.provideIntersection b) flatten forceExpand
+      else
+        inner.resolve trace col indent widthLimit possibilities NewRightBridge expectBridge flatten forceExpand
+    | .require b _ =>
       if leftBridge == bridgeFlex then
         let fail : Doc := Doc.fail "require given no bridges"
-        fail.resolve trace col indent widthLimit bridgeFlex rightBridge flatten forceExpand
+        fail.resolve trace col indent widthLimit bridgeFlex NewRightBridge expectBridge flatten forceExpand
       else
-        let possibilities := leftBridge.intersection s
+        let possibilities := leftBridge.requireIntersection b
         let choices := (possibilitiesToDoc possibilities flatten true)
-        choices.resolve trace col indent widthLimit bridgeFlex rightBridge flatten forceExpand
-      | .rule s doc _ =>
-        doc.resolve (s::trace) col indent widthLimit leftBridge rightBridge flatten forceExpand
-      | .flatten doc _ =>
-        doc.resolve trace col indent widthLimit leftBridge rightBridge true forceExpand
-      | .stx _ _ =>
-        panic! "Syntax should be expanded before reaching this point"
-      | .cost c doc _ =>
-        let inner ← doc.resolve trace col indent widthLimit leftBridge rightBridge flatten forceExpand
-        let lineCost : χ := (List.range c).foldl (fun (acc: χ) _ => acc + (Cost.nl 0)) (Cost.text 0 0 0)
-        let withCost := inner.fst.map (fun ms => {ms with set := ms.set.map (fun m => m.addCost (lineCost))})
-        cacheLog (fun _ => s!"cost:: {inner.snd.length}")
-        match withCost.head? with
-        | some ms =>
-          match ms.set.head? with
-          | some m =>
-            cacheLog (fun _ => s!"{repr m.cost}")
-          | _ =>
-            cacheLog (fun _ => "cost:: one")
-        | _ =>
-            cacheLog (fun _ => "cost:: two")
+        (choices).resolve trace col indent widthLimit bridgeFlex NewRightBridge expectBridge flatten forceExpand
+    | .rule s doc _ =>
+      doc.resolve (s::trace) col indent widthLimit leftBridge NewRightBridge expectBridge flatten forceExpand
+    | .flatten doc _ =>
+      -- doc.resolve trace col indent widthLimit leftBridge NewRightBridge expectBridge true forceExpand
+      panic! "flatten should be handled before"
+    | .stx _ _ =>
+      panic! "Syntax should be expanded before reaching this point"
+    | .cost c doc _ =>
+      let inner ← doc.resolve trace col indent widthLimit leftBridge NewRightBridge expectBridge flatten forceExpand
+      let lineCost : χ := (List.range c).foldl (fun (acc: χ) _ => acc + (Cost.nl)) (Cost.text 0 0 0)
+      let withCost := inner.fst.map (fun ms => {ms with set := ms.set.map (fun m => m.addCost (lineCost))})
 
-        -- IO.println s!"withCost {repr withCost[0]!.set[0]!.cost}"
-        return (withCost, [TaintedTrunk.cost c inner.snd])
-      | .bubbleComment comment doc _ =>
-        let inner ← doc.resolve trace col indent widthLimit leftBridge rightBridge flatten forceExpand
-        let withComment := inner.fst.map (fun ms => {ms with set := ms.set.map (fun m => m.prependLayout (placeComment 0 comment))})
-        return (withComment, [TaintedTrunk.bubbleComment comment inner.snd])
+      -- IO.println s!"withCost {repr withCost[0]!.set[0]!.cost}"
+      return (withCost, [TaintedTrunk.cost c inner.snd])
+    | .bubbleComment comment doc _ =>
+      let inner ← doc.resolve trace col indent widthLimit leftBridge NewRightBridge expectBridge flatten forceExpand
+      let withComment := inner.fst.map (fun ms => {ms with set := ms.set.map (fun m => m.prependLayout (placeComment 0 comment))})
+      return (withComment, [TaintedTrunk.bubbleComment comment inner.snd])
 
   /-
   Compute the set that contains the concatenations of all possible lhs measures
@@ -471,18 +506,14 @@ where
             dedup rights (currentBest :: result) current
 
       -- let rights := processRight l (l.spacingR)
-      measureDiff s!"concat before resolve"
-      let (rightResults, rightTainted) ← right.resolve state.trace l.last state.indent state.widthLimit (l.spacingR) state.expectBridge state.flatten forceExpand
+      let (rightResults, rightTainted) ← right.resolve state.trace l.last state.indent state.widthLimit (l.spacingR) state.rightBridge state.expectBridge state.flatten forceExpand
       -- return (rightResults, rightTainted)
-      -- cacheLog fun _ => s!"CONCAT::LEFT  {l.layout []} rightDoc:{right.toString}"
-      cacheLog fun _ => s!"CONCAT::LEFT  {l.layout []} "
       let tainted := if rightTainted.length > 0 then
           [TaintedTrunk.rightTainted l rightTainted state concatId]
         else
           []
       let mut res : MeasureGroups χ := ([], tainted)
       -- panic! s!"TODO: remove this panic {rightResults.length}"
-      measureDiff s!"concat {rightResults.length}"
       for rightSets in rightResults do
         -- dedup like pretty expressive
         -- TODO: test if dedup is worth it here
@@ -505,15 +536,11 @@ where
     let (ml, taintedLeft) := left
 
     -- panic! s!"TODO: left ? {shallowSummary ml}"
-    -- cacheLog (s!"TODO: left ? {shallowSummary ml}")
-    -- cacheLog "a"
-    let __a ← IO.monoNanosNow
 
     let (t, taintedRight) ← combineMeasureSetGroupsExpand (ml, []) (fun _ m =>
       concatOneWithRight m
     )
 
-    let __b ← IO.monoNanosNow
 
     -- if we provide a solution to all required bridges then we can discard left tainted, because we already have a possible solution to all scenarios
 
@@ -525,8 +552,6 @@ where
 
     let expected := if state.flatten then state.expectBridge.flatten else state.expectBridge
 
-    if (taintedLeft.length > 0 && !(providedBridges.canHandle expected)) != (taintedLeft.length > 0) then
-      cacheLog fun _ => s!"CONCAT::LEFT::TAINTED::SKIP::DIFF provided:{providedBridges.str} expected:{expected.str} unflattened {state.expectBridge.str}"
     -- let providedBridges := if state.flatten then providedBridges.flatten else providedBridges
     let tainted := if taintedLeft.length > 0 && !(providedBridges.canHandle expected) then
     -- let tainted := if taintedLeft.length > 0 then
@@ -573,19 +598,14 @@ partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrun
           cachedResults := mergeTaintedMeasures (right.rightBridge, cachedResult) cachedResults
 
       if remainingBridges == bridgeNull then
-        cacheLog (fun _ => s!"Tainted::cache::hit::{id}")
         return cachedResults
-      cacheLog (fun _ => s!"Tainted::cache::miss::{id} missing {remainingBridges.str} originally {state.expectBridge.str}")
       let foundResults ← expandTainted' remainingBridges trunk
       let foundBridges := foundResults.foldl (fun acc b => acc ||| b.fst) 0
 
       if foundResults.length > 0 then
-
         let measureGroups := taintedMeasureToMeasureGroups foundResults
-        cacheLog (fun _ => s!"Tainted::cache::add::{id} for bridges {foundBridges.str} ({foundResults.length})")
         addToCache id state.indent state.col state.flatten true state.leftBridge measureGroups
-      else
-        cacheLog (fun _ => s!"Tainted::cache::fail did not expand to anything")
+
       return foundResults
     else
       expandTainted' state.expectBridge trunk
@@ -604,29 +624,21 @@ partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrun
   | .leftTainted (left : List (TaintedTrunk χ)) (right:Doc) (state:TaintedState) (id:Nat) => do
     let mut result : TaintedResult χ := []
     let mut coveredBridges := bridgeNull
-    if id != 0 then
-      cacheLog fun _ => (s!"Tainted::Left::cache::{id}")
 
-    cacheLog fun _ => (s!"Tainted::Left::{id} options {left.length}")
     for l in left do
       let leftExpanded ← expandTainted l
-      cacheLog fun _ => (s!"Tainted::Left::{id} expanded to {leftExpanded.length} options")
       for (leftBridge, leftMeasure) in leftExpanded do
         if rightBridge.contains coveredBridges then
           return result -- we have found a possible solution to all bridges the next item requires
-        cacheLog fun _ => (s!"Tainted::Left::{id} left measure: {leftMeasure.layout []} last:{leftMeasure.last}")
 
-        let (rights, tainted) ← right.resolve state.trace leftMeasure.last state.indent state.widthLimit leftBridge rightBridge state.flatten true
+        let (rights, tainted) ← right.resolve state.trace leftMeasure.last state.indent state.widthLimit leftBridge rightBridge state.expectBridge state.flatten true
         for t in tainted do
           if rightBridge.contains coveredBridges then
             return result
-          -- cacheLog (s!"Tainted::Left tainted left {t} last:{t.last}")
           for (rightBridge, rightMeasure) in (← expandTainted t) do
             if rightMeasure.fail.isNone then
               coveredBridges := coveredBridges ||| rightBridge
-            -- cacheLog (s!"Tainted::Left tainted left {leftMeasure.layout []} last:{leftMeasure.last} right {rightMeasure.layout []} last:{rightMeasure.last}")
             result := mergeTaintedMeasures (rightBridge, leftMeasure.concat rightMeasure) result
-        cacheLog fun _ => (s!"Tainted::Left::{id} found rights: {rights.length} options (tainted rights : {tainted.length})")
         for right in rights do
           if right.set.any (fun m => m.fail.isNone) then
             coveredBridges := coveredBridges ||| right.rightBridge
@@ -634,35 +646,25 @@ partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrun
           match right.set with
           | [] => result := result
           | rightMeasure :: _ =>
-            cacheLog fun _ => (s!"Tainted::Left::{id} b:{rightMeasure.spacingR.str} ({right.rightBridge}) right {rightMeasure.layout []} combined layout {(leftMeasure.concat rightMeasure).layout []} fail: {(leftMeasure.concat rightMeasure).fail} fail just right {rightMeasure.fail}")
             result := mergeTaintedMeasures (right.rightBridge, leftMeasure.concat rightMeasure) result
-            -- cacheLog fun
-    cacheLog fun _ => (s!"Tainted::Left combined result {result.length}")
 
     return result
   | .rightTainted left rights s (id:Nat) => do
-    if id != 0 then
-      cacheLog fun _ => (s!"Tainted::Right::cache::{id}")
-    cacheLog fun _ => (s!"Tainted::Right::{id} tainted Right layout :{left.layout []} last:{left.last} rightOptions:{rights.length}")
     let mut result : TaintedResult χ := []
     let mut coveredBridges := bridgeNull
 
     for right in rights do
       if rightBridge.contains coveredBridges then
-        cacheLog (fun _ => s!"Tainted::Right we have found enough bridges wanted:{s.expectBridge} have {coveredBridges}")
         return result -- we have found a possible solution to all bridges the next item requires
       let expanded ← expandTainted right
-      cacheLog (fun _ => s!"Tainted::Right expanded to {expanded.length}")
       for (rightBridge, rightMeasure) in expanded do
         let combined := left.concat rightMeasure
-        cacheLog (fun _ => s!"Tainted::Right a solution? {combined.layout []}")
         result := mergeTaintedMeasures (rightBridge, combined) result
 
     return result
   | .center doc state => do
     let mut result : TaintedResult χ := []
-    let (resolved, tainted) ← doc.resolve state.trace state.col state.indent state.widthLimit state.expectBridge state.expectBridge state.flatten true
-    cacheLog fun _ => (s!"Tainted::Center and return... {resolved.length}")
+    let (resolved, tainted) ← doc.resolve state.trace state.col state.indent state.widthLimit state.expectBridge state.rightBridge state.expectBridge state.flatten true
     for t in tainted do
       result := mergeTaintedResults (← expandTainted t) result
     for ms in resolved do
@@ -675,7 +677,7 @@ partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrun
     for t in trunks do
       result := mergeTaintedResults (← expandTainted t) result
 
-    let lineCost : χ := (List.range c).foldl (fun (acc: χ) _ => acc + (Cost.nl 0)) (Cost.text 0 0 0)
+    let lineCost : χ := (List.range c).foldl (fun (acc: χ) _ => acc + (Cost.nl)) (Cost.text 0 0 0)
     return result.map (fun m => (m.fst, m.snd.addCost (lineCost)))
   | .bubbleComment c trunks => do
     let mut result : TaintedResult χ := []
@@ -736,7 +738,7 @@ Find an optimal layout for a document and render it.
 -/
 partial def Doc.print (χ : Type) [Inhabited χ] [Repr χ] [Cost χ] (doc : Doc) (cacheSize col widthLimit : Nat) (log : Option (List String)): IO (PrintResult χ) := do
   -- let (preferredGroups, cache) := ((doc.resolve (χ := χ) [] col 0 widthLimit bridgeFlex bridgeFlex false false).run (initCache cacheSize log)).run
-  let (preferredGroups, cache) ← ((doc.resolve (χ := χ) [] col 0 widthLimit bridgeFlex bridgeFlex false false).run (initCache cacheSize log))
+  let (preferredGroups, cache) ← ((doc.resolve (χ := χ) [] col 0 widthLimit bridgeFlex bridgeFlex bridgeFlex false false).run (initCache cacheSize log))
   let (goodSolution, solutions, tainted) := removeEndingBridges preferredGroups
   let (failedResult, cache) ← theFailedSolution preferredGroups |>.run cache
   if goodSolution then
