@@ -5,7 +5,11 @@ import Lean
 
 open Lean PrettyFormat
 
+set_option pf.debugPPL true
 
+#format
+/-- Hey!-/
+def a : Nat :=2
 
 /--
 info:
@@ -166,9 +170,4 @@ open PrettyFormat
 
 
 -- set_option pf.debugLog true
-set_option pf.debugSyntax true
-set_option pf.debugPPL true
-
-instance : Inter NameSet where
-    inter := fun s t =>
-        s.fold (fun r n => if t.contains n then r.insert n else r) {}
+-- set_option pf.debugSyntax true

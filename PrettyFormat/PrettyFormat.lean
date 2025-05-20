@@ -28,8 +28,8 @@ where
   | .concat left right _ => prettyPrint' indent left ++ prettyPrint' indent right
   | .stx stx _ => s!"stx {stx}"
   | .reset s _ => s!"reset {prettyPrint' 0 s}"
-  | .rule name s _ => s!"rule {name} {prettyPrint' indent s}"
-  | .provide s _ => s!"provide {s}"
+  | .rule name s _ => s!"rule {name} ({prettyPrint' indent s})"
+  | .provide s d _ => s!"provide {s} ({prettyPrint' indent d})"
   | .require s _ => s!"require {s}"
   | .cost s d _ => s!"cost {s} ({prettyPrint' indent d})"
   | .bubbleComment s d _ => s!"bubbleComment {s} ({prettyPrint' indent d})"
@@ -271,7 +271,7 @@ register_option pf.debugLog : Bool := {
 }
 
 register_option pf.cacheDistance : Nat := {
-    defValue := 3
+    defValue := 2
     group    := "pf"
     descr    := "(pretty format) To reduce memory usage we do not have cache every element. A larger cache distance means fewer elements gets cached"
 }

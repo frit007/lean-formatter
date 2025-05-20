@@ -30,96 +30,19 @@ partial def findPatternStart (s pattern : String) : Option String :=
   findPatternStartAux s pattern
 
 
-
-/-
-Funny sideNote: if we change provide bridgeNl to always be attached to a document it would be nicer to work with from the formatters point of view
-
-but the alternative is easier to write Syntax transformers for
--/
-/--
-We choose to preprocess flatten to simplify formatting later
-
-Flatten converts all newlines to spaces
-
-The interaction between flatten and bridges is less obvious but the rule is:
-"flatten only flattens the bridges inside the flattened section"
-This was chosen to allow comments at the end of a flattened section
-example:
-"a" <**> flatten ("b" <**> "c" <> Provide bridgeNl) <**> "d"
-Is flattened to
-"a" <**> ("b" <_> "c" <> Provide bridgeNl) <**> "d"
-
--/
-partial def flattenPreprocessor (flattenLeft flattenRight: Bool) (d :Doc) : FlattenStateM Doc := do
-  let meta := d.meta
-  if meta.shouldBeCached then
-    let state ← get
-    let existing := match state.cached.get? meta.id with
-    | some e => e.find? (fun (c:FlattenCache) => c.flattenLeft == flattenLeft && c.flattenRight == flattenRight)
-    | _ => none
-
-    match existing with
-    | some e => return e.d
-    | _ => flattenPreprocessor' flattenLeft flattenRight d
-  else
-    flattenPreprocessor' flattenLeft flattenRight d
-  -- TODO: update meta
-where
-  flattenPreprocessor' (flattenLeft flattenRight: Bool) : Doc → FlattenStateM (Doc × Bridge)
-    | .fail s m => return (.fail s m, m.leftBridge)
-    | .text s m => return (.text s m, m.leftBridge)
-    | .newline a m =>
-      match a with
-      | some s => return (.text s m, m.leftBridge)
-      | _ => return (.fail "cannot flatten" m, m.leftBridge)
-    | .choice left right _=> do
-      let l ← flattenPreprocessor flattenLeft flattenRight left
-      let r ← flattenPreprocessor flattenLeft flattenRight right
-      return (.choice l r, l.meta.leftBridge)
-    | .flatten inner _=> do
-      let i ← flattenPreprocessor flattenLeft flattenRight inner
-      return (i, i.meta.leftBridge)
-    | .align inner m => do
-      let i ← flattenPreprocessor flattenLeft flattenRight inner
-      return (.align i m, i.meta.leftBridge)
-    | .nest i inner m => do
-      let inner ← flattenPreprocessor flattenLeft flattenRight inner
-      return (.nest i inner m, inner.meta.leftBridge)
-    | .concat left right m =>
-      -- we could ask: contains text
-      -- not good enough because: uncertain if right side contains choice (and for that matter it is uncertain whether left side contains text)
-      -- leads to the expansion problem again...
-      -- the problem is require and provide?
-      -- Can I restructure provide and require to make it simpler
-      -- otherwise I must do rewrites
-      -- My problem is that I do not know whether I want provide right or left
-      -- I could split it into left provide and right provide
-      -- require is always left
-      -- I don't like that <_> <**> <$$> operators must check before applying to a side
-      -- however that is possible
-      -- I could keep the nodes and just move them to wrap the next non empty node (This is ruined by choice)
-
-      isEmpty' left && isEmpty' right
-    | .stx s _=> panic! "can't flatten syntax"
-    | .reset inner _=> isEmpty' inner
-    | .rule _ inner _=> isEmpty' inner
-    | .provide _ _=> false
-    | .require _ _=> false
-    | .bubbleComment _ d _=> isEmpty' d
-    | .cost _ d _=> isEmpty' d
-
 -- since the result might contain Syntax we expand it now
 -- At this point we also tag the syntax with Ids, bug only if they should be cached
 -- At this point we want to add bridgeInformation
 -- At this point we could also remove failures (we wait until now to because otherwise failure can not be cascade across syntax)
 partial def expandSyntax (r : RuleRec) (ppl : Doc) : FormatM Doc := do
+  -- dbg_trace s!"expanding: {repr ppl}"
   if ppl.meta.hasBeenExpanded then
     return ppl
   match ppl with
   | .fail s _ => return (.fail s)
   | .text s _ => return (.text s)
   | .newline s _ => return (.newline s)
-  | .choice left right _ => do
+  | .choice left right m => do
     let left ← expandSyntax r left
     let right ← expandSyntax r right
     match left, right with
@@ -128,17 +51,17 @@ partial def expandSyntax (r : RuleRec) (ppl : Doc) : FormatM Doc := do
     | _, .fail _ =>
       return left
     | _, _ =>
-      cachePPL (.choice left right) (max left.meta.cacheWeight right.meta.cacheWeight) (left.meta.leftBridge ||| right.meta.leftBridge)
-  | .flatten inner _ =>
+      cachePPL (.choice left right m) (max left.meta.cacheWeight right.meta.cacheWeight)
+  | .flatten inner m =>
     let inner ← expandSyntax r inner
-    cachePPL (.flatten inner) (inner.meta.cacheWeight) (inner.meta.leftBridge.flatten)
-  | .align inner _ =>
+    cachePPL (.flatten inner m) (inner.meta.cacheWeight)
+  | .align inner m =>
     let inner ← expandSyntax r inner
-    cachePPL (.align inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
-  | .nest n inner _ =>
+    cachePPL (.align inner m) (inner.meta.cacheWeight)
+  | .nest n inner m =>
     let inner ← expandSyntax r inner
-    cachePPL (.nest n inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
-  | .concat left right _ =>
+    cachePPL (.nest n inner m) (inner.meta.cacheWeight)
+  | .concat left right m =>
     let left ← expandSyntax r left
     let right ← expandSyntax r right
     match left, right with
@@ -148,42 +71,53 @@ partial def expandSyntax (r : RuleRec) (ppl : Doc) : FormatM Doc := do
       return Doc.fail s
     | _, _ =>
       -- Note that in case of unknown we over estimate the bridges required
-      cachePPL (.concat left right) (max left.meta.cacheWeight right.meta.cacheWeight) (left.meta.leftBridge)
-  | .rule name inner _ =>
+      dbg_trace s!"cachePPL {repr left.meta.cacheWeight} {repr right.meta.cacheWeight}"
+      cachePPL (.concat left right m) (max left.meta.cacheWeight right.meta.cacheWeight)
+  | .rule name inner m =>
     let inner ← expandSyntax r inner
-    cachePPL (.rule name inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
-  | .bubbleComment s inner _ =>
+    cachePPL (.rule name inner m) (inner.meta.cacheWeight)
+  | .bubbleComment s inner m =>
     let inner ← expandSyntax r inner
-    cachePPL (.bubbleComment s inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
+    cachePPL (.bubbleComment s inner m) (inner.meta.cacheWeight)
   | .stx stx _ => return ← r stx
-  | .reset inner _ =>
+  | .reset inner m =>
     let inner ← expandSyntax r inner
-    cachePPL (.reset inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
-  | .provide s _ => cachePPL (.provide s) 0 s
-  | .require s _ => cachePPL (.require s) 0 s
-  | .cost c inner _ =>
+    cachePPL (.reset inner m) (inner.meta.cacheWeight)
+  | .provide b inner m  =>
     let inner ← expandSyntax r inner
-    cachePPL (.cost c inner) (inner.meta.cacheWeight) (inner.meta.leftBridge)
+    cachePPL (.provide b inner m) 0
+  | .require b _ => cachePPL (.require b) 0
+  | .cost c inner m =>
+    let inner ← expandSyntax r inner
+    cachePPL (.cost c inner m) (inner.meta.cacheWeight)
     -- cachePPL (.cost c) 0 bridgeFlex
 where
-
-  cachePPL (doc:Doc) (childCacheWeight:Nat) (leftBridge:Bridge := bridgeFlex): FormatM Doc := do
-    if childCacheWeight >= (← get).cacheDistance then
+  cachePPL (doc:Doc) (childCacheWeight:Nat) : FormatM Doc := do
+    let newMeta := doc.calcMeta
+    -- dbg_trace s!"cachePPL {repr doc} {repr newMeta}"
+    -- if newMeta.shouldBeExpanded then
+    --   return doc
+    -- else
+    -- if childCacheWeight >= (← get).cacheDistance then
+    if childCacheWeight >= 2 then
       -- return doc leftBridge (← FormatM.genId) 0 true
+      dbg_trace s!"cachePPL we generate a new id"
       return doc.setMeta {
+        newMeta with
         cacheWeight := 0,
-        leftBridge := leftBridge,
         id := ← FormatM.genId
       }
     else
+      dbg_trace s!"cachePPL we skip new id"
       return doc.setMeta {
+        newMeta with
         cacheWeight := childCacheWeight + 1,
-        leftBridge := leftBridge,
         id := 0
       }
 
 
 partial def findFirstMatch (fmts : List (Name → Option Rule)) (kind : SyntaxNodeKind) (r : RuleRec) (stx : Syntax) :FormatM (List FormatError ⊕ Doc):= do
+  -- dbg_trace s!"findFirstMatch {stx.getKind}"
   let mut errors : List FormatError := []
   for fmt in fmts do
     -- let options := pFormatAttr.getValues env kind
@@ -194,6 +128,7 @@ partial def findFirstMatch (fmts : List (Name → Option Rule)) (kind : SyntaxNo
     | some f =>
       match ← f stx.getArgs with
       | .ok ppl =>
+
         let res ← expandSyntax r ppl
         -- if stx.getKind == `Lean.Parser.Tactic.tacticSeq then
         --   let diag := (← get).diagnostic
@@ -247,11 +182,8 @@ def commentInfoToEndOfLine (c : CommentInfo) : Doc :=
 
 def CommentInfoToBubbleComment (c : CommentInfo) (p:Doc) : Doc :=
   let comments := commentInfoToStrings c
-    |>.foldl (fun (acc) (c:String) => Doc.cost 3 (Doc.bubbleComment c acc)) (p)
+    |>.foldl (fun (acc:Doc) (c:String) => costDoc 3 (bubbleCommentDoc c acc)) (p)
   comments
-
--- def CommentInfo.toDocs (c : CommentInfo) : Doc :=
-
 
 partial def parseComments (comments:List CommentInfo): List Char → (List CommentInfo)
 | '-'::'-'::xs =>
@@ -408,7 +340,7 @@ partial def pf (formatters : Formatters) (stx: Syntax): FormatM Doc := updateSyn
       | Sum.inr ppl =>
         -- if stx.getKind == `Lean.Parser.Tactic.tacticSeq then
         --   return text "capture good"
-        return Doc.rule (toString kind) ppl
+        return Doc.rule (toString kind) ppl {containsWhiteSpace := ppl.meta.containsWhiteSpace}|>.updateMeta
       | Sum.inl errs =>
         -- if stx.getKind == `Lean.Parser.Tactic.tacticSeq then
         --   return text "capture err"
@@ -424,7 +356,7 @@ partial def pf (formatters : Formatters) (stx: Syntax): FormatM Doc := updateSyn
             v := (e, (← get).stx)::v
           set {s with diagnostic := {d with failures := v}}
 
-        return Doc.rule (toString kind) (← pfCombine formattingRule args)
+        return (Doc.rule (toString kind) (← pfCombine formattingRule args)) {containsWhiteSpace := false/- Will be updated-/}|>.updateMeta
   | .atom (info : SourceInfo) (val : String) =>
     return (surroundWithComments info (toDoc val))
 
@@ -445,6 +377,7 @@ def combine [ToDoc a] (sep: Doc → Doc → Doc) (stxArr : Array a) : Doc := Id.
       combined := sep combined p'
   return combined
 
+#eval (combine (.<**> .) #["a", "", "c"]).toString
 
 def sep [ToDoc a] (stxs : Array a) : Doc :=
   (combine (.<_>.) stxs) <^> (combine (.<$$>.) stxs)
@@ -487,7 +420,6 @@ def extractTopLevelCommands (s : Frontend.State) : IO (Array CommandSyntax):= do
   for infoTree in s.commandState.infoState.trees.toArray do
     match infoTree with
     | InfoTree.context i (InfoTree.node (Info.ofCommandInfo {stx, ..}) _) =>
-
       match i with
       | .commandCtx { env, currNamespace, openDecls, options,.. } =>
         topLevelCmds := topLevelCmds.push {env, options, currNamespace, openDecls, stx}
@@ -797,22 +729,6 @@ initialize formattedCode : IO.Ref String ← IO.mkRef "initialString"
 --     else
 --       return ppl <> sep
 
-def formatThen [ToDoc a] [ToDoc b] (sep : a) (ppl : b) : Doc :=
-  let p := toDoc ppl
-  if isEmpty p then
-    toDoc ""
-  else
-    p <> sep
-
-def formatBefore [ToDoc a] [ToDoc b] (sep : a) (ppl : b) : Doc :=
-  let p := toDoc ppl
-  if isEmpty p then
-    toDoc ""
-  else
-    sep <> p
-
-infixr:45 " ?> " => fun l r => formatThen r l
-infixr:45 " <? " => fun l r => formatBefore l r
 
 
 instance : Alternative RuleM where

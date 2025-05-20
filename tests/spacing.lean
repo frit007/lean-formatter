@@ -1,7 +1,9 @@
 import PFMT
 import BaseFormatter
 
+open Lean
 open PrettyFormat
+
 -- this functions assumes that there are no Syntax objects in the doc
 partial def markCachedObject (doc:FormatM Doc) : (Doc × FormatState) :=
   let (doc, cache) := doc.run {formattingFunction := fun _ _ _ _ =>
@@ -45,7 +47,7 @@ a
 /-- info: bbbbbbbbbbbbbbbbbbbb -/
 #guard_msgs in
 #eval do
-  let d := Doc.provide bridgeImmediate <> (bridgeImmediate <! "bbbbbbbbbbbbbbbbbbbb" <^> "" <$$> "a")
+  let d := provideDoc' bridgeImmediate <> (bridgeImmediate <! "bbbbbbbbbbbbbbbbbbbb" <^> "" <$$> "a")
   let (d, cache) := markCachedObject (do return d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) d
   IO.println s!"{out}"
@@ -54,17 +56,17 @@ a
 /-- info: bbbbbbbbbbbbbbbbbbbb -/
 #guard_msgs in
 #eval do
-  let d := Doc.provide bridgeImmediate <> ( "" <$$> "a" <^> bridgeImmediate <! "bbbbbbbbbbbbbbbbbbbb")
+  let d := provideDoc' bridgeImmediate <> ( "" <$$> "a" <^> bridgeImmediate <! "bbbbbbbbbbbbbbbbbbbb")
   let (d, cache) := markCachedObject (do return d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) d
   IO.println s!"{out}"
 
 
 -- do we still find all options if we start in a tainted context?
-/-- info: aaacorrect -/
+/-- info: aaacorrec -/
 #guard_msgs in
 #eval do
-  let d := "aaa" <> Doc.provide bridgeImmediate <> ( "none" <^> bridgeImmediate<!"correct" <^> (Doc.provide bridgeSpace))
+  let d := "aaa" <> provideDoc' bridgeImmediate <> ( "none" <^> bridgeImmediate<!"correct" <^> (provideDoc' bridgeSpace)) <>"b"
   let (d, cache) := markCachedObject (do return d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
   IO.println s!"{out}"
@@ -76,7 +78,7 @@ b
 -/
 #guard_msgs in
 #eval do
-  let d := "aaa" <> Doc.provide bridgeAny <> "b"
+  let d := "aaa" <> provideDoc' bridgeAny <> "b"
   let (d, cache) := markCachedObject (do return d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
   IO.println s!"{out}"
@@ -84,7 +86,7 @@ b
 /-- info: aaa none -/
 #guard_msgs in
 #eval do
-  let d := "aaa" <> Doc.provide bridgeSpace <> ( "none" <^> bridgeImmediate<!"correct")
+  let d := "aaa" <> provideDoc' bridgeSpace <> ( "none" <^> bridgeImmediate<!"correct")
   let (d, cache) := markCachedObject (do return d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
   IO.println s!"{out}"
@@ -92,7 +94,7 @@ b
 /-- info: aaa space  after -/
 #guard_msgs in
 #eval do
-  let d := "aaa" <> ((Doc.provide bridgeHardNl <^> " space " <_> "")) <> flattenDoc ("after")
+  let d := "aaa" <> ((provideDoc' bridgeHardNl <^> " space " <_> "")) <> flattenDoc ("after")
   -- IO.println s!"{d.toString}"
   let (d, cache) := markCachedObject (do return d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
@@ -101,7 +103,7 @@ b
 /-- info: longer -/
 #guard_msgs in
 #eval do
-  let d := (Doc.cost 2 (toDoc "short")) <^> "longer"
+  let d := (costDoc 2 (toDoc "short")) <^> "longer"
   -- IO.println s!"{d.toString}"
   let (d, cache) := markCachedObject (do return d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
@@ -115,7 +117,7 @@ c
 -/
 #guard_msgs in
 #eval do
-  let d := (Doc.cost 2 (toDoc "short")) <^> ("longer" <$$> "b" <$$> "c")
+  let d := (costDoc 2 (toDoc "short")) <^> ("longer" <$$> "b" <$$> "c")
   -- IO.println s!"{d.toString}"
   let (d, cache) := markCachedObject (do return d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
@@ -125,67 +127,67 @@ c
 /-- info: short -/
 #guard_msgs in
 #eval do
-  let d := (Doc.cost 2 (toDoc "short")) <^> "longer"
-  -- IO.println s!"{d.toString}"
+  let d := (costDoc 2 (toDoc "short")) <^> "longer"
+  -- let d := runFlatten 100 d
   let (d, cache) := markCachedObject (do return d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
   IO.println s!"{out}"
 
-/--
-info:  let ⟨ih₁, ih₂⟩ := merge' ht₁ ht₂
-  exact ⟨⟨Nat.le_succ_of_le hr₁, this, ih₁.of_rankGT (ih₂ (iff_of_false hl₁ hl₂))⟩, fun _=>Nat.lt_succ_of_le hr₁⟩
--/
-#guard_msgs in
-#eval do
-  let d := (Doc.nest 2 ((Doc.provide bridgeSpace) <> (Doc.rule "Lean.Parser.Tactic.tacticSeq"
-                     (Doc.rule "Lean.Parser.Tactic.tacticSeq1Indented"
-                       (((Doc.rule "Lean.Parser.Tactic.tacticLet_"
-                         (((Doc.text "let") <> (Doc.provide bridgeSpace)) <> (Doc.rule "Lean.Parser.Term.letDecl"
-                           (Doc.rule "Lean.Parser.Term.letPatDecl"
-                             (/-152-/ (((Doc.rule "Lean.Parser.Term.anonymousCtor"
-                               ((/-150-/ (Doc.text "⟨") <> ((((Doc.text "ih₁") <> (Doc.text ",")) <> (Doc.text " ")) <> (Doc.text "ih₂"))) <> (Doc.text "⟩"))
-                              ) <> (Doc.provide bridgeSpace)) <> (Doc.text ":=")) <> (Doc.nest 2 ((Doc.provide (bridgeSpaceNl|||bridgeSpace|||bridgeImmediate)) <> (Doc.rule "Lean.Parser.Term.app"
-                               (/-151-/ ((Doc.text "merge'") <> (Doc.provide bridgeSpace)) <> (((Doc.text "ht₁") <> (Doc.provide bridgeSpace)) <> (Doc.text "ht₂")))
-                              ))))
-                            )
-                          ))
-                        ) <> (Doc.provide bridgeHardNl)) <> (Doc.rule "Lean.Parser.Tactic.exact"
-                         (((Doc.text "exact") <> (Doc.provide bridgeSpace)) <> (Doc.rule "Lean.Parser.Term.anonymousCtor"
-                           ((/-161-/ (Doc.text "⟨") <> ((((Doc.rule "Lean.Parser.Term.anonymousCtor"
-                             (/-155-/ ((Doc.text "⟨") <> (((/-153-/ ((((Doc.rule "Lean.Parser.Term.app"
-                               (((Doc.text "Nat.le_succ_of_le") <> (Doc.provide bridgeSpace)) <> (Doc.text "hr₁"))
-                              ) <> (Doc.text ",")) <> (Doc.text " ")) <> (Doc.text "this")) <> (Doc.text ",")) <> (Doc.text " ")) <> (Doc.rule "Lean.Parser.Term.app"
-                               (((Doc.text "ih₁.of_rankGT") <> (Doc.provide bridgeSpace)) <> (Doc.rule "Lean.Parser.Term.paren"
-                                 (((Doc.text "(") <> (Doc.rule "Lean.Parser.Term.app"
-                                   (((Doc.text "ih₂") <> (Doc.provide bridgeSpace)) <> (Doc.rule "Lean.Parser.Term.paren"
-                                     (((Doc.text "(") <> (Doc.rule "Lean.Parser.Term.app"
-                                       (/-154-/ ((Doc.text "iff_of_false") <> (Doc.provide bridgeSpace)) <> (((Doc.text "hl₁") <> (Doc.provide bridgeSpace)) <> (Doc.text "hl₂")))
-                                      )) <> (Doc.text ")"))
-                                    ))
-                                  )) <> (Doc.text ")"))
-                                ))
-                              ))) <> (Doc.text "⟩"))
-                            ) <> (Doc.text ",")) <> (Doc.text " ")) <> (Doc.rule "Lean.Parser.Term.fun"
-                             (/-160-/ (((Doc.text "fun") <> (Doc.provide bridgeAny)) <> (/-157-/ Doc.rule "Lean.Parser.Term.basicFun"
-                               (((Doc.rule ""
-                                 (Doc.text "_")
-                                ) <> (Doc.text "=>")) <> (/-156-/ Doc.rule "Lean.Parser.Term.app"
-                                 (((Doc.text "Nat.lt_succ_of_le") <> (Doc.provide bridgeSpace)) <> (Doc.text "hr₁"))
-                                ))
-                              ))<^>(/-159-/ (((Doc.require bridgeImmediate) <> (Doc.text " ")) <> (Doc.text "fun")) <> ((Doc.provide bridgeImmediate) <> (/-158-/ Doc.rule "Lean.Parser.Term.basicFun"
-                               (((Doc.rule ""
-                                 (Doc.text "_")
-                                ) <> (Doc.text "=>")) <> (/-156-/ Doc.rule "Lean.Parser.Term.app"
-                                 (((Doc.text "Nat.lt_succ_of_le") <> (Doc.provide bridgeSpace)) <> (Doc.text "hr₁"))
-                                ))
-                              )))
-                              )
-                            ))) <> (Doc.text "⟩"))
-                          ))
-                        ))))))
-  let (d, cache) := markCachedObject (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1000) d
-  IO.println s!"{out}"
+-- /--
+-- info:  let ⟨ih₁, ih₂⟩ := merge' ht₁ ht₂
+--   exact ⟨⟨Nat.le_succ_of_le hr₁, this, ih₁.of_rankGT (ih₂ (iff_of_false hl₁ hl₂))⟩, fun _=>Nat.lt_succ_of_le hr₁⟩
+-- -/
+-- #guard_msgs in
+-- #eval do
+--   let d := (Doc.nest 2 ((provideDoc' bridgeSpace) <> (Doc.rule "Lean.Parser.Tactic.tacticSeq"
+--                      (Doc.rule "Lean.Parser.Tactic.tacticSeq1Indented"
+--                        (((Doc.rule "Lean.Parser.Tactic.tacticLet_"
+--                          (((Doc.text "let") <> (provideDoc' bridgeSpace)) <> (Doc.rule "Lean.Parser.Term.letDecl"
+--                            (Doc.rule "Lean.Parser.Term.letPatDecl"
+--                              (/-152-/ (((Doc.rule "Lean.Parser.Term.anonymousCtor"
+--                                ((/-150-/ (Doc.text "⟨") <> ((((Doc.text "ih₁") <> (Doc.text ",")) <> (Doc.text " ")) <> (Doc.text "ih₂"))) <> (Doc.text "⟩"))
+--                               ) <> (provideDoc' bridgeSpace)) <> (Doc.text ":=")) <> (Doc.nest 2 ((provideDoc' (bridgeSpaceNl|||bridgeSpace|||bridgeImmediate)) <> (Doc.rule "Lean.Parser.Term.app"
+--                                (/-151-/ ((Doc.text "merge'") <> (provideDoc' bridgeSpace)) <> (((Doc.text "ht₁") <> (provideDoc' bridgeSpace)) <> (Doc.text "ht₂")))
+--                               ))))
+--                             )
+--                           ))
+--                         ) <> (provideDoc' bridgeHardNl)) <> (Doc.rule "Lean.Parser.Tactic.exact"
+--                          (((Doc.text "exact") <> (provideDoc' bridgeSpace)) <> (Doc.rule "Lean.Parser.Term.anonymousCtor"
+--                            ((/-161-/ (Doc.text "⟨") <> ((((Doc.rule "Lean.Parser.Term.anonymousCtor"
+--                              (/-155-/ ((Doc.text "⟨") <> (((/-153-/ ((((Doc.rule "Lean.Parser.Term.app"
+--                                (((Doc.text "Nat.le_succ_of_le") <> (provideDoc' bridgeSpace)) <> (Doc.text "hr₁"))
+--                               ) <> (Doc.text ",")) <> (Doc.text " ")) <> (Doc.text "this")) <> (Doc.text ",")) <> (Doc.text " ")) <> (Doc.rule "Lean.Parser.Term.app"
+--                                (((Doc.text "ih₁.of_rankGT") <> (provideDoc' bridgeSpace)) <> (Doc.rule "Lean.Parser.Term.paren"
+--                                  (((Doc.text "(") <> (Doc.rule "Lean.Parser.Term.app"
+--                                    (((Doc.text "ih₂") <> (provideDoc' bridgeSpace)) <> (Doc.rule "Lean.Parser.Term.paren"
+--                                      (((Doc.text "(") <> (Doc.rule "Lean.Parser.Term.app"
+--                                        (/-154-/ ((Doc.text "iff_of_false") <> (provideDoc' bridgeSpace)) <> (((Doc.text "hl₁") <> (provideDoc' bridgeSpace)) <> (Doc.text "hl₂")))
+--                                       )) <> (Doc.text ")"))
+--                                     ))
+--                                   )) <> (Doc.text ")"))
+--                                 ))
+--                               ))) <> (Doc.text "⟩"))
+--                             ) <> (Doc.text ",")) <> (Doc.text " ")) <> (Doc.rule "Lean.Parser.Term.fun"
+--                              (/-160-/ (((Doc.text "fun") <> (provideDoc' bridgeAny)) <> (/-157-/ Doc.rule "Lean.Parser.Term.basicFun"
+--                                (((Doc.rule ""
+--                                  (Doc.text "_")
+--                                 ) <> (Doc.text "=>")) <> (/-156-/ Doc.rule "Lean.Parser.Term.app"
+--                                  (((Doc.text "Nat.lt_succ_of_le") <> (provideDoc' bridgeSpace)) <> (Doc.text "hr₁"))
+--                                 ))
+--                               ))<^>(/-159-/ (((Doc.require bridgeImmediate) <> (Doc.text " ")) <> (Doc.text "fun")) <> ((provideDoc' bridgeImmediate) <> (/-158-/ Doc.rule "Lean.Parser.Term.basicFun"
+--                                (((Doc.rule ""
+--                                  (Doc.text "_")
+--                                 ) <> (Doc.text "=>")) <> (/-156-/ Doc.rule "Lean.Parser.Term.app"
+--                                  (((Doc.text "Nat.lt_succ_of_le") <> (provideDoc' bridgeSpace)) <> (Doc.text "hr₁"))
+--                                 ))
+--                               )))
+--                               )
+--                             ))) <> (Doc.text "⟩"))
+--                           ))
+--                         ))))))
+  -- let (d, cache) := markCachedObject (do return d)
+  -- let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1000) d
+  -- IO.println s!"{out}"
 
 -- #eval
 --   let d := "#format" <> (bridgeSpace <> "rest")
@@ -212,12 +214,13 @@ partial def nchoicenl : Nat → FormatM Doc
 
 
 
-
--- it takes a second without caching
-
-
 #eval do
-  let (doc, cache) := markCachedObject (nchoicenl 599)
+  -- let (doc, cache) := markCachedObject (nchoicenl 599)
+  let ((doc, cache), timeCreate) ← measureTime (fun _ => do
+    return markCachedObject (nchoicenl 9)
+  )
+  IO.println s!"{repr doc}"
+  IO.println s!"Time: {timeCreate.toFloat / 1000000000.0}s \n"
 
   IO.println s!"{cache.nextId}"
 
@@ -227,43 +230,43 @@ partial def nchoicenl : Nat → FormatM Doc
   )
 
   -- IO.println s!"Time: {timeDoc.toFloat / 1000000000.0}s \n{out} the doc\n{doc.toString}"
-  IO.println s!"Time: {timeDoc.toFloat / 1000000000.0}s \n{out} the"
+  IO.println s!"Time: {timeDoc.toFloat / 1000000000.0}s \n{out}"
 
 
 -- #eval
 --   let d := Doc.rule "formatCmd" ((Doc.text "#format") <> (Doc.rule "Lean.Parser.Command.declaration"
 --    (Doc.rule "Lean.Parser.Command.inductive"
---      ((((((Doc.text "inductive") <> (Doc.provide bridgeSpace)) <> (Doc.rule "Lean.Parser.Command.declId"
---        ((Doc.text "AliasInfo") <> (Doc.provide bridgeAny))
---       )) <> (Doc.provide bridgeSpace)) <> (Doc.text "where")) <> (Doc.nest 2 ((Doc.provide bridgeNl) <> ((((((Doc.rule "Lean.Parser.Command.ctor"
+--      ((((((Doc.text "inductive") <> (provideDoc' bridgeSpace)) <> (Doc.rule "Lean.Parser.Command.declId"
+--        ((Doc.text "AliasInfo") <> (provideDoc' bridgeAny))
+--       )) <> (provideDoc' bridgeSpace)) <> (Doc.text "where")) <> (Doc.nest 2 ((provideDoc' bridgeNl) <> ((((((Doc.rule "Lean.Parser.Command.ctor"
 --        ((((Doc.rule "Lean.Parser.Command.docComment"
---          (((Doc.flatten (((Doc.text "/--") <> (Doc.provide bridgeSpace)) <> (((Doc.newline (some " ")) <> (Doc.text "Plain alias")) <> (Doc.text " -/"))))<^>((((Doc.text "/--") <> ((Doc.newline (some " ")) <> (Doc.text "Plain alias"))) <> (Doc.newline (some " "))) <> (Doc.text "-/"))
---           ) <> (Doc.provide bridgeHardNl))
---         ) <> (Doc.text "|")) <> (Doc.text " ")) <> (((Doc.text "plain") <> (Doc.provide bridgeSpace)) <> (Doc.rule "Lean.Parser.Command.optDeclSig"
+--          (((Doc.flatten (((Doc.text "/--") <> (provideDoc' bridgeSpace)) <> (((Doc.newline (some " ")) <> (Doc.text "Plain alias")) <> (Doc.text " -/"))))<^>((((Doc.text "/--") <> ((Doc.newline (some " ")) <> (Doc.text "Plain alias"))) <> (Doc.newline (some " "))) <> (Doc.text "-/"))
+--           ) <> (provideDoc' bridgeHardNl))
+--         ) <> (Doc.text "|")) <> (Doc.text " ")) <> (((Doc.text "plain") <> (provideDoc' bridgeSpace)) <> (Doc.rule "Lean.Parser.Command.optDeclSig"
 --          (Doc.rule "Lean.Parser.Term.explicitBinder"
---            (Doc.flatten (((Doc.text "(") <> (((Doc.text "n") <> (Doc.provide bridgeSpace)) <> (((Doc.text ":") <> (Doc.provide bridgeSpace)) <> (Doc.text "Name")))) <> (Doc.text ")")))
+--            (Doc.flatten (((Doc.text "(") <> (((Doc.text "n") <> (provideDoc' bridgeSpace)) <> (((Doc.text ":") <> (provideDoc' bridgeSpace)) <> (Doc.text "Name")))) <> (Doc.text ")")))
 --           )
 --         )))
---       ) <> (Doc.provide bridgeNl)) <> (Doc.rule "Lean.Parser.Command.ctor"
+--       ) <> (provideDoc' bridgeNl)) <> (Doc.rule "Lean.Parser.Command.ctor"
 --        ((((Doc.rule "Lean.Parser.Command.docComment"
---          (((Doc.flatten (((Doc.text "/--") <> (Doc.provide bridgeSpace)) <> (((Doc.newline (some " ")) <> (Doc.text "Forward direction of an iff alias")) <> (Doc.text " -/"))))<^>((((Doc.text "/--") <> ((Doc.newline (some " ")) <> (Doc.text "Forward direction of an iff alias"))) <> (Doc.newline (some " "))) <> (Doc.text "-/"))
---           ) <> (Doc.provide bridgeHardNl))
---         ) <> (Doc.text "|")) <> (Doc.text " ")) <> (((Doc.text "forward") <> (Doc.provide bridgeSpace)) <> (Doc.rule "Lean.Parser.Command.optDeclSig"
+--          (((Doc.flatten (((Doc.text "/--") <> (provideDoc' bridgeSpace)) <> (((Doc.newline (some " ")) <> (Doc.text "Forward direction of an iff alias")) <> (Doc.text " -/"))))<^>((((Doc.text "/--") <> ((Doc.newline (some " ")) <> (Doc.text "Forward direction of an iff alias"))) <> (Doc.newline (some " "))) <> (Doc.text "-/"))
+--           ) <> (provideDoc' bridgeHardNl))
+--         ) <> (Doc.text "|")) <> (Doc.text " ")) <> (((Doc.text "forward") <> (provideDoc' bridgeSpace)) <> (Doc.rule "Lean.Parser.Command.optDeclSig"
 --          (Doc.rule "Lean.Parser.Term.explicitBinder"
---            (Doc.flatten (((Doc.text "(") <> (((Doc.text "n") <> (Doc.provide bridgeSpace)) <> (((Doc.text ":") <> (Doc.provide bridgeSpace)) <> (Doc.text "Name")))) <> (Doc.text ")")))
+--            (Doc.flatten (((Doc.text "(") <> (((Doc.text "n") <> (provideDoc' bridgeSpace)) <> (((Doc.text ":") <> (provideDoc' bridgeSpace)) <> (Doc.text "Name")))) <> (Doc.text ")")))
 --           )
 --         )))
---       )) <> (Doc.provide bridgeNl)) <> (Doc.rule "Lean.Parser.Command.ctor"
+--       )) <> (provideDoc' bridgeNl)) <> (Doc.rule "Lean.Parser.Command.ctor"
 --        ((((Doc.rule "Lean.Parser.Command.docComment"
---          (((Doc.flatten (((Doc.text "/--") <> (Doc.provide bridgeSpace)) <> (((Doc.newline (some " ")) <> (Doc.text "Reverse direction of an iff alias")) <> (Doc.text " -/"))))<^>((((Doc.text "/--") <> ((Doc.newline (some " ")) <> (Doc.text "Reverse direction of an iff alias"))) <> (Doc.newline (some " "))) <> (Doc.text "-/"))
---           ) <> (Doc.provide bridgeHardNl))
---         ) <> (Doc.text "|")) <> (Doc.text " ")) <> (((Doc.text "reverse") <> (Doc.provide bridgeSpace)) <> (Doc.rule "Lean.Parser.Command.optDeclSig"
+--          (((Doc.flatten (((Doc.text "/--") <> (provideDoc' bridgeSpace)) <> (((Doc.newline (some " ")) <> (Doc.text "Reverse direction of an iff alias")) <> (Doc.text " -/"))))<^>((((Doc.text "/--") <> ((Doc.newline (some " ")) <> (Doc.text "Reverse direction of an iff alias"))) <> (Doc.newline (some " "))) <> (Doc.text "-/"))
+--           ) <> (provideDoc' bridgeHardNl))
+--         ) <> (Doc.text "|")) <> (Doc.text " ")) <> (((Doc.text "reverse") <> (provideDoc' bridgeSpace)) <> (Doc.rule "Lean.Parser.Command.optDeclSig"
 --          (Doc.rule "Lean.Parser.Term.explicitBinder"
---            (Doc.flatten (((Doc.text "(") <> (((Doc.text "n") <> (Doc.provide bridgeSpace)) <> (((Doc.text ":") <> (Doc.provide bridgeSpace)) <> (Doc.text "Name")))) <> (Doc.text ")")))
+--            (Doc.flatten (((Doc.text "(") <> (((Doc.text "n") <> (provideDoc' bridgeSpace)) <> (((Doc.text ":") <> (provideDoc' bridgeSpace)) <> (Doc.text "Name")))) <> (Doc.text ")")))
 --           )
 --         )))
---       )) <> ((Doc.provide bridgeNl) <> (Doc.rule "Lean.Parser.Command.optDeriving"
---        (((Doc.text "deriving") <> (Doc.provide bridgeAny)) <> (Doc.text "Inhabited"))
+--       )) <> ((provideDoc' bridgeNl) <> (Doc.rule "Lean.Parser.Command.optDeriving"
+--        (((Doc.text "deriving") <> (provideDoc' bridgeAny)) <> (Doc.text "Inhabited"))
 --       ))))))
 --     )
 --   ))

@@ -448,6 +448,7 @@ def printUsage : IO Unit := do
 -- #eval FormatReport.deserialize "22,22,924900,5504600,463198000,70178900,Lean.guardMsgsCmd;:;:;PrettyFormat.┬½term_<_>_┬╗;:;:;Lean.Parser.Term.letDecl;:;:;┬½term#[_,]┬╗;:;:;PrettyFormat.┬½term_<$$>_┬╗;:;:;str;:;:;Lean.Parser.Term.letRecDecl;:;:;Lean.Parser.Term.cdot;:;:;Lean.Parser.Command.eoi;:;:;┬½termΓêà┬╗;:;:;formatCmd;:;:;PrettyFormat.┬½term_<>_┬╗;:;:;Lean.Parser.Term.structInstLVal;:;:;PrettyFormat.┬½term_<?_┬╗"
 
 unsafe def main (originalArgs : List String) : IO (Unit) := do
+  IO.println s!"running main"
   -- let (_,coreEnv) ← parseModule (← IO.FS.readFile "PrettyFormat/CoreFormatters.lean") "PrettyFormat/CoreFormatters.lean"
   -- let _ ← coreEnv.displayStats
   -- let a := pFormatAttr.getValues coreEnv `Lean.Parser.Command.declId
@@ -532,7 +533,9 @@ def main3 : IO Unit := do
 
 
 -- #eval measureTime (fun _ => main3)
-
+#eval do
+  let o ← getOptions
+  return 2
 
 partial def tellMeAbout (kind: SyntaxNodeKind) (args: Array Syntax): MetaM (Array Syntax) := do
   let o ← getOptions
