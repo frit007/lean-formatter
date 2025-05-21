@@ -169,9 +169,9 @@ function declaration
 
 #coreFmt Lean.Parser.Command.declaration fun
 | s =>
-  -- dbg_trace s!"declaration: {s}"
+  -- -- dbg_trace s!"declaration: {s}"
   let v := combine (. <> provideDoc' (bridgeAny ||| bridgeImmediate) <> .) s
-  -- dbg_trace s!"the vals?: {v.toString}"
+  -- -- dbg_trace s!"the vals?: {v.toString}"
   return v
 
 partial def pfDeclId : Rule
@@ -1332,7 +1332,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
 
 #coreFmt Lean.Parser.Command.definition fun
 | #[defAtom, declId, optDeclSig, val, derivings] => do
-  -- dbg_trace s!"definition {defAtom} {declId} {optDeclSig} {val} {derivings}"
+  -- -- dbg_trace s!"definition {defAtom} {declId} {optDeclSig} {val} {derivings}"
   let derive := match derivings.getArgs with
   | #[derivingAtom, values] => ""<$$$>derivingAtom <_> addSpaceAfterCommas values.getArgs
   | _ => toDoc ""
@@ -1341,9 +1341,9 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
 
   let l:=defAtom <_> nestDoc 4 (combine (.<**>.) #[declId, optDeclSig]) <**> val <> derive
   -- let sss:=toDoc "and"
-  -- dbg_trace s!"def {val}"
-  -- dbg_trace s!"def {repr (toDoc defAtom)} and {(← formatStx defAtom).toString} ___ {repr (combine (.<_>.) #[toDoc defAtom, sss])}"
-  -- dbg_trace s!"definition v: {l.toString} derive? {derive.toString}"
+  -- dbg_trace s!"def {repr l}"
+  -- -- dbg_trace s!"def {repr (toDoc defAtom)} and {(← formatStx defAtom).toString} ___ {repr (combine (.<_>.) #[toDoc defAtom, sss])}"
+  -- -- dbg_trace s!"definition v: {l.toString} derive? {derive.toString}"
   return l
 | _ => failure
 
@@ -1370,10 +1370,10 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
 
 #coreFmt Lean.Parser.Command.declValSimple fun
 | #[assignAtom, value, suffix, whereDecls] => do
-  dbg_trace s!"declValSimple {assignAtom} ({value}) {suffix} {whereDecls}"
+  -- dbg_trace s!"declValSimple {assignAtom} ({value}) {suffix} {whereDecls}"
   let value ← formatStx value
-  dbg_trace s!"declValSimple value {repr value}"
-  dbg_trace s!"declValSimple combined {repr (assignAtom <>("" <_> value))}"
+  -- dbg_trace s!"declValSimple value {repr value}"
+  -- dbg_trace s!"declValSimple combined {repr (assignAtom <>("" <_> value))}"
   return (nestDoc 2 (assignAtom <> ((("" <_> (flattenDoc value))
   <^> ("" <$$> value))))
   -- we require space here because we let the do notation handle the next indentation, which means that we momentarily have no indentation
@@ -1426,7 +1426,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
 
 #coreFmt Lean.Parser.Command.docComment fun
 | #[startAtom, content] =>
-  dbg_trace s!"@docComment start"
+  -- dbg_trace s!"@docComment start"
 
   -- TODO: handle whitespace comments after content
   match content with
@@ -1440,7 +1440,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
       |>.foldl (fun (acc) (c:String) => acc <> Doc.nl <> c) (toDoc "")
 
     let l := ((startAtom <> flattenDoc (comments) <^> (startAtom <> comments)) <> (provideDoc' bridgeHardNl))
-    dbg_trace s!"@docComment {repr l}"
+    -- dbg_trace s!"@docComment {repr l}"
     return l
   | _ => failure
 | _ => failure

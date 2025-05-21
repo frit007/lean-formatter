@@ -215,15 +215,27 @@ instance : Cost DefaultCost where
   text := DefaultCost.text
   nl := DefaultCost.nl
 
+inductive Trilean
+| yes
+| no
+| maybe
+deriving Inhabited, Repr
+
 
 structure DocMeta where
   leftBridge : Bridge := bridgeFlex
   id : Nat := 0
   cacheWeight : Nat := 0
-  -- no default value: to force the user to implement it, or better use our functions :)
-  containsWhiteSpace : Bool
-  delayedProvide: Option (List Bridge) := none
-  shouldBeExpanded : Bool := containsWhiteSpace || delayedProvide.isSome
+  -- no default value: to force the user to implement it, or better: use our functions :)
+  -- containsWhiteSpace : Bool
+  -- shouldBeExpanded : Bool := containsWhiteSpace
+  --
+
+  -- This is used for for flatten
+  --
+  collapsesBridges : Trilean
+  -- we delay this calculation until flatten, because otherwise we might have to recalculate
+  paths : List (Bridge × Bridge) := []
 
 deriving Inhabited, Repr
 
@@ -243,12 +255,12 @@ inductive Doc where
 /--
 Render a `String` that does not contain newlines.
 -/
-| text (s : String) (meta : DocMeta := {containsWhiteSpace := s.length == 0})
+| text (s : String) (meta : DocMeta := {collapsesBridges := s.length > 0})
 /--
 Render a newline. Also contains an alternative rendering for the newline for `Doc.flatten`.
 If s is `none` then it will fail
 -/
-| newline (s : Option String) (meta : DocMeta := {containsWhiteSpace := false})
+| newline (s : Option String) (meta : DocMeta := {collapsesBridges := true})
 /--
 Concatenate two documents unaligned. If `l` is the chars that we get from `lhs`
 and `r` from `rhs` they will render as:
@@ -281,7 +293,7 @@ Reset the indentation level to 0.
 Fail will never be rendered.
 This error will propagate until the next choice, where branches containing errors are eliminated.
 -/
-| fail (err : String) (meta : DocMeta := {containsWhiteSpace := false})
+| fail (err : String) (meta : DocMeta)
 /--
 The special spacing options are
 - `space` which is a single space
@@ -295,11 +307,11 @@ do/by notation use `assignValue` to handle this scenario so they can place their
 
 provide can be chained to narrow the options to overlap between the two sets
 -/
-| provide (bridge : Bridge) (doc : Doc) (meta : DocMeta)
+| provide (bridge : Bridge) (meta : DocMeta)
 /--
 `require` must be preceded by a `provide` and will fail if the provided bridge does not contain the expected spacing
 -/
-| require (bridge : Bridge) (meta : DocMeta := {containsWhiteSpace := false})
+| require (bridge : Bridge) (meta : DocMeta := {collapsesBridges := true})
 -- TODO: Think about adding the cost constructor. It does however make type inference much harder
 | rule (r : String) (doc : Doc) (meta : DocMeta)
 | stx (s : Lean.Syntax) (meta : DocMeta)
@@ -549,31 +561,28 @@ def Doc.kind : Doc → String
   | .cost _ _ _ => s!"cost"
 
 def Doc.calcMeta : Doc → DocMeta
-  | .fail _ m => {m with leftBridge := bridgeNull, containsWhiteSpace := false, shouldBeExpanded := false}
-  | .text s m => {m with leftBridge := bridgeFlex, containsWhiteSpace := s.length == 0, shouldBeExpanded := s.length == 0 || m.delayedProvide.isSome}
-  | .newline _ m => {m with leftBridge := bridgeFlex, containsWhiteSpace:= false, shouldBeExpanded := m.delayedProvide.isSome}
+  | .fail _ m => {m with leftBridge := bridgeNull, containsWhiteSpace := false}
+  | .text s m => {m with leftBridge := bridgeFlex, containsWhiteSpace := s.length == 0}
+  | .newline _ m => {m with leftBridge := bridgeFlex, containsWhiteSpace:= false}
   | .choice l r m => {m with
       leftBridge := l.meta.leftBridge ||| r.meta.leftBridge,
       containsWhiteSpace := l.meta.containsWhiteSpace || r.meta.containsWhiteSpace,
-      shouldBeExpanded := l.meta.shouldBeExpanded || r.meta.shouldBeExpanded || l.meta.delayedProvide.isSome || r.meta.delayedProvide.isSome
     }
-  | .flatten i m => {m with leftBridge := i.meta.leftBridge.flatten, containsWhiteSpace := i.meta.containsWhiteSpace, shouldBeExpanded := i.meta.shouldBeExpanded, delayedProvide := firstDelayed i.meta.delayedProvide m.delayedProvide}
-  | .align i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace, shouldBeExpanded := i.meta.shouldBeExpanded, delayedProvide := firstDelayed i.meta.delayedProvide m.delayedProvide}
-  | .nest _ i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace, shouldBeExpanded := i.meta.shouldBeExpanded, delayedProvide := firstDelayed i.meta.delayedProvide m.delayedProvide}
+  | .flatten i m => {m with leftBridge := i.meta.leftBridge.flatten, containsWhiteSpace := i.meta.containsWhiteSpace}
+  | .align i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace}
+  | .nest _ i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace}
   | .concat l r m => {m with
     -- if the right side cannot be expanded then neither can the left side
     leftBridge := if r.meta.leftBridge == bridgeNull then bridgeNull else l.meta.leftBridge,
-    shouldBeExpanded := r.meta.delayedProvide.isSome,
     containsWhiteSpace := false, -- invariant: concat is never whitespace, it should have been combined to a single doc
-    delayedProvide := r.meta.delayedProvide
     }
   | .stx _ m => m
-  | .rule _ i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace, shouldBeExpanded := i.meta.shouldBeExpanded, delayedProvide := firstDelayed i.meta.delayedProvide m.delayedProvide}
-  | .reset i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace, shouldBeExpanded := i.meta.shouldBeExpanded, delayedProvide := firstDelayed i.meta.delayedProvide m.delayedProvide}
-  | .provide b i m => {m with leftBridge := i.meta.leftBridge.provideIntersection b, containsWhiteSpace := i.meta.containsWhiteSpace, shouldBeExpanded := i.meta.shouldBeExpanded}
-  | .require b m => {m with leftBridge := b, containsWhiteSpace := false, shouldBeExpanded := m.delayedProvide.isSome, delayedProvide := m.delayedProvide}
-  | .bubbleComment _ i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace, shouldBeExpanded := i.meta.shouldBeExpanded, delayedProvide := firstDelayed i.meta.delayedProvide m.delayedProvide}
-  | .cost _ i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace, shouldBeExpanded := i.meta.shouldBeExpanded, delayedProvide := firstDelayed i.meta.delayedProvide m.delayedProvide}
+  | .rule _ i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace}
+  | .reset i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace}
+  | .provide b i m => {m with leftBridge := i.meta.leftBridge.provideIntersection b, containsWhiteSpace := i.meta.containsWhiteSpace}
+  | .require b m => {m with leftBridge := b, containsWhiteSpace := false}
+  | .bubbleComment _ i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace}
+  | .cost _ i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace}
 where
   -- use the first delayedProvide, because one of these is going to be the source of a delayedProvide and we do not want to delete the source
   firstDelayed : Option (List Bridge) → Option (List Bridge) → Option (List Bridge)
@@ -645,42 +654,19 @@ where
 
 
 partial def moveRight (d:Doc): Doc → Doc
-  | .concat _ _ _=> panic "should not move concat (right)"
-  | .choice _ _ _=> panic "should not move choice (right)"
-  | .flatten inner _=> moveRight d inner
-  | .align inner _=> moveRight d inner
-  | .nest _ inner _=> moveRight d inner
-  | .reset inner _=> moveRight d inner
-  | .rule r inner _=> .rule r (moveRight d inner) (d.meta)
-  | .provide b inner m => .provide b (moveRight d inner) m
+  | .choice _ _ _ => panic "should not move choice (right)"
+  | .flatten inner _ => moveRight d inner
+  | .align inner _ => moveRight d inner
+  | .nest _ inner _ => moveRight d inner
+  | .reset inner _ => moveRight d inner
+  | .rule r inner m => Doc.rule r (moveRight d inner) (m) |>.updateMeta
+  | .provide b inner m => (Doc.provide b (moveRight d inner) m)|>.updateMeta
+  | .concat l r m => Doc.concat l (moveRight d r) m |>.updateMeta
   /-
   Note that this means that cost and bubble comments will be discarded if they are not attached to a relevant object
   -/
-  | .bubbleComment c inner _=> .bubbleComment c (moveRight d inner) (d.meta)
-  | .cost c inner _=> .cost c (moveRight d inner) (d.meta)
-  -- when we reach a leaf return
-  | _ => d
-
-partial def moveLeft (d:Doc): Doc → Doc
-  | .concat _ _ _=> panic "should not move concat (left)"
-  | .choice _ _ _=> panic "should not move choice (left)"
-  | .flatten inner _=> moveLeft d inner
-  | .align inner _=> moveLeft d inner
-  | .nest _ inner _=> moveLeft d inner
-  | .reset inner _=> moveLeft d inner
-  | .rule r inner _=> .rule r (moveLeft d inner) (d.meta)
-  | .provide b inner _=>
-    let inner := moveLeft d inner
-    match inner.meta.delayedProvide with
-    | some delayed =>
-      inner.setMeta {inner.meta with delayedProvide := some (delayed ++ [b])} |>.updateMeta
-    | none =>
-      inner.setMeta {inner.meta with delayedProvide := some ([b])} |>.updateMeta
-  /-
-  Note that this means that cost and bubble comments will be discarded if they are not attached to a relevant object
-  -/
-  | .bubbleComment c inner _=> .bubbleComment c (moveLeft d inner) (d.meta)
-  | .cost c inner _=> .cost c (moveLeft d inner) (d.meta)
+  | .bubbleComment c inner m => Doc.bubbleComment c (moveRight d inner) (m) |>.updateMeta
+  | .cost c inner m => Doc.cost c (moveRight d inner) (m) |>.updateMeta
   -- when we reach a leaf return
   | _ => d
 
@@ -688,25 +674,39 @@ partial def moveLeft (d:Doc): Doc → Doc
 /--
 Expand choice operator until it must no longer be expanded. While moving over modifiers
 -/
-def expandDoc (d : Doc): List Doc :=
-  if d.meta.shouldBeExpanded then
+def expandDoc (d : Doc): (List (Doc × List Doc)) :=
+  if d.meta.containsWhiteSpace then
     expandDoc' d
   else
-    [d]
+    [(d, [])]
     -- [.text "are we heer?" {containsWhiteSpace:=false}]
 where
-  expandDoc' : Doc → List Doc
+  expandDoc' : Doc → (List (Doc × List Doc))
   | .choice l r _ => expandDoc l|>.append (expandDoc r)
-  | .rule n i m => expandDoc i |> .map (fun d => Doc.rule n d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta )
-  | .reset i m => expandDoc i |> .map (fun d => Doc.reset d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta)
-  | .flatten i m => expandDoc i |> .map (fun d => Doc.flatten d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta)
-  | .align i m => expandDoc i |> .map (fun d => Doc.align d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta)
-  | .nest i inner m => expandDoc inner |> .map (fun d => Doc.nest i d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta)
-  | .bubbleComment c inner m => expandDoc inner |> .map (fun d => Doc.bubbleComment c d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta)
-  | .cost c inner m => expandDoc inner |> .map (fun d => Doc.cost c d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta)
-  | .provide b inner m => expandDoc inner |> .map (fun d => Doc.provide b d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta)
+  | .rule n i m => expandDoc i |> .map (fun (d, d') => (Doc.rule n d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d') )
+  | .reset i m => expandDoc i |> .map (fun (d, d') => (Doc.reset d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d'))
+  | .flatten i m => expandDoc i |> .map (fun (d, d') => (Doc.flatten d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d'))
+  | .align i m => expandDoc i |> .map (fun (d, d') => (Doc.align d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d'))
+  | .nest i inner m => expandDoc inner |> .map (fun (d, d') => (Doc.nest i d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d'))
+  | .bubbleComment c inner m => expandDoc inner |> .map fun (d, d') => (Doc.bubbleComment c d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d')
+  | .cost c inner m => expandDoc inner |> .map fun (d, d') => (Doc.cost c d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d')
+  | .provide b inner m => expandDoc inner |> .map fun (d, d') => (Doc.provide b d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d')
+  | .concat l r m =>
+    --  dbg_trace s!"expand concatDoc: l: {repr l} r: {repr r}"
+    (expandDoc r) |>.map (fun (d, _) =>
+      (l, [d])
+    )
+
+    -- (expandDoc r) |>.map (fun (d, _) =>
+    --   if d.meta.containsWhiteSpace then
+    --     (Doc.concat l d {containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, [])
+    --   else
+    --     (Doc.concat l d {containsWhiteSpace := false} |>.updateMeta, [])
+    --   (l, [d])
+    -- )
+    -- (l, r)
   -- concat, fail, newline, text, require cannot be expanded, since they must be a value (and empty text is just empty text)
-  | d => [d]
+  | d => [(d, [])]
 
 def choiceDoc [ToDoc a] [ToDoc b] (l : a) (r : b) :=
   let l := toDoc l
@@ -722,92 +722,76 @@ def choiceDoc [ToDoc a] [ToDoc b] (l : a) (r : b) :=
 def provideDoc [ToDoc α] (b : Bridge) (i : α):=
   let i := toDoc i
   -- Should expand did not work, because even if it may contain whitespace, it may still
-  -- if i.meta.shouldBeExpanded then
-  --   i |>.setMeta {i.meta with delayedProvide := some [b]} |>.updateMeta
-  -- else
-  Doc.provide b i {shouldBeExpanded := i.meta.shouldBeExpanded, containsWhiteSpace:= i.meta.containsWhiteSpace} |>.updateMeta
+  Doc.provide b i {containsWhiteSpace:= i.meta.containsWhiteSpace} |>.updateMeta
 
 def provideDoc' (b : Bridge):=
   let i := toDoc ""
-  Doc.provide b i {shouldBeExpanded := true, containsWhiteSpace:= true} |>.updateMeta
-  -- i |>.setMeta {i.meta with delayedProvide := some [b]}|>.updateMeta
+  Doc.provide b i {containsWhiteSpace:= true} |>.updateMeta
 
 /--
 concat guarantees the following properties:
- - There are no leaf nodes that contain whitespace
- - provides are moved to the left of a leaf node
+ - There are only the final leaf nodes that contain whitespace
+ - provides are moved to the right or to the final final leaf node
 -/
 partial def concatDoc [ToDoc α] [ToDoc β] (l : α) (r : β) : Doc :=
   let l := toDoc l
   let r := toDoc r
-  dbg_trace s!"concattop: l: {l.toString} r: {r.toString}"
+  --  dbg_trace s!"concattop: l: {l.toString} r: {r.toString}"
   -- I only want to react to right if
   -- if it contains whitespace
   -- regarding the delayedProvide problem
   --   - I could do a last pass to replace the delayedProvide with the actual provide (annoying that we have so many passes)
   --   - Do I care about a bridge that leads to nowhere? Typically no, it should not restrict (unless it is a special case)
-  if r.meta.containsWhiteSpace || l.meta.shouldBeExpanded then
-    dbg_trace "anyOtherTrace"
+  if r.meta.containsWhiteSpace || l.meta.containsWhiteSpace then
     -- This might seem like a terribly slow operation, however the goal is to eliminate trails that end in whitespace as soon as it is introduced
     -- therefore the length of ls and rs are assumed to be relatively small, because users likely do not want to express something about something with no rules. If you want to optimize your formatting rules do not use whitespace rules
     let ls := expandDoc l
     let rs := expandDoc r
-    let options := ls.foldl (fun acc l =>
-      rs.foldl (fun acc r =>
-        if l.meta.containsWhiteSpace then
-          if r.meta.containsWhiteSpace then
-            -- let combinedProvide := match l.meta.delayedProvide, r.meta.delayedProvide with
-            -- | none, none => none
-            -- | some b, none => some b
-            -- | none, some b => some b
-            -- | some b1, some b2 => some (b1 ++ b2)
-            dbg_trace "kexpandBoth {l.toString}({isEmpty l}) {r.toString}({isEmpty r})"
-            if isEmpty l then
-              moveRight (r) l :: acc
-            else
-              moveLeft (l) r :: acc
-          else
+    -- we have the scenarios
+    -- 1. l concatenated empty string & r concatenated empty string (concat (concat l (concat lwhite r)) rwhite)
+    -- 2. l concatenated empty string & r is a value (are 2 and 3 the same?, in both cases move the left value to the right)
+    -- 3. l concatenated empty string & r is an empty string
+    -- 4. l is empty & r is not ()
+    let options := ls.foldl (fun acc (l, lr) =>
+      rs.foldl (fun acc (r, rr) =>
+        -- attach the whitespace from the left to the right
+        let rWithWhiteSpace := lr.foldl (fun (acc:Option Doc) leftWhiteSpace =>
+          match acc with
+          | some prev => some (Doc.choice prev (moveRight r leftWhiteSpace) {containsWhiteSpace := leftWhiteSpace.meta.containsWhiteSpace})
+          | none => some (moveRight r leftWhiteSpace)
+        ) none
+        let r := rWithWhiteSpace.getD r
 
-            dbg_trace "kexpandBoth {l.toString}({isEmpty l}) {r.toString}({isEmpty r})"
-            match l.meta.delayedProvide with
-            | some bridges =>
-              -- dbg_trace "expandBoth {l.toString} {r.toString}"
-              (bridges.foldl ( fun acc' b => provideDoc b acc') (moveRight (r) l)) :: acc
-            | _ =>
-              -- dbg_trace "sexpandBoth {l.toString} {r.toString}"
-              moveRight (r) l :: acc
-        else if r.meta.containsWhiteSpace then
-          -- dbg_trace "rightHadSpaces {l.toString} {repr r} l:{l.meta.delayedProvide} r:{r.meta.delayedProvide}"
-          dbg_trace "rightHasWhite left[[{repr l}]]({isEmpty l}) right[[{repr r}]]({isEmpty r}) {l.meta.delayedProvide}"
-          moveLeft (l) r :: acc
+        let combined := if l.meta.containsWhiteSpace then
+          if r.meta.containsWhiteSpace then
+            --  dbg_trace "kexpandBoth {l.toString}({isEmpty l}) {r.toString}({isEmpty r})"
+            if isEmpty l then
+              (moveRight r l)
+            else
+              (Doc.concat l r {containsWhiteSpace := r.meta.containsWhiteSpace})
+          else
+            --  dbg_trace "kexpandLeft {l.toString}({isEmpty l}) {r.toString}({isEmpty r})"
+            moveRight r l
         else
-          match l.meta.delayedProvide with
-          | some bridges =>
-            -- dbg_trace "expandLeftwithBridges {l.toString} {r.toString}"
-            (Doc.concat (l.setMeta {l.meta with delayedProvide := none}) (bridges.foldl ( fun acc' b => provideDoc b acc') (r)) {containsWhiteSpace := false, delayedProvide:=r.meta.delayedProvide}) :: acc
-          | _ =>
-            -- dbg_trace "expandWithoutBridges {l.toString} {r.toString}"
-            dbg_trace "no more expansions {repr l} {r.toString}"
-            Doc.concat l r {containsWhiteSpace := false, delayedProvide := r.meta.delayedProvide} :: acc
-            -- [toDoc "err :)"]
+          --  dbg_trace "kexpandNeither {l.toString}({isEmpty l}) () {r.toString}({isEmpty r}) (what is lr {repr lr})"
+          Doc.concat l r {containsWhiteSpace := r.meta.containsWhiteSpace}
+
+        let combinedWithSpaces := rr.foldl (fun (acc:Option Doc) rWithWhiteSpace =>
+          match acc with
+          | some prev => some (Doc.choice prev (Doc.concat combined rWithWhiteSpace {containsWhiteSpace := true}) {containsWhiteSpace := true})
+          | none => some (Doc.concat combined rWithWhiteSpace {containsWhiteSpace := true})
+        ) none
+
+        combinedWithSpaces.getD combined :: acc
       ) acc
     ) []
     -- ensure that the outer options contain whitespace, so we reduce how needs to be expanded
-    let (whiteSpaceOptions, otherOptions) := options.partition (fun d => d.meta.containsWhiteSpace || d.meta.delayedProvide.isSome)
+    let (whiteSpaceOptions, otherOptions) := options.partition (fun d => d.meta.containsWhiteSpace)
     listToChoices (whiteSpaceOptions ++ otherOptions)
     -- .text s!"{whiteSpaceOptions.length},,{otherOptions.length},, {repr (options.map (fun d => d.toString))}"
   else
-    -- dbg_trace "this should be a normal concat {l.toString} {r.toString}"
-    dbg_trace "concatDoc {l.meta.cacheWeight} {l.kind} {r.meta.cacheWeight} {r.kind}"
-    match l.meta.delayedProvide with
-    | some bridges =>
-      -- Doc.text "what"
-      dbg_trace "hey left"
-      let rWithProvide := bridges.foldl (fun acc b => provideDoc b acc) r
-      Doc.concat l rWithProvide {containsWhiteSpace := false, delayedProvide := r.meta.delayedProvide}
-    | none =>
-      dbg_trace s!"hey right {repr r}"
-      Doc.concat l r {containsWhiteSpace := r.meta.delayedProvide.isSome, delayedProvide := r.meta.delayedProvide}
+    --  dbg_trace "concatDoc {l.meta.cacheWeight} {l.kind} {r.meta.cacheWeight} {r.kind}"
+    Doc.concat l r {containsWhiteSpace := r.meta.containsWhiteSpace}
 where
   listToChoices : List Doc → Doc
   | a::[] => a
@@ -835,6 +819,7 @@ infixl:40 " <+> " => fun l r => concatDoc (toDoc l) Doc.align (toDoc r)
 
 infixl:45 " !> " => fun l r => provideDoc l r
 infixl:45 " <! " => fun l r => concatDoc (requireDoc l) (toDoc r)
+
 
 
 -- #eval expandDoc ("hello" <> "world")
@@ -917,420 +902,91 @@ infixr:45 " <? " => fun l r => formatBefore l r
 -- #eval "2" ?> "hello"
 
 /--
-info: concattop: l: "hasValue" r: provideDoc bridgeNl ("")
-anyOtherTrace
-rightHasWhite left[[PrettyFormat.Doc.text
-  "hasValue"
-  { leftBridge := 1,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := false,
-    delayedProvide := none,
-    shouldBeExpanded := false }]](false) right[[PrettyFormat.Doc.provide
-  6
-  (PrettyFormat.Doc.text
-    ""
-    { leftBridge := 1,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := true,
-      delayedProvide := none,
-      shouldBeExpanded := true })
-  { leftBridge := 6,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := true,
-    delayedProvide := none,
-    shouldBeExpanded := true }]](true) none
-concattop: l: "hasValue" r: provideDoc bridgeSpace ("")
-anyOtherTrace
-rightHasWhite left[[PrettyFormat.Doc.text
-  "hasValue"
-  { leftBridge := 1,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := false,
-    delayedProvide := none,
-    shouldBeExpanded := false }]](false) right[[PrettyFormat.Doc.provide
-  8
-  (PrettyFormat.Doc.text
-    ""
-    { leftBridge := 1,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := true,
-      delayedProvide := none,
-      shouldBeExpanded := true })
-  { leftBridge := 8,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := true,
-    delayedProvide := none,
-    shouldBeExpanded := true }]](true) none
-concattop: l: "hey" r: provideDoc bridgeSpace (("hasValue")<^>("hasValue")
-)
-concatDoc 0 text hey 0 provide
-hey right PrettyFormat.Doc.provide
-  8
-  (PrettyFormat.Doc.choice
-    (PrettyFormat.Doc.text
-      "hasValue"
-      { leftBridge := 1,
-        id := 0,
-        cacheWeight := 0,
-        containsWhiteSpace := false,
-        delayedProvide := some [6],
-        shouldBeExpanded := true })
-    (PrettyFormat.Doc.text
-      "hasValue"
-      { leftBridge := 1,
-        id := 0,
-        cacheWeight := 0,
-        containsWhiteSpace := false,
-        delayedProvide := some [8],
-        shouldBeExpanded := true })
-    { leftBridge := 1,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := false,
-      delayedProvide := none,
-      shouldBeExpanded := true })
-  { leftBridge := 8,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := false,
-    delayedProvide := none,
-    shouldBeExpanded := true }
----
-info: "(\"hey\") <> (provideDoc bridgeSpace ((\"hasValue\")<^>(\"hasValue\")\n))"
+info: "(\"hey\") <> (provideDoc bridgeSpace (((((\"l\") <> (provideDoc bridgeSpace (\"a\"))) <> (provideDoc bridgeSpace (\"reset\")))<^>((((\"l\") <> (provideDoc bridgeSpace (\"b\"))) <> (provideDoc bridgeNl (\"reset\")))<^>((((\"r\") <> (provideDoc bridgeNl (\"a\"))) <> (provideDoc bridgeSpace (\"reset\")))<^>(((\"r\") <> (provideDoc bridgeNl (\"b\"))) <> (provideDoc bridgeNl (\"reset\")))\n)\n)\n) <> ((\"no more\")<^>(\"branches\")\n)))"
+-/
+#guard_msgs in
+#eval ("hey" <_> (("l"<_>""<^> "r"<$$>"")) <> (("a"<_>""<^> "b"<$$>"")) <> "reset" <> ("no more"<^> "branches")).toString
+
+
+/-- info: "((\"l\") <> (provideDoc bridgeSpace (\"reset\"))) <> (\"warning\")" -/
+#guard_msgs in
+#eval ((("l"<_>"")) <> "reset" <> "warning").toString
+
+/--
+info: PrettyFormat.Doc.concat
+  (PrettyFormat.Doc.concat
+    (PrettyFormat.Doc.text "hey" { leftBridge := 1, id := 0, cacheWeight := 0, containsWhiteSpace := false })
+    (PrettyFormat.Doc.provide
+      8
+      (PrettyFormat.Doc.text "hasValue" { leftBridge := 1, id := 0, cacheWeight := 0, containsWhiteSpace := false })
+      { leftBridge := 8, id := 0, cacheWeight := 0, containsWhiteSpace := false })
+    { leftBridge := 1, id := 0, cacheWeight := 0, containsWhiteSpace := false })
+  (PrettyFormat.Doc.provide
+    6
+    (PrettyFormat.Doc.text "final" { leftBridge := 1, id := 0, cacheWeight := 0, containsWhiteSpace := false })
+    { leftBridge := 6, id := 0, cacheWeight := 0, containsWhiteSpace := false })
+  { leftBridge := 1, id := 0, cacheWeight := 0, containsWhiteSpace := false }
+-/
+#guard_msgs in
+#eval (("hey" <_> (("hasValue"<$$>""))) <> "final")
+
+/--
+info: "(\"hey\") <> (provideDoc bridgeSpace ((\"hasValue\") <> (provideDoc bridgeNl (\"final\"))))"
+-/
+#guard_msgs in
+#eval ("hey" <_> (("hasValue"<$$>"")) <> "final").toString
+
+
+
+
+/--
+info: "(((\"hey\") <> (provideDoc bridgeSpace (\"hasValue\"))) <> (provideDoc bridgeSpace (\"\")))<^>(((\"hey\") <> (provideDoc bridgeSpace (\"hasValue\"))) <> (provideDoc bridgeNl (\"\")))\n"
 -/
 #guard_msgs in
 #eval ("hey" <_> (("hasValue"<$$>"") <^> ("hasValue" <_> ""))).toString
 
+
 /--
-info: concattop: l: "hasValue" r: provideDoc bridgeNl ("")
-anyOtherTrace
-rightHasWhite left[[PrettyFormat.Doc.text
-  "hasValue"
-  { leftBridge := 1,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := false,
-    delayedProvide := none,
-    shouldBeExpanded := false }]](false) right[[PrettyFormat.Doc.provide
-  6
-  (PrettyFormat.Doc.text
-    ""
-    { leftBridge := 1,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := true,
-      delayedProvide := none,
-      shouldBeExpanded := true })
-  { leftBridge := 6,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := true,
-    delayedProvide := none,
-    shouldBeExpanded := true }]](true) none
-concattop: l: "hasValue" r: provideDoc bridgeSpace ("")
-anyOtherTrace
-rightHasWhite left[[PrettyFormat.Doc.text
-  "hasValue"
-  { leftBridge := 1,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := false,
-    delayedProvide := none,
-    shouldBeExpanded := false }]](false) right[[PrettyFormat.Doc.provide
-  8
-  (PrettyFormat.Doc.text
-    ""
-    { leftBridge := 1,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := true,
-      delayedProvide := none,
-      shouldBeExpanded := true })
-  { leftBridge := 8,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := true,
-    delayedProvide := none,
-    shouldBeExpanded := true }]](true) none
-concattop: l: ("hasValue")<^>("hasValue")
- r: "later"
-anyOtherTrace
-concattop: l: "hey" r: provideDoc bridgeSpace ((("hasValue") <> (provideDoc bridgeSpace ("later")))<^>(("hasValue") <> (provideDoc bridgeNl ("later")))
-)
-concatDoc 0 text hey 0 provide
-hey right PrettyFormat.Doc.provide
-  8
-  (PrettyFormat.Doc.choice
-    (PrettyFormat.Doc.concat
-      (PrettyFormat.Doc.text
-        "hasValue"
-        { leftBridge := 1,
-          id := 0,
-          cacheWeight := 0,
-          containsWhiteSpace := false,
-          delayedProvide := none,
-          shouldBeExpanded := true })
-      (PrettyFormat.Doc.provide
-        8
-        (PrettyFormat.Doc.text
-          "later"
-          { leftBridge := 1,
-            id := 0,
-            cacheWeight := 0,
-            containsWhiteSpace := false,
-            delayedProvide := none,
-            shouldBeExpanded := false })
-        { leftBridge := 8,
-          id := 0,
-          cacheWeight := 0,
-          containsWhiteSpace := false,
-          delayedProvide := none,
-          shouldBeExpanded := false })
-      { leftBridge := 1,
-        id := 0,
-        cacheWeight := 0,
-        containsWhiteSpace := false,
-        delayedProvide := none,
-        shouldBeExpanded := false })
-    (PrettyFormat.Doc.concat
-      (PrettyFormat.Doc.text
-        "hasValue"
-        { leftBridge := 1,
-          id := 0,
-          cacheWeight := 0,
-          containsWhiteSpace := false,
-          delayedProvide := none,
-          shouldBeExpanded := true })
-      (PrettyFormat.Doc.provide
-        6
-        (PrettyFormat.Doc.text
-          "later"
-          { leftBridge := 1,
-            id := 0,
-            cacheWeight := 0,
-            containsWhiteSpace := false,
-            delayedProvide := none,
-            shouldBeExpanded := false })
-        { leftBridge := 6,
-          id := 0,
-          cacheWeight := 0,
-          containsWhiteSpace := false,
-          delayedProvide := none,
-          shouldBeExpanded := false })
-      { leftBridge := 1,
-        id := 0,
-        cacheWeight := 0,
-        containsWhiteSpace := false,
-        delayedProvide := none,
-        shouldBeExpanded := false })
-    { leftBridge := 1,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := false,
-      delayedProvide := none,
-      shouldBeExpanded := false })
-  { leftBridge := 8,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := false,
-    delayedProvide := none,
-    shouldBeExpanded := false }
----
 info: "(\"hey\") <> (provideDoc bridgeSpace (((\"hasValue\") <> (provideDoc bridgeSpace (\"later\")))<^>((\"hasValue\") <> (provideDoc bridgeNl (\"later\")))\n))"
 -/
 #guard_msgs in
 #eval ("hey" <_> (("hasValue"<$$>"") <^> ("hasValue" <_> "")) <> "later").toString
 
+/-- info: "((\"hello\") <> (\"world\")) <> (\"\")" -/
+#guard_msgs in
+#eval ("hello" <> ("world" <> "")).toString
+
 /--
-info: concattop: l: "hasValue" r: provideDoc bridgeNl ("")
-anyOtherTrace
-rightHasWhite left[[PrettyFormat.Doc.text
-  "hasValue"
-  { leftBridge := 1,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := false,
-    delayedProvide := none,
-    shouldBeExpanded := false }]](false) right[[PrettyFormat.Doc.provide
-  6
-  (PrettyFormat.Doc.text
-    ""
-    { leftBridge := 1,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := true,
-      delayedProvide := none,
-      shouldBeExpanded := true })
-  { leftBridge := 6,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := true,
-    delayedProvide := none,
-    shouldBeExpanded := true }]](true) none
-concattop: l: "hey" r: provideDoc bridgeSpace ("hasValue")
-concatDoc 0 text hey 0 provide
-hey right PrettyFormat.Doc.provide
-  8
-  (PrettyFormat.Doc.text
-    "hasValue"
-    { leftBridge := 1,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := false,
-      delayedProvide := some [6],
-      shouldBeExpanded := true })
-  { leftBridge := 8,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := false,
-    delayedProvide := none,
-    shouldBeExpanded := true }
----
-info: "(\"hey\") <> (provideDoc bridgeSpace (\"hasValue\"))"
+info: "((\"hey\") <> (provideDoc bridgeSpace (\"hasValue\"))) <> (provideDoc bridgeNl (\"\"))"
 -/
 #guard_msgs in
 #eval ("hey" <_> (("hasValue"<$$>""))).toString
 
-
 /--
-info: concattop: l: "hey" r: provideDoc bridgeSpace ("")
-anyOtherTrace
-rightHasWhite left[[PrettyFormat.Doc.text
-  "hey"
-  { leftBridge := 1,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := false,
-    delayedProvide := none,
-    shouldBeExpanded := false }]](false) right[[PrettyFormat.Doc.provide
-  8
-  (PrettyFormat.Doc.text
-    ""
-    { leftBridge := 1,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := true,
-      delayedProvide := none,
-      shouldBeExpanded := true })
-  { leftBridge := 8,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := true,
-    delayedProvide := none,
-    shouldBeExpanded := true }]](true) none
----
-info: PrettyFormat.Doc.text
-  "hey"
-  { leftBridge := 1,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := false,
-    delayedProvide := some [8],
-    shouldBeExpanded := true }
+info: "((\"hey\") <> (provideDoc bridgeSpace (provideDoc bridgeSpace (\"hasValue\")))) <> (provideDoc bridgeNl (\"\"))"
 -/
 #guard_msgs in
-#eval ("hey" <_> "")
+#eval ("hey" <_>"" <_> (("hasValue"<$$>""))).toString
 
-/--
-info: concattop: l: "aaa" r: provideDoc bridgeImmediate ("")
-anyOtherTrace
-rightHasWhite left[[PrettyFormat.Doc.text
-  "aaa"
-  { leftBridge := 1,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := false,
-    delayedProvide := none,
-    shouldBeExpanded := false }]](false) right[[PrettyFormat.Doc.provide
-  32
-  (PrettyFormat.Doc.text
-    ""
-    { leftBridge := 1,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := true,
-      delayedProvide := none,
-      shouldBeExpanded := true })
-  { leftBridge := 32,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := true,
-    delayedProvide := none,
-    shouldBeExpanded := true }]](true) none
-concattop: l: "aaa" r: "hello"
-anyOtherTrace
----
-info: "(\"aaa\") <> (provideDoc bridgeImmediate (\"hello\"))"
--/
+/-- info: "(\"hey\") <> (provideDoc bridgeSpace (\"\"))" -/
+#guard_msgs in
+#eval ("hey" <_> "").toString
+
+/-- info: "(\"aaa\") <> (provideDoc bridgeImmediate (\"hello\"))" -/
 #guard_msgs in
 #eval ("aaa" <> provideDoc' bridgeImmediate <> "hello").toString
 
 /--
-info: concattop: l: (flattenDoc ("hey"))<^>("b")
- r: provideDoc bridgeHardNl ("")
-anyOtherTrace
-rightHasWhite left[[PrettyFormat.Doc.choice
-  (PrettyFormat.Doc.flatten
-    (PrettyFormat.Doc.text
-      "hey"
-      { leftBridge := 1,
-        id := 0,
-        cacheWeight := 0,
-        containsWhiteSpace := false,
-        delayedProvide := none,
-        shouldBeExpanded := false })
-    { leftBridge := 24,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := false,
-      delayedProvide := none,
-      shouldBeExpanded := false })
-  (PrettyFormat.Doc.text
-    "b"
-    { leftBridge := 1,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := false,
-      delayedProvide := none,
-      shouldBeExpanded := false })
-  { leftBridge := 25,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := false,
-    delayedProvide := none,
-    shouldBeExpanded := false }]](false) right[[PrettyFormat.Doc.provide
-  4
-  (PrettyFormat.Doc.text
-    ""
-    { leftBridge := 1,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := true,
-      delayedProvide := none,
-      shouldBeExpanded := true })
-  { leftBridge := 4,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := true,
-    delayedProvide := none,
-    shouldBeExpanded := true }]](true) none
-concattop: l: ruleDoc "hey" ⏎
- ((flattenDoc ("hey"))<^>("b")
-  ) ⏎
- r: "hello"
-concatDoc 0 rule 0 text hello
-hey left
----
 info: "(ruleDoc \"hey\" \n ((flattenDoc (\"hey\"))<^>(\"b\")\n  ) \n) <> (provideDoc bridgeHardNl (\"hello\"))"
 -/
 #guard_msgs in
 #eval ((ruleDoc "hey" ((flattenDoc "hey" <^> "b") <> provideDoc' bridgeHardNl)) <> "hello").toString
+
+/--
+info: "(((ruleDoc \"a\" \n (\"1\") \n) <> (provideDoc bridgeSpace (ruleDoc \"b\" \n (\"2\") \n))) <> (provideDoc bridgeSpace (\"later\")))<^>((((ruleDoc \"a\" \n (\"1\") \n) <> (provideDoc bridgeSpace (ruleDoc \"b\" \n (\"2b\") \n))) <> (provideDoc bridgeNl (\"later\")))<^>((((ruleDoc \"a\" \n (\"1b\") \n) <> (provideDoc bridgeNl (ruleDoc \"b\" \n (\"2\") \n))) <> (provideDoc bridgeSpace (\"later\")))<^>(((ruleDoc \"a\" \n (\"1b\") \n) <> (provideDoc bridgeNl (ruleDoc \"b\" \n (\"2b\") \n))) <> (provideDoc bridgeNl (\"later\")))\n)\n)\n"
+-/
+#guard_msgs in
+#eval ((ruleDoc "a" ("1" <_> "" <^> "1b" <$$> "")) <> (ruleDoc "b" ("2" <_> "" <^> "2b" <$$> "")) <> "later").toString
 
 
 -- def estimateBridge (b : List Bridge): Doc → List Bridge
@@ -1363,4 +1019,9 @@ info: "(ruleDoc \"hey\" \n ((flattenDoc (\"hey\"))<^>(\"b\")\n  ) \n) <> (provid
 --   flatten
 
 
+#eval ("def:= " <_> nestDoc 4 ("funcName" <**> "helps") <**> "val").toString
+
 end PrettyFormat
+
+
+-- Dette virkede på antagelsen af at der ikke er syntax i mit træ...

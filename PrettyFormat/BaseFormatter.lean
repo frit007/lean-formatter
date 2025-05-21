@@ -34,11 +34,11 @@ partial def findPatternStart (s pattern : String) : Option String :=
 -- At this point we also tag the syntax with Ids, bug only if they should be cached
 -- At this point we want to add bridgeInformation
 -- At this point we could also remove failures (we wait until now to because otherwise failure can not be cascade across syntax)
-partial def expandSyntax (r : RuleRec) (ppl : Doc) : FormatM Doc := do
-  -- dbg_trace s!"expanding: {repr ppl}"
-  if ppl.meta.hasBeenExpanded then
-    return ppl
-  match ppl with
+partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
+  -- -- dbg_trace s!"expanding: {repr ppl}"
+  if doc.meta.hasBeenExpanded then
+    return doc
+  match doc with
   | .fail s _ => return (.fail s)
   | .text s _ => return (.text s)
   | .newline s _ => return (.newline s)
@@ -54,13 +54,13 @@ partial def expandSyntax (r : RuleRec) (ppl : Doc) : FormatM Doc := do
       cachePPL (.choice left right m) (max left.meta.cacheWeight right.meta.cacheWeight)
   | .flatten inner m =>
     let inner ← expandSyntax r inner
-    cachePPL (.flatten inner m) (inner.meta.cacheWeight)
+    cachePPL (.flatten inner {m with containsWhiteSpace := inner.meta.containsWhiteSpace}) (inner.meta.cacheWeight)
   | .align inner m =>
     let inner ← expandSyntax r inner
-    cachePPL (.align inner m) (inner.meta.cacheWeight)
+    cachePPL (.align inner {m with containsWhiteSpace := inner.meta.containsWhiteSpace}) (inner.meta.cacheWeight)
   | .nest n inner m =>
     let inner ← expandSyntax r inner
-    cachePPL (.nest n inner m) (inner.meta.cacheWeight)
+    cachePPL (.nest n inner {m with containsWhiteSpace := inner.meta.containsWhiteSpace}) (inner.meta.cacheWeight)
   | .concat left right m =>
     let left ← expandSyntax r left
     let right ← expandSyntax r right
@@ -71,44 +71,48 @@ partial def expandSyntax (r : RuleRec) (ppl : Doc) : FormatM Doc := do
       return Doc.fail s
     | _, _ =>
       -- Note that in case of unknown we over estimate the bridges required
-      dbg_trace s!"cachePPL {repr left.meta.cacheWeight} {repr right.meta.cacheWeight}"
-      cachePPL (.concat left right m) (max left.meta.cacheWeight right.meta.cacheWeight)
+      -- dbg_trace s!"cachePPL {repr left.meta.cacheWeight} {repr right.meta.cacheWeight}"
+      if (left.meta.containsWhiteSpace || right.meta.containsWhiteSpace) then
+        cachePPL (concatDoc left right) (max left.meta.cacheWeight right.meta.cacheWeight)
+      else
+        cachePPL (.concat left right m) (max left.meta.cacheWeight right.meta.cacheWeight)
+
   | .rule name inner m =>
     let inner ← expandSyntax r inner
-    cachePPL (.rule name inner m) (inner.meta.cacheWeight)
+    cachePPL (.rule name inner {m with containsWhiteSpace := inner.meta.containsWhiteSpace}) (inner.meta.cacheWeight)
   | .bubbleComment s inner m =>
     let inner ← expandSyntax r inner
-    cachePPL (.bubbleComment s inner m) (inner.meta.cacheWeight)
+    cachePPL (.bubbleComment s inner {m with containsWhiteSpace := inner.meta.containsWhiteSpace}) (inner.meta.cacheWeight)
   | .stx stx _ => return ← r stx
   | .reset inner m =>
     let inner ← expandSyntax r inner
-    cachePPL (.reset inner m) (inner.meta.cacheWeight)
+    cachePPL (.reset inner {m with containsWhiteSpace := inner.meta.containsWhiteSpace}) (inner.meta.cacheWeight)
   | .provide b inner m  =>
     let inner ← expandSyntax r inner
-    cachePPL (.provide b inner m) 0
+    cachePPL (.provide b inner {m with containsWhiteSpace := inner.meta.containsWhiteSpace}) 0
   | .require b _ => cachePPL (.require b) 0
   | .cost c inner m =>
     let inner ← expandSyntax r inner
-    cachePPL (.cost c inner m) (inner.meta.cacheWeight)
+    cachePPL (.cost c inner {m with containsWhiteSpace := inner.meta.containsWhiteSpace}) (inner.meta.cacheWeight)
     -- cachePPL (.cost c) 0 bridgeFlex
 where
   cachePPL (doc:Doc) (childCacheWeight:Nat) : FormatM Doc := do
     let newMeta := doc.calcMeta
-    -- dbg_trace s!"cachePPL {repr doc} {repr newMeta}"
+    -- -- dbg_trace s!"cachePPL {repr doc} {repr newMeta}"
     -- if newMeta.shouldBeExpanded then
     --   return doc
     -- else
     -- if childCacheWeight >= (← get).cacheDistance then
     if childCacheWeight >= 2 then
       -- return doc leftBridge (← FormatM.genId) 0 true
-      dbg_trace s!"cachePPL we generate a new id"
+      -- dbg_trace s!"cachePPL we generate a new id"
       return doc.setMeta {
         newMeta with
         cacheWeight := 0,
         id := ← FormatM.genId
       }
     else
-      dbg_trace s!"cachePPL we skip new id"
+      -- dbg_trace s!"cachePPL we skip new id"
       return doc.setMeta {
         newMeta with
         cacheWeight := childCacheWeight + 1,
@@ -117,7 +121,7 @@ where
 
 
 partial def findFirstMatch (fmts : List (Name → Option Rule)) (kind : SyntaxNodeKind) (r : RuleRec) (stx : Syntax) :FormatM (List FormatError ⊕ Doc):= do
-  -- dbg_trace s!"findFirstMatch {stx.getKind}"
+  -- -- dbg_trace s!"findFirstMatch {stx.getKind}"
   let mut errors : List FormatError := []
   for fmt in fmts do
     -- let options := pFormatAttr.getValues env kind

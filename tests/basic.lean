@@ -5,11 +5,11 @@ import Lean
 
 open Lean PrettyFormat
 
-set_option pf.debugPPL true
+-- set_option pf.debugPPL true
 
 #format
-/-- Hey!-/
-def a : Nat :=2
+def mult (n : Nat) := n * 3
+
 
 /--
 info:
@@ -74,8 +74,8 @@ set_option pf.lineLength 70 -- Test that the code will be folded if the line len
 /--
 info:
 instance : Inter NameSet where
-  inter := fun s t =>
-    s.fold (fun r n => if t.contains n then r.insert n else r) {}
+  inter := fun s t => s.fold (fun
+    r n => if t.contains n then r.insert n else r) {}
 -/
 #guard_msgs in
 #format
@@ -97,8 +97,8 @@ open Lean Elab Parser.Command
   do
     assumeMissing unknown1
     return (combine (.<_>.)
-      #[toDoc inductiveAtom,toDoc decl,toDoc optDeclSig,combine (.<_>.)
-      whereContainer.getArgs])<>(Doc.nest 2 (""<$$>combine (.<$$>.)
+      #[toDoc inductiveAtom, toDoc decl,toDoc optDeclSig,combine (.<_>.)
+      whereContainer.getArgs])<>(nestDoc 2 (""<$$>combine (.<$$>.)
       terms.getArgs<>(""<$$>""<?derive)))
 | _ => failure
 

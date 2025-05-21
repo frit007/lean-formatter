@@ -268,15 +268,15 @@ partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (trace : 
       let (measureResults, remainingBridges) ← getCached doc.meta.id indent col leftBridge forceTainted
       if remainingBridges.isEmpty then
         -- if the cache found results for all ingoing bridges then return existing result
-        dbg_trace s!"Cache hit for {doc.meta.id} with {remainingBridges} at {col} {indent}"
+        -- dbg_trace s!"Cache hit for {doc.meta.id} with {remainingBridges} at {col} {indent}"
         return measureResults
       else
         -- only check the bridges that have not already been checked yet
-      dbg_trace s!"Cache miss for {doc.meta.id} with {remainingBridges} at {col} {indent}"
+      -- dbg_trace s!"Cache miss for {doc.meta.id} with {remainingBridges} at {col} {indent}"
 
       let value ← exceedCheck doc trace col indent widthLimit remainingBridges forceTainted
       addToCache doc.meta.id indent col (!forceTainted) remainingBridges value
-      dbg_trace s!"Cache add for {doc.meta.id} for {remainingBridges} at {col} {indent}"
+      -- dbg_trace s!"Cache add for {doc.meta.id} for {remainingBridges} at {col} {indent}"
       return value
     else
       exceedCheck doc trace col indent widthLimit leftBridge forceTainted
@@ -536,18 +536,20 @@ where
     -- allocate twice the space needed, so flatten is separated into its own category
     {size := n, content := Array.mkArray (n*2) [], log := log, giveUp := 1000, lastMeasurement := 0}
 
-partial def runFlatten (nextId : Nat) (doc : Doc) : Doc :=
-  let (doc, _) := (flattenPreprocessor false false doc).run {nextId := nextId, cached := Std.HashMap.empty}
-  doc
+partial def runFlatten (nextId : Nat) (doc : Doc) : (Doc × Nat) :=
+  let (doc, cache2) := (flattenPreprocessor false false doc).run {nextId := nextId, cached := Std.HashMap.empty}
+  (doc, cache2.nextId)
 
 /--
 Find an optimal layout for a document and render it.
 -/
 partial def Doc.prettyPrint (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit : Nat) : IO String := do
-  return (← Doc.print χ (runFlatten cacheSize doc) cacheSize col widthLimit (none)) |>.layout
+  let (doc, cacheSize) := (runFlatten cacheSize doc)
+  return (← Doc.print χ doc cacheSize col widthLimit (none)) |>.layout
 
 partial def Doc.prettyPrintLog (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit : Nat) : IO String := do
-  let l ← Doc.print χ (runFlatten cacheSize doc) cacheSize col widthLimit (some [])
+  let (doc, cacheSize) := (runFlatten cacheSize doc)
+  let l ← Doc.print χ doc cacheSize col widthLimit (some [])
   match l.log with
   | none => return l.layout
   | some log =>

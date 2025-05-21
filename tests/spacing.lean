@@ -217,12 +217,12 @@ partial def nchoicenl : Nat → FormatM Doc
 #eval do
   -- let (doc, cache) := markCachedObject (nchoicenl 599)
   let ((doc, cache), timeCreate) ← measureTime (fun _ => do
-    return markCachedObject (nchoicenl 9)
+    return markCachedObject (nchoicenl 599)
   )
-  IO.println s!"{repr doc}"
-  IO.println s!"Time: {timeCreate.toFloat / 1000000000.0}s \n"
+  -- IO.println s!"{repr doc}"
+  -- IO.println s!"Time: {timeCreate.toFloat / 1000000000.0}s \n"
 
-  IO.println s!"{cache.nextId}"
+  -- IO.println s!"{cache.nextId}"
 
   let (out, timeDoc) ← measureTime (fun _ => do
     let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) doc
