@@ -29,10 +29,10 @@ where
   | .stx stx _ => s!"stx {stx}"
   | .reset s _ => s!"reset {prettyPrint' 0 s}"
   | .rule name s _ => s!"rule {name} ({prettyPrint' indent s})"
-  | .provide s d _ => s!"provide {s} ({prettyPrint' indent d})"
+  | .provide s _ => s!"provide"
   | .require s _ => s!"require {s}"
-  | .cost s d _ => s!"cost {s} ({prettyPrint' indent d})"
-  | .bubbleComment s d _ => s!"bubbleComment {s} ({prettyPrint' indent d})"
+  | .cost s _ => s!"cost {s}"
+  | .bubbleComment s _ => s!"bubbleComment {s}"
 
   def escapeQuotes (s : String) : String :=
     s.replace "\"" "\\\""

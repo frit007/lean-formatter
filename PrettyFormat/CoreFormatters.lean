@@ -170,7 +170,7 @@ function declaration
 #coreFmt Lean.Parser.Command.declaration fun
 | s =>
   -- -- dbg_trace s!"declaration: {s}"
-  let v := combine (. <> provideDoc' (bridgeAny ||| bridgeImmediate) <> .) s
+  let v := combine (. <> provideDoc (bridgeAny ||| bridgeImmediate) <> .) s
   -- -- dbg_trace s!"the vals?: {v.toString}"
   return v
 
@@ -257,7 +257,7 @@ partial def pfDeclId : Rule
 #coreFmt Lean.Parser.Command.declModifiers fun
 | #[docComment, attributes, visibility, noncomputableS, unsafeS, partialS] => do
   let modifiers := combine (.<_>.) #[visibility, noncomputableS, unsafeS, partialS]
-  return docComment <> (attributes ?> (provideDoc' bridgeHardNl)) <> modifiers
+  return docComment <> (attributes ?> (provideDoc bridgeHardNl)) <> modifiers
 | _ => failure
 
 /-
@@ -458,7 +458,7 @@ def termOperator : Rule := fun
 
   let content := byAtom <> (nestDoc 2 (bridgeHardNl !> tactic) <^> flattenDoc (bridgeSpace !> tactic))
   return (bridgeNl <! byAtom <> nestDoc 2 (bridgeNl !> tactic)) <^>
-  (((bridgeSpace ||| bridgeNone) <! content <^> costDoc 3 content/-allow any bridge, but at a cost-/)) <^>
+  (((bridgeSpace ||| bridgeNone) <! content <^> costDoc 3 <> content/-allow any bridge, but at a cost-/)) <^>
   (bridgeImmediate <! " " <> (nestDoc 2 (byAtom <> Doc.nl <> tactic)))
 | _ => failure
 
@@ -561,7 +561,7 @@ def formatSimpleProof : Array Syntax → RuleM Doc
 
 #coreFmt Lean.Parser.Term.anonymousCtor fun
 | #[lbracket, rwSeq, rbracket] => do
-  return (toDoc lbracket) <> (provideDoc' (bridgeNone)) <> (addSpaceAfterCommas rwSeq.getArgs) <> (toDoc rbracket)
+  return (toDoc lbracket) <> (provideDoc (bridgeNone)) <> (addSpaceAfterCommas rwSeq.getArgs) <> (toDoc rbracket)
 | _ => failure
 
 #coreFmt Lean.Parser.Tactic.simpa combine' (.<_>.)
@@ -734,7 +734,7 @@ def combineParenExpression [ToDoc a] [Inhabited a] (sep: Doc → Doc → Doc) (a
 
 #coreFmt Lean.Parser.Tactic.obtain fun
 | #[obtainAtom, cases, unknown1, assign] => do
-  return obtainAtom <> bridgeSpace !> cases <> bridgeSpace !> (combine (. <> provideDoc' (bridgeAny ||| bridgeImmediate) <> .) assign.getArgs)
+  return obtainAtom <> bridgeSpace !> cases <> bridgeSpace !> (combine (. <> provideDoc (bridgeAny ||| bridgeImmediate) <> .) assign.getArgs)
 | _ => failure
 
 #coreFmt Lean.Parser.Tactic.rcasesPat.tuple fun
@@ -1120,7 +1120,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
   assumeMissing unknown2
   assumeMissing unknown3
   assumeMissing unknown4
-  return (declModifiers ?> provideDoc' bridgeNl) <> attrKind <> elabAtom <**> combine (.<**>.) macroArgs.getArgs <**> elabTail
+  return (declModifiers ?> provideDoc bridgeNl) <> attrKind <> elabAtom <**> combine (.<**>.) macroArgs.getArgs <**> elabTail
 | _ => failure
 
 #coreFmt Lean.Parser.Command.section combine' (.<_>.)
@@ -1439,7 +1439,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
     let comments := (parts.head! :: tail)
       |>.foldl (fun (acc) (c:String) => acc <> Doc.nl <> c) (toDoc "")
 
-    let l := ((startAtom <> flattenDoc (comments) <^> (startAtom <> comments)) <> (provideDoc' bridgeHardNl))
+    let l := ((startAtom <> flattenDoc (comments) <^> (startAtom <> comments)) <> (provideDoc bridgeHardNl))
     -- dbg_trace s!"@docComment {repr l}"
     return l
   | _ => failure

@@ -7,8 +7,8 @@ open Lean PrettyFormat
 
 -- set_option pf.debugPPL true
 
-#format
-def mult (n : Nat) := n * 3
+-- #format
+-- def mult (n : Nat) := n * 3
 
 
 /--

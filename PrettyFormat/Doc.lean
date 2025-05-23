@@ -17,7 +17,7 @@ def bridgeSpace :Bridge := 8
 def bridgeNone :Bridge := 16
 def bridgeImmediate :Bridge := 32
 def bridgeAny := bridgeSpace ||| bridgeNl ||| bridgeHardNl
-
+def bridgeEnding := bridgeAny ||| bridgeFlex
 
 def Bridge.subsetOf (l r: Bridge) : Bool :=
   (l &&& r) == r
@@ -53,6 +53,14 @@ def Bridge.isEmpty (b : Bridge) : Bool :=
 
 def Bridge.smallerThan (lhs rhs: Bridge) : Bool :=
   lhs < rhs
+
+partial def Bridge.parts : Bridge → List Bridge
+| 0 => []
+| x =>
+  let one := (x &&& (~~~ (x - 1)))
+  one :: Bridge.parts (x &&& (~~~ one))
+
+#eval bridgeFlex.parts
 
 -- The idea is that bridge flex will accept any bridge
 def Bridge.canHandle (lhs rhs: Bridge) : Bool :=
@@ -215,15 +223,50 @@ instance : Cost DefaultCost where
   text := DefaultCost.text
   nl := DefaultCost.nl
 
-inductive Trilean
+inductive Ternary
 | yes
 | no
 | maybe
 deriving Inhabited, Repr
 
+-- What I want to ask is?
+-- containsWhiteSpace
+-- What am I trying to ask?
+-- I am trying to figure out if there is a choice operator on the left side, that may or
+-- choice operators are not that bad the problem is if one of the choice operators returns
+-- contains choice
+-- maybe it just does not make sense to ask concat whether or not it collapses...
+-- walk the left side of the tree
+
+-- def Ternary.or : Ternary → Ternary → Ternary
+-- | .yes, _ => .yes
+-- | _, .yes => .yes
+-- | .maybe, _ => .maybe
+-- | _, .maybe => .maybe
+-- | .no, .no => .no
+
+def Ternary.and : Ternary → Ternary → Ternary
+| .yes, .yes => .yes
+| .no, .no => .no
+| _, _ => .maybe
+
+def Ternary.eq : Ternary → Ternary → Bool
+| .yes, .yes => true
+| .no, .no => true
+| .maybe, .maybe => true
+| _, _ => false
+
+
+-- inductive D where
+-- | cached (cache: Array (Bridge × Bridge))
+-- | passThrough
+-- | acceptFlex
+-- | provide (b : Bridge)
+-- | require (b : Bridge)
+-- deriving Inhabited, Repr
 
 structure DocMeta where
-  leftBridge : Bridge := bridgeFlex
+  -- leftBridge : Bridge := bridgeFlex
   id : Nat := 0
   cacheWeight : Nat := 0
   -- no default value: to force the user to implement it, or better: use our functions :)
@@ -231,11 +274,16 @@ structure DocMeta where
   -- shouldBeExpanded : Bool := containsWhiteSpace
   --
 
-  -- This is used for for flatten
-  --
-  collapsesBridges : Trilean
+  /--
+   This is used for for flatten
+  The issue is that flatten wants to ignore the first bridge on either side of a flatten operation. For example
+  "def main := " <$$> flatten ("return 1" <> "-- end of line comment" <$$$>)
+  wants to allow to allow the newline before the flatten operation (remember that the bridge is evaluated when we reach the "return 1" text)
+  -/
+  collapsesBridges : Ternary
   -- we delay this calculation until flatten, because otherwise we might have to recalculate
-  paths : List (Bridge × Bridge) := []
+  -- paths guarantee that if you provide a bridge on the left then you can reach the right bridge
+  paths : Array (Bridge × Bridge) := #[]
 
 deriving Inhabited, Repr
 
@@ -255,12 +303,12 @@ inductive Doc where
 /--
 Render a `String` that does not contain newlines.
 -/
-| text (s : String) (meta : DocMeta := {collapsesBridges := s.length > 0})
+| text (s : String) (meta : DocMeta := {collapsesBridges := if s.length > 0 then Ternary.yes else Ternary.no})
 /--
 Render a newline. Also contains an alternative rendering for the newline for `Doc.flatten`.
 If s is `none` then it will fail
 -/
-| newline (s : Option String) (meta : DocMeta := {collapsesBridges := true})
+| newline (s : Option String) (meta : DocMeta := {collapsesBridges := Ternary.yes})
 /--
 Concatenate two documents unaligned. If `l` is the chars that we get from `lhs`
 and `r` from `rhs` they will render as:
@@ -293,7 +341,7 @@ Reset the indentation level to 0.
 Fail will never be rendered.
 This error will propagate until the next choice, where branches containing errors are eliminated.
 -/
-| fail (err : String) (meta : DocMeta)
+| fail (err : String) (meta : DocMeta := {collapsesBridges := Ternary.yes})
 /--
 The special spacing options are
 - `space` which is a single space
@@ -311,19 +359,18 @@ provide can be chained to narrow the options to overlap between the two sets
 /--
 `require` must be preceded by a `provide` and will fail if the provided bridge does not contain the expected spacing
 -/
-| require (bridge : Bridge) (meta : DocMeta := {collapsesBridges := true})
--- TODO: Think about adding the cost constructor. It does however make type inference much harder
+| require (bridge : Bridge) (meta : DocMeta := {collapsesBridges := Ternary.yes})
 | rule (r : String) (doc : Doc) (meta : DocMeta)
 | stx (s : Lean.Syntax) (meta : DocMeta)
 | flatten (inner : Doc) (meta : DocMeta)
 /--
 Add cost equivalent to `nl` newlines
 -/
-| cost (nl:Nat) (inner : Doc) (meta : DocMeta)
+| cost (nl:Nat) (meta : DocMeta)
 /--
 The comment will be placed after the last newline before this line
 -/
-| bubbleComment (comment : String) (inner : Doc)  (meta : DocMeta)
+| bubbleComment (comment : String) (meta : DocMeta)
 deriving Inhabited, Repr
 
 def Doc.meta : Doc → DocMeta
@@ -335,13 +382,13 @@ def Doc.meta : Doc → DocMeta
   | .choice _ _ meta => meta
   | .reset _ meta => meta
   | .fail _ meta => meta
-  | .provide _ _ meta => meta
+  | .provide _ meta => meta
   | .require _ meta => meta
   | .rule _ _ meta => meta
   | .stx _ meta => meta
   | .flatten _ docMeta => docMeta
-  | .cost _ _ meta => meta
-  | .bubbleComment _ _ meta => meta
+  | .cost _ meta => meta
+  | .bubbleComment _ meta => meta
 
 def Doc.setMeta (doc : Doc) (meta : DocMeta) : Doc :=
   match doc with
@@ -353,13 +400,13 @@ def Doc.setMeta (doc : Doc) (meta : DocMeta) : Doc :=
   | .choice l r _ => .choice l r meta
   | .reset d _ => .reset d meta
   | .fail err _ => .fail err meta
-  | .provide s i _ => .provide s i meta
+  | .provide s _ => .provide s meta
   | .require s _ => require s meta
   | .rule r d _ => .rule r d meta
   | .stx s _ => .stx s meta
   | .flatten inner _ => .flatten inner meta
-  | .cost c d _ => .cost c d meta
-  | .bubbleComment c d _ => .bubbleComment c d meta
+  | .cost c _ => .cost c meta
+  | .bubbleComment c _ => .bubbleComment c meta
 
 /--
 A `Measure` contains a `Doc` along with meta information from the rendering process.
@@ -381,6 +428,7 @@ structure Measure (χ : Type) where
   layout : List String → List String
   -- spacingL : Option (HashSet String) := none
   -- spacingR : Bridge := bridgeFlex
+  bridgeR : Bridge
   -- /--
   -- Force the next character to be newline. If it is not then fail
   -- -/
@@ -405,7 +453,7 @@ instance [Cost χ] : LEB (Measure χ) where
   leq lhs rhs :=
     (lhs.fail.isSome && rhs.fail.isNone) || (lhs.last ≤ rhs.last && LEB.leq lhs.cost rhs.cost)
 
-def Measure.mkFail [Cost χ] (cost : χ ) (err : (List (List String))) : Measure χ := {last := 0, cost:=cost, layout := fun _ => panic! "We never want to print fail", fail := some err}
+def Measure.mkFail [Cost χ] (cost : χ ) (err : (List (List String))) : Measure χ := {last := 0, cost:=cost, layout := fun _ => panic! "We never want to print fail", fail := some err, bridgeR := bridgeFlex}
 
 def bridgeIntersection (set1 set2 : Bridge): Bridge :=
   set1 &&& set2
@@ -418,7 +466,7 @@ def Measure.concat [Cost χ] (lhs rhs : Measure χ) :Measure χ :=
   | (some l, none) => Measure.mkFail lhs.cost l
   | (none, some r) => Measure.mkFail rhs.cost r
   | (some l, some r) => Measure.mkFail lhs.cost (l ++ r)
-  | _ => { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), fail := none }
+  | _ => { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), fail := none, bridgeR := rhs.bridgeR }
 
 def Measure.addCost [Cost χ] (m : Measure χ) (c : χ) : Measure χ :=
   { m with cost := m.cost + c}
@@ -432,6 +480,7 @@ structure TaintedState where
   indent : Nat
   widthLimit : Nat
   leftBridge : Bridge
+  rightBridge : Bridge
 
 
 
@@ -439,8 +488,8 @@ inductive TaintedTrunk (χ : Type) where
 | leftTainted (left: TaintedTrunk χ) (doc: Doc) (state : TaintedState) (id: Nat)
 | rightTainted (left : Measure χ) (right: TaintedTrunk χ) (state : TaintedState) (id: Nat)
 | center (doc : Doc) (state : TaintedState) (id: Nat)
-| cost (cost : Nat) (trunk : (TaintedTrunk χ)) (id: Nat)
-| bubbleComment (bubleComment : String) (trunk : (TaintedTrunk χ)) (id: Nat)
+-- | cost (cost : Nat) (trunk : (TaintedTrunk χ)) (id: Nat)
+-- | bubbleComment (bubleComment : String) (trunk : (TaintedTrunk χ)) (id: Nat)
 
 inductive MeasureSet (χ : Type)
   /-
@@ -455,21 +504,22 @@ def impossibleMeasure [Cost χ] (trace: List String): Measure χ := {
       cost := Cost.text 0 0 0,
       layout := fun ss => "(no possible formatter)" :: (String.join (trace.intersperse "::")):: "\n" :: ss
       fail := ["impossible"::trace]
+      bridgeR := bridgeFlex
     }
 def impossibleMeasureSet [Cost χ] (trace: List String): MeasureSet χ :=
   .set [impossibleMeasure trace]
 
 instance : Inhabited (MeasureSet χ) where
   -- default := MeasureSet.set []
-  default := MeasureSet.tainted (TaintedTrunk.center (Doc.text "" {containsWhiteSpace := false}) {trace := [], col := 0, indent := 0, widthLimit := 0, leftBridge := bridgeFlex} 0) true
+  default := MeasureSet.tainted (TaintedTrunk.center (Doc.text "" {collapsesBridges := Ternary.yes}) {trace := [], col := 0, indent := 0, widthLimit := 0, leftBridge := bridgeFlex, rightBridge := bridgeFlex} 0) true
 
 def TaintedTrunk.cacheInfo (trunk : TaintedTrunk χ) : Option (TaintedState × Nat) :=
   match trunk with
   | .leftTainted _ _ s id => some (s, id)
   | .rightTainted _ _ s id => some (s, id)
   | .center _ s id => some (s, id)
-  | .cost _ _ id => some ({trace := [], col := 0, indent := 0, widthLimit := 0, leftBridge := bridgeFlex}, id)
-  | _ => none
+  -- | .cost _ _ id => some ({trace := [], col := 0, indent := 0, widthLimit := 0, leftBridge := bridgeFlex}, id)
+  -- | _ => none
 
 
 
@@ -530,10 +580,10 @@ where
   | .stx _ _ => "stx\n"
   | .rule name s _ => s!"ruleDoc \"{name}\" {newline indent} ({output' (indent + 2) s}) {newline indent}"
   | .reset s _ => s!"Doc.reset ({output' indent s})"
-  | .provide b i _ => s!"provideDoc {b.str} ({output' indent i})"
+  | .provide b _ => s!"provideDoc {b.str}"
   | .require b _ => s!"requireDoc {b.str}"
-  | .cost n d _ => s!"costDoc {n} ({output' indent d})"
-  | .bubbleComment s d _ => s!"bubbleComment \"{s}\" ({output' indent d})"
+  | .cost n _ => s!"costDoc {n}"
+  | .bubbleComment s _ => s!"bubbleComment \"{s}\""
   if d.meta.id != 0 then
     s!"/-{d.meta.id}-/ {inner}"
   else
@@ -555,34 +605,31 @@ def Doc.kind : Doc → String
   | .stx _ _ => "stx\n"
   | .rule _ _ _ => s!"rule"
   | .reset _ _ => s!"reset"
-  | .provide _ _ _ => s!"provide"
+  | .provide _ _ => s!"provide"
   | .require _ _ => s!"require"
-  | .bubbleComment s _ _ => s!"bubbleComment \"{s}\""
-  | .cost _ _ _ => s!"cost"
+  | .bubbleComment s _ => s!"bubbleComment \"{s}\""
+  | .cost _ _ => s!"cost"
 
 def Doc.calcMeta : Doc → DocMeta
-  | .fail _ m => {m with leftBridge := bridgeNull, containsWhiteSpace := false}
-  | .text s m => {m with leftBridge := bridgeFlex, containsWhiteSpace := s.length == 0}
-  | .newline _ m => {m with leftBridge := bridgeFlex, containsWhiteSpace:= false}
+  | .fail _ m => {m with collapsesBridges := Ternary.yes}
+  | .text s m => {m with collapsesBridges := if s.length == 0 then Ternary.no else Ternary.yes}
+  | .newline _ m => {m with collapsesBridges:= Ternary.yes}
   | .choice l r m => {m with
-      leftBridge := l.meta.leftBridge ||| r.meta.leftBridge,
-      containsWhiteSpace := l.meta.containsWhiteSpace || r.meta.containsWhiteSpace,
+      collapsesBridges := l.meta.collapsesBridges.and r.meta.collapsesBridges,
     }
-  | .flatten i m => {m with leftBridge := i.meta.leftBridge.flatten, containsWhiteSpace := i.meta.containsWhiteSpace}
-  | .align i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace}
-  | .nest _ i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace}
+  | .flatten i m => {m with collapsesBridges := i.meta.collapsesBridges}
+  | .align i m => {m with collapsesBridges := i.meta.collapsesBridges}
+  | .nest _ i m => {m with collapsesBridges := i.meta.collapsesBridges}
   | .concat l r m => {m with
-    -- if the right side cannot be expanded then neither can the left side
-    leftBridge := if r.meta.leftBridge == bridgeNull then bridgeNull else l.meta.leftBridge,
-    containsWhiteSpace := false, -- invariant: concat is never whitespace, it should have been combined to a single doc
+    collapsesBridges := l.meta.collapsesBridges.and r.meta.collapsesBridges,
     }
   | .stx _ m => m
-  | .rule _ i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace}
-  | .reset i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace}
-  | .provide b i m => {m with leftBridge := i.meta.leftBridge.provideIntersection b, containsWhiteSpace := i.meta.containsWhiteSpace}
-  | .require b m => {m with leftBridge := b, containsWhiteSpace := false}
-  | .bubbleComment _ i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace}
-  | .cost _ i m => {m with leftBridge := i.meta.leftBridge, containsWhiteSpace := i.meta.containsWhiteSpace}
+  | .rule _ i m => {m with collapsesBridges := i.meta.collapsesBridges}
+  | .reset i m => {m with collapsesBridges := i.meta.collapsesBridges}
+  | .provide _ m => {m with collapsesBridges := Ternary.no}
+  | .require _ m => {m with collapsesBridges := Ternary.no}
+  | .bubbleComment _ m => {m with collapsesBridges := Ternary.no}
+  | .cost _ m => {m with collapsesBridges := Ternary.no}
 where
   -- use the first delayedProvide, because one of these is going to be the source of a delayedProvide and we do not want to delete the source
   firstDelayed : Option (List Bridge) → Option (List Bridge) → Option (List Bridge)
@@ -616,13 +663,13 @@ partial def isSyntaxEmpty (stx : Lean.Syntax) : Bool :=
 
 instance : ToDoc Lean.Syntax where
   -- note that syntax is placed as a placeholder and will be expanded later
-  toDoc stx:= Doc.stx stx {containsWhiteSpace := isSyntaxEmpty stx}
+  toDoc stx:= Doc.stx stx {collapsesBridges := if isSyntaxEmpty stx then Ternary.no else Ternary.yes}
 
 instance : ToDoc (Lean.TSyntax a) where
-  toDoc tstx:= Doc.stx tstx.raw {containsWhiteSpace := isSyntaxEmpty tstx.raw}
+  toDoc tstx:= Doc.stx tstx.raw {collapsesBridges := if isSyntaxEmpty tstx.raw then Ternary.no else Ternary.yes}
 
 instance : ToDoc String where
-  toDoc text:= Doc.text text {containsWhiteSpace := text.length == 0}
+  toDoc text:= Doc.text text
 
 -- instance : ToDoc Bridge where
 --   toDoc b := Doc.provide b (Doc.text "" {containsWhiteSpace := true, delayedProvide := some [b]}) {containsWhiteSpace := true, delayedProvide := some [b]}
@@ -644,13 +691,13 @@ where
   | .stx s _=> isSyntaxEmpty s
   | .reset inner _=> isEmpty' inner
   | .rule _ inner _=> isEmpty' inner
-  | .provide _ i _=> isEmpty' i
+  | .provide _ _=> false
   | .require _ _=> false
   /-
   Note that this means that cost and bubble comments will be discarded if they are not attached to a relevant object
   -/
-  | .bubbleComment _ d _=> isEmpty' d
-  | .cost _ d _=> isEmpty' d
+  | .bubbleComment _ _=> false
+  | .cost _ _=> false
 
 
 partial def moveRight (d:Doc): Doc → Doc
@@ -660,13 +707,10 @@ partial def moveRight (d:Doc): Doc → Doc
   | .nest _ inner _ => moveRight d inner
   | .reset inner _ => moveRight d inner
   | .rule r inner m => Doc.rule r (moveRight d inner) (m) |>.updateMeta
-  | .provide b inner m => (Doc.provide b (moveRight d inner) m)|>.updateMeta
   | .concat l r m => Doc.concat l (moveRight d r) m |>.updateMeta
   /-
   Note that this means that cost and bubble comments will be discarded if they are not attached to a relevant object
   -/
-  | .bubbleComment c inner m => Doc.bubbleComment c (moveRight d inner) (m) |>.updateMeta
-  | .cost c inner m => Doc.cost c (moveRight d inner) (m) |>.updateMeta
   -- when we reach a leaf return
   | _ => d
 
@@ -674,39 +718,48 @@ partial def moveRight (d:Doc): Doc → Doc
 /--
 Expand choice operator until it must no longer be expanded. While moving over modifiers
 -/
-def expandDoc (d : Doc): (List (Doc × List Doc)) :=
-  if d.meta.containsWhiteSpace then
-    expandDoc' d
+def expandDoc (d : Doc) (isLeft : Bool): (List Doc) :=
+  if d.meta.collapsesBridges.eq Ternary.yes then
+    [d]
   else
-    [(d, [])]
+    expandDoc' d
     -- [.text "are we heer?" {containsWhiteSpace:=false}]
 where
-  expandDoc' : Doc → (List (Doc × List Doc))
-  | .choice l r _ => expandDoc l|>.append (expandDoc r)
-  | .rule n i m => expandDoc i |> .map (fun (d, d') => (Doc.rule n d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d') )
-  | .reset i m => expandDoc i |> .map (fun (d, d') => (Doc.reset d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d'))
-  | .flatten i m => expandDoc i |> .map (fun (d, d') => (Doc.flatten d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d'))
-  | .align i m => expandDoc i |> .map (fun (d, d') => (Doc.align d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d'))
-  | .nest i inner m => expandDoc inner |> .map (fun (d, d') => (Doc.nest i d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d'))
-  | .bubbleComment c inner m => expandDoc inner |> .map fun (d, d') => (Doc.bubbleComment c d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d')
-  | .cost c inner m => expandDoc inner |> .map fun (d, d') => (Doc.cost c d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d')
-  | .provide b inner m => expandDoc inner |> .map fun (d, d') => (Doc.provide b d {m with containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, d')
+  expandDoc' : Doc → (List Doc)
+  | .choice l r _ => expandDoc l isLeft|>.append (expandDoc r isLeft)
+  | .rule n inner m => expandDoc inner isLeft |> .map (fun d => Doc.rule n d {m with collapsesBridges := d.meta.collapsesBridges} |>.updateMeta )
+  | .reset inner m => expandDoc inner isLeft |> .map (fun d => Doc.reset d {m with collapsesBridges := d.meta.collapsesBridges} |>.updateMeta)
+  | .flatten inner m => expandDoc inner isLeft |> .map (fun d => Doc.flatten d {m with collapsesBridges := d.meta.collapsesBridges} |>.updateMeta)
+  | .align inner m => expandDoc inner isLeft |> .map (fun d => Doc.align d {m with collapsesBridges := d.meta.collapsesBridges} |>.updateMeta)
+  | .nest i inner m => expandDoc inner isLeft |> .map (fun d => Doc.nest i d {m with collapsesBridges := d.meta.collapsesBridges} |>.updateMeta)
   | .concat l r m =>
     --  dbg_trace s!"expand concatDoc: l: {repr l} r: {repr r}"
-    (expandDoc r) |>.map (fun (d, _) =>
-      (l, [d])
-    )
+    if isLeft then
+      if l.meta.collapsesBridges.eq Ternary.yes then
+        [.concat l r m]
+      else if r.meta.collapsesBridges.eq Ternary.yes then
+        expandDoc l isLeft |>.foldl (fun acc (dl) => Doc.concat dl r {collapsesBridges := dl.meta.collapsesBridges.and r.meta.collapsesBridges} :: acc) []
+      else
+        let rr := expandDoc r isLeft
+        expandDoc l isLeft |>.foldl (fun acc dl =>
+          rr.foldl (fun acc dr =>
+            Doc.concat dl dr {collapsesBridges := dl.meta.collapsesBridges.and dr.meta.collapsesBridges} :: acc
+          ) acc
+        ) []
 
-    -- (expandDoc r) |>.map (fun (d, _) =>
-    --   if d.meta.containsWhiteSpace then
-    --     (Doc.concat l d {containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta, [])
-    --   else
-    --     (Doc.concat l d {containsWhiteSpace := false} |>.updateMeta, [])
-    --   (l, [d])
-    -- )
-    -- (l, r)
-  -- concat, fail, newline, text, require cannot be expanded, since they must be a value (and empty text is just empty text)
-  | d => [(d, [])]
+    else
+      if r.meta.collapsesBridges.eq Ternary.yes then
+        [.concat l r m]
+      else if l.meta.collapsesBridges.eq Ternary.yes then
+        expandDoc r isLeft |>.foldl (fun acc (dr) => Doc.concat l dr {collapsesBridges := l.meta.collapsesBridges.and dr.meta.collapsesBridges} :: acc) []
+      else
+        let rr := expandDoc r isLeft
+        expandDoc l isLeft |>.foldl (fun acc dl =>
+          rr.foldl (fun acc dr =>
+            Doc.concat dl dr {collapsesBridges := dl.meta.collapsesBridges.and dr.meta.collapsesBridges} :: acc
+          ) acc
+        ) []
+  | d => [d]
 
 def choiceDoc [ToDoc a] [ToDoc b] (l : a) (r : b) :=
   let l := toDoc l
@@ -717,16 +770,12 @@ def choiceDoc [ToDoc a] [ToDoc b] (l : a) (r : b) :=
   -- | some b, none => some b
   -- | none, some b => some b
   -- | some b1, some b2 => some (b1 ++ b2)
-  Doc.choice l r {containsWhiteSpace := false} |>.updateMeta
+  Doc.choice l r {collapsesBridges := l.meta.collapsesBridges.and r.meta.collapsesBridges} |>.updateMeta
 
-def provideDoc [ToDoc α] (b : Bridge) (i : α):=
-  let i := toDoc i
+def provideDoc (b : Bridge) : Doc :=
   -- Should expand did not work, because even if it may contain whitespace, it may still
-  Doc.provide b i {containsWhiteSpace:= i.meta.containsWhiteSpace} |>.updateMeta
+  Doc.provide b {collapsesBridges:= Ternary.no}
 
-def provideDoc' (b : Bridge):=
-  let i := toDoc ""
-  Doc.provide b i {containsWhiteSpace:= true} |>.updateMeta
 
 /--
 concat guarantees the following properties:
@@ -736,62 +785,8 @@ concat guarantees the following properties:
 partial def concatDoc [ToDoc α] [ToDoc β] (l : α) (r : β) : Doc :=
   let l := toDoc l
   let r := toDoc r
-  --  dbg_trace s!"concattop: l: {l.toString} r: {r.toString}"
-  -- I only want to react to right if
-  -- if it contains whitespace
-  -- regarding the delayedProvide problem
-  --   - I could do a last pass to replace the delayedProvide with the actual provide (annoying that we have so many passes)
-  --   - Do I care about a bridge that leads to nowhere? Typically no, it should not restrict (unless it is a special case)
-  if r.meta.containsWhiteSpace || l.meta.containsWhiteSpace then
-    -- This might seem like a terribly slow operation, however the goal is to eliminate trails that end in whitespace as soon as it is introduced
-    -- therefore the length of ls and rs are assumed to be relatively small, because users likely do not want to express something about something with no rules. If you want to optimize your formatting rules do not use whitespace rules
-    let ls := expandDoc l
-    let rs := expandDoc r
-    -- we have the scenarios
-    -- 1. l concatenated empty string & r concatenated empty string (concat (concat l (concat lwhite r)) rwhite)
-    -- 2. l concatenated empty string & r is a value (are 2 and 3 the same?, in both cases move the left value to the right)
-    -- 3. l concatenated empty string & r is an empty string
-    -- 4. l is empty & r is not ()
-    let options := ls.foldl (fun acc (l, lr) =>
-      rs.foldl (fun acc (r, rr) =>
-        -- attach the whitespace from the left to the right
-        let rWithWhiteSpace := lr.foldl (fun (acc:Option Doc) leftWhiteSpace =>
-          match acc with
-          | some prev => some (Doc.choice prev (moveRight r leftWhiteSpace) {containsWhiteSpace := leftWhiteSpace.meta.containsWhiteSpace})
-          | none => some (moveRight r leftWhiteSpace)
-        ) none
-        let r := rWithWhiteSpace.getD r
 
-        let combined := if l.meta.containsWhiteSpace then
-          if r.meta.containsWhiteSpace then
-            --  dbg_trace "kexpandBoth {l.toString}({isEmpty l}) {r.toString}({isEmpty r})"
-            if isEmpty l then
-              (moveRight r l)
-            else
-              (Doc.concat l r {containsWhiteSpace := r.meta.containsWhiteSpace})
-          else
-            --  dbg_trace "kexpandLeft {l.toString}({isEmpty l}) {r.toString}({isEmpty r})"
-            moveRight r l
-        else
-          --  dbg_trace "kexpandNeither {l.toString}({isEmpty l}) () {r.toString}({isEmpty r}) (what is lr {repr lr})"
-          Doc.concat l r {containsWhiteSpace := r.meta.containsWhiteSpace}
-
-        let combinedWithSpaces := rr.foldl (fun (acc:Option Doc) rWithWhiteSpace =>
-          match acc with
-          | some prev => some (Doc.choice prev (Doc.concat combined rWithWhiteSpace {containsWhiteSpace := true}) {containsWhiteSpace := true})
-          | none => some (Doc.concat combined rWithWhiteSpace {containsWhiteSpace := true})
-        ) none
-
-        combinedWithSpaces.getD combined :: acc
-      ) acc
-    ) []
-    -- ensure that the outer options contain whitespace, so we reduce how needs to be expanded
-    let (whiteSpaceOptions, otherOptions) := options.partition (fun d => d.meta.containsWhiteSpace)
-    listToChoices (whiteSpaceOptions ++ otherOptions)
-    -- .text s!"{whiteSpaceOptions.length},,{otherOptions.length},, {repr (options.map (fun d => d.toString))}"
-  else
-    --  dbg_trace "concatDoc {l.meta.cacheWeight} {l.kind} {r.meta.cacheWeight} {r.kind}"
-    Doc.concat l r {containsWhiteSpace := r.meta.containsWhiteSpace}
+  Doc.concat l r {collapsesBridges := l.meta.collapsesBridges.and r.meta.collapsesBridges}
 where
   listToChoices : List Doc → Doc
   | a::[] => a
@@ -806,8 +801,8 @@ infixl:40 " <> " => fun l r => concatDoc l r
 def requireDoc (b : Bridge) : Doc :=
   Doc.require b
 
-def bridgeConcat [ToDoc α] [ToDoc β] (bridge:Bridge) (l : α) (r : β) :=
-  concatDoc l (provideDoc bridge r)
+def bridgeConcat [ToDoc α] [ToDoc β] (bridge:Bridge) (l : α) (r : β) : Doc :=
+  concatDoc (concatDoc l (provideDoc bridge)) r
 
 infixl:39 " <$$> " => fun l r => bridgeConcat bridgeNl l r
 infixl:38 " <$$$> " => fun l r => bridgeConcat bridgeHardNl l r
@@ -817,7 +812,7 @@ infixl:36 " <_> " => fun l r => bridgeConcat bridgeSpace l r
 
 infixl:40 " <+> " => fun l r => concatDoc (toDoc l) Doc.align (toDoc r)
 
-infixl:45 " !> " => fun l r => provideDoc l r
+infixl:45 " !> " => fun l r => concatDoc (provideDoc l) r
 infixl:45 " <! " => fun l r => concatDoc (requireDoc l) (toDoc r)
 
 
@@ -829,11 +824,11 @@ infixl:34 " <^> " => fun l r => choiceDoc l r
 
 def flattenDoc [ToDoc α] (s: α): Doc:=
   let s := (toDoc s)
-  (Doc.flatten s {containsWhiteSpace := s.meta.containsWhiteSpace}) |>.updateMeta
+  (Doc.flatten s {collapsesBridges := s.meta.collapsesBridges}) |>.updateMeta
 
 def nestDoc [ToDoc α] (n : Nat) (s: α) : Doc:=
   let s := (toDoc s)
-  (Doc.nest n s {containsWhiteSpace := s.meta.containsWhiteSpace}) |>.updateMeta
+  (Doc.nest n s {collapsesBridges := s.meta.collapsesBridges}) |>.updateMeta
 
 def Doc.group (doc : Doc) : Doc :=
   (doc <^> (flattenDoc doc))
@@ -842,10 +837,10 @@ def Doc.group (doc : Doc) : Doc :=
 
 def alignDoc [ToDoc α] (s: α): Doc:=
   let s := (toDoc s)
-  (Doc.align s {containsWhiteSpace := s.meta.containsWhiteSpace})
+  (Doc.align s {collapsesBridges := s.meta.collapsesBridges})
 
-def Doc.nl : Doc := (Doc.newline (some " ") {containsWhiteSpace := false})
-def Doc.hardNl : Doc := (Doc.newline none {containsWhiteSpace := false})
+def Doc.nl : Doc := (Doc.newline (some " ") {collapsesBridges := Ternary.yes})
+def Doc.hardNl : Doc := (Doc.newline none {collapsesBridges := Ternary.yes})
 
 /--
 Aligned concatenation, joins two sub-layouts horizontally, aligning the whole right sub-layout at the
@@ -857,17 +852,15 @@ def Doc.alignedConcat [ToDoc α] [ToDoc β] (lhs : α) (rhs : β) : Doc := conca
 -- -/
 def Doc.flattenedAlignedConcat [ToDoc α] [ToDoc β] (lhs : α) (rhs : β) : Doc := Doc.alignedConcat (flattenDoc (toDoc lhs)) rhs
 
-def costDoc [ToDoc α] (nl:Nat) (d:α) : Doc :=
-  let d := toDoc d
-  Doc.cost nl d {containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta
+def costDoc (cost:Nat) : Doc :=
+  Doc.cost cost {collapsesBridges := Ternary.no} |>.updateMeta
 
-def bubbleCommentDoc [ToDoc α] (s:String) (d:α) : Doc :=
-  let d := toDoc d
-  Doc.bubbleComment s d {containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta
+def bubbleCommentDoc (s:String) : Doc :=
+  Doc.bubbleComment s {collapsesBridges := Ternary.no} |>.updateMeta
 
 def ruleDoc [ToDoc α] (s:String) (d:α) : Doc :=
   let d := toDoc d
-  Doc.rule s d {containsWhiteSpace := d.meta.containsWhiteSpace} |>.updateMeta
+  Doc.rule s d {collapsesBridges := d.meta.collapsesBridges} |>.updateMeta
 
 def measureTime (f : Unit → IO α) : IO (α × Nat):= do
   let before ← IO.monoNanosNow
@@ -876,11 +869,11 @@ def measureTime (f : Unit → IO α) : IO (α × Nat):= do
   return (res, after - before)
 
 def measureDiff (str:String): MeasureResult χ Unit := do
-  return () -- TODO: remove
-  -- let now ← IO.monoNanosNow
-  -- let s ← get
-  -- set {s with lastMeasurement := now}
-  -- IO.println s!"{str}::PERF {(now - s.lastMeasurement).toFloat / 1000000000.0} ({now})"
+  -- return () -- TODO: remove
+  let now ← IO.monoNanosNow
+  let s ← get
+  set {s with lastMeasurement := now}
+  IO.println s!"{str}::PERF {(now - s.lastMeasurement).toFloat / 1000000000.0} ({now})"
 
 def formatThen [ToDoc α] [ToDoc β] (sep : α) (ppl : β) : Doc :=
   let p := toDoc ppl
@@ -899,39 +892,125 @@ def formatBefore [ToDoc a] [ToDoc b] (sep : a) (ppl : b) : Doc :=
 infixr:45 " ?> " => fun l r => formatThen r l
 infixr:45 " <? " => fun l r => formatBefore l r
 
--- #eval "2" ?> "hello"
+/--
+info: [PrettyFormat.Doc.concat
+   (PrettyFormat.Doc.concat
+     (PrettyFormat.Doc.text
+       "Hello"
+       { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+     (PrettyFormat.Doc.text
+       "world"
+       { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+     { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+   (PrettyFormat.Doc.provide 6 { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.no, paths := #[] })
+   { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.maybe, paths := #[] },
+ PrettyFormat.Doc.concat
+   (PrettyFormat.Doc.concat
+     (PrettyFormat.Doc.text
+       "Hello"
+       { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+     (PrettyFormat.Doc.text
+       "world"
+       { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+     { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+   (PrettyFormat.Doc.text "!" { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+   { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] },
+ PrettyFormat.Doc.concat
+   (PrettyFormat.Doc.concat
+     (PrettyFormat.Doc.provide
+       14
+       { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.no, paths := #[] })
+     (PrettyFormat.Doc.text
+       "world"
+       { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+     { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.maybe, paths := #[] })
+   (PrettyFormat.Doc.provide 6 { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.no, paths := #[] })
+   { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.maybe, paths := #[] },
+ PrettyFormat.Doc.concat
+   (PrettyFormat.Doc.concat
+     (PrettyFormat.Doc.provide
+       14
+       { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.no, paths := #[] })
+     (PrettyFormat.Doc.text
+       "world"
+       { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+     { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.maybe, paths := #[] })
+   (PrettyFormat.Doc.text "!" { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+   { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.maybe, paths := #[] }]
+-/
+#guard_msgs in
+#eval (expandDoc (("Hello"<^> provideDoc bridgeAny) <> "world" <> ("!"<^> provideDoc bridgeNl)) true )
+/--
+info: PrettyFormat.Doc.concat
+  (PrettyFormat.Doc.concat
+    (PrettyFormat.Doc.choice
+      (PrettyFormat.Doc.text
+        "Hello"
+        { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+      (PrettyFormat.Doc.provide
+        14
+        { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.no, paths := #[] })
+      { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.maybe, paths := #[] })
+    (PrettyFormat.Doc.text
+      "world"
+      { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+    { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.maybe, paths := #[] })
+  (PrettyFormat.Doc.choice
+    (PrettyFormat.Doc.text
+      "!"
+      { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+    (PrettyFormat.Doc.provide
+      6
+      { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.no, paths := #[] })
+    { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.maybe, paths := #[] })
+  { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.maybe, paths := #[] }
+-/
+#guard_msgs in
+#eval ((("Hello"<^> provideDoc bridgeAny) <> "world" <> ("!"<^> provideDoc bridgeNl)) )
 
 /--
-info: "(\"hey\") <> (provideDoc bridgeSpace (((((\"l\") <> (provideDoc bridgeSpace (\"a\"))) <> (provideDoc bridgeSpace (\"reset\")))<^>((((\"l\") <> (provideDoc bridgeSpace (\"b\"))) <> (provideDoc bridgeNl (\"reset\")))<^>((((\"r\") <> (provideDoc bridgeNl (\"a\"))) <> (provideDoc bridgeSpace (\"reset\")))<^>(((\"r\") <> (provideDoc bridgeNl (\"b\"))) <> (provideDoc bridgeNl (\"reset\")))\n)\n)\n) <> ((\"no more\")<^>(\"branches\")\n)))"
+info: [PrettyFormat.Doc.concat
+   (PrettyFormat.Doc.concat
+     (PrettyFormat.Doc.text
+       "nothing"
+       { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+     (PrettyFormat.Doc.choice
+       (PrettyFormat.Doc.provide
+         14
+         { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.no, paths := #[] })
+       (PrettyFormat.Doc.provide
+         8
+         { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.no, paths := #[] })
+       { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.no, paths := #[] })
+     { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.maybe, paths := #[] })
+   (PrettyFormat.Doc.text
+     "to do"
+     { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.yes, paths := #[] })
+   { id := 0, cacheWeight := 0, collapsesBridges := PrettyFormat.Ternary.maybe, paths := #[] }]
+-/
+#guard_msgs in
+#eval (expandDoc ("nothing" <> (provideDoc bridgeAny <^> provideDoc bridgeSpace)<> "to do") false )
+
+
+/--
+info: "((\"hey\") <> (provideDoc bridgeSpace)) <> (((((((\"l\") <> (provideDoc bridgeSpace)) <> (\"\"))<^>(((\"r\") <> (provideDoc bridgeNl)) <> (\"\"))\n) <> ((((\"a\") <> (provideDoc bridgeSpace)) <> (\"\"))<^>(((\"b\") <> (provideDoc bridgeNl)) <> (\"\"))\n)) <> (\"reset\")) <> ((\"no more\")<^>(\"branches\")\n))"
 -/
 #guard_msgs in
 #eval ("hey" <_> (("l"<_>""<^> "r"<$$>"")) <> (("a"<_>""<^> "b"<$$>"")) <> "reset" <> ("no more"<^> "branches")).toString
 
 
-/-- info: "((\"l\") <> (provideDoc bridgeSpace (\"reset\"))) <> (\"warning\")" -/
+/-- info: "((((\"l\") <> (provideDoc bridgeSpace)) <> (\"\")) <> (\"reset\")) <> (\"warning\")" -/
 #guard_msgs in
 #eval ((("l"<_>"")) <> "reset" <> "warning").toString
 
 /--
-info: PrettyFormat.Doc.concat
-  (PrettyFormat.Doc.concat
-    (PrettyFormat.Doc.text "hey" { leftBridge := 1, id := 0, cacheWeight := 0, containsWhiteSpace := false })
-    (PrettyFormat.Doc.provide
-      8
-      (PrettyFormat.Doc.text "hasValue" { leftBridge := 1, id := 0, cacheWeight := 0, containsWhiteSpace := false })
-      { leftBridge := 8, id := 0, cacheWeight := 0, containsWhiteSpace := false })
-    { leftBridge := 1, id := 0, cacheWeight := 0, containsWhiteSpace := false })
-  (PrettyFormat.Doc.provide
-    6
-    (PrettyFormat.Doc.text "final" { leftBridge := 1, id := 0, cacheWeight := 0, containsWhiteSpace := false })
-    { leftBridge := 6, id := 0, cacheWeight := 0, containsWhiteSpace := false })
-  { leftBridge := 1, id := 0, cacheWeight := 0, containsWhiteSpace := false }
+info: "(((\"hey\") <> (provideDoc bridgeSpace)) <> (((\"hasValue\") <> (provideDoc bridgeNl)) <> (\"\"))) <> (\"final\")"
 -/
 #guard_msgs in
-#eval (("hey" <_> (("hasValue"<$$>""))) <> "final")
+#eval (("hey" <_> (("hasValue"<$$>""))) <> "final").toString
 
 /--
-info: "(\"hey\") <> (provideDoc bridgeSpace ((\"hasValue\") <> (provideDoc bridgeNl (\"final\"))))"
+info: "((\"hey\") <> (provideDoc bridgeSpace)) <> ((((\"hasValue\") <> (provideDoc bridgeNl)) <> (\"\")) <> (\"final\"))"
 -/
 #guard_msgs in
 #eval ("hey" <_> (("hasValue"<$$>"")) <> "final").toString
@@ -940,50 +1019,50 @@ info: "(\"hey\") <> (provideDoc bridgeSpace ((\"hasValue\") <> (provideDoc bridg
 
 
 /--
-info: "(((\"hey\") <> (provideDoc bridgeSpace (\"hasValue\"))) <> (provideDoc bridgeSpace (\"\")))<^>(((\"hey\") <> (provideDoc bridgeSpace (\"hasValue\"))) <> (provideDoc bridgeNl (\"\")))\n"
+info: "((\"hey\") <> (provideDoc bridgeSpace)) <> ((((\"hasValue\") <> (provideDoc bridgeNl)) <> (\"\"))<^>(((\"hasValue\") <> (provideDoc bridgeSpace)) <> (\"\"))\n)"
 -/
 #guard_msgs in
 #eval ("hey" <_> (("hasValue"<$$>"") <^> ("hasValue" <_> ""))).toString
 
 
 /--
-info: "(\"hey\") <> (provideDoc bridgeSpace (((\"hasValue\") <> (provideDoc bridgeSpace (\"later\")))<^>((\"hasValue\") <> (provideDoc bridgeNl (\"later\")))\n))"
+info: "((\"hey\") <> (provideDoc bridgeSpace)) <> (((((\"hasValue\") <> (provideDoc bridgeNl)) <> (\"\"))<^>(((\"hasValue\") <> (provideDoc bridgeSpace)) <> (\"\"))\n) <> (\"later\"))"
 -/
 #guard_msgs in
 #eval ("hey" <_> (("hasValue"<$$>"") <^> ("hasValue" <_> "")) <> "later").toString
 
-/-- info: "((\"hello\") <> (\"world\")) <> (\"\")" -/
+/-- info: "(\"hello\") <> ((\"world\") <> (\"\"))" -/
 #guard_msgs in
 #eval ("hello" <> ("world" <> "")).toString
 
 /--
-info: "((\"hey\") <> (provideDoc bridgeSpace (\"hasValue\"))) <> (provideDoc bridgeNl (\"\"))"
+info: "((\"hey\") <> (provideDoc bridgeSpace)) <> (((\"hasValue\") <> (provideDoc bridgeNl)) <> (\"\"))"
 -/
 #guard_msgs in
 #eval ("hey" <_> (("hasValue"<$$>""))).toString
 
 /--
-info: "((\"hey\") <> (provideDoc bridgeSpace (provideDoc bridgeSpace (\"hasValue\")))) <> (provideDoc bridgeNl (\"\"))"
+info: "((((\"hey\") <> (provideDoc bridgeSpace)) <> (\"\")) <> (provideDoc bridgeSpace)) <> (((\"hasValue\") <> (provideDoc bridgeNl)) <> (\"\"))"
 -/
 #guard_msgs in
 #eval ("hey" <_>"" <_> (("hasValue"<$$>""))).toString
 
-/-- info: "(\"hey\") <> (provideDoc bridgeSpace (\"\"))" -/
+/-- info: "((\"hey\") <> (provideDoc bridgeSpace)) <> (\"\")" -/
 #guard_msgs in
 #eval ("hey" <_> "").toString
 
-/-- info: "(\"aaa\") <> (provideDoc bridgeImmediate (\"hello\"))" -/
+/-- info: "((\"aaa\") <> (provideDoc bridgeImmediate)) <> (\"hello\")" -/
 #guard_msgs in
-#eval ("aaa" <> provideDoc' bridgeImmediate <> "hello").toString
+#eval ("aaa" <> provideDoc bridgeImmediate <> "hello").toString
 
 /--
-info: "(ruleDoc \"hey\" \n ((flattenDoc (\"hey\"))<^>(\"b\")\n  ) \n) <> (provideDoc bridgeHardNl (\"hello\"))"
+info: "(ruleDoc \"hey\" \n (((flattenDoc (\"hey\"))<^>(\"b\")\n  ) <> (provideDoc bridgeHardNl)) \n) <> (\"hello\")"
 -/
 #guard_msgs in
-#eval ((ruleDoc "hey" ((flattenDoc "hey" <^> "b") <> provideDoc' bridgeHardNl)) <> "hello").toString
+#eval ((ruleDoc "hey" ((flattenDoc "hey" <^> "b") <> provideDoc bridgeHardNl)) <> "hello").toString
 
 /--
-info: "(((ruleDoc \"a\" \n (\"1\") \n) <> (provideDoc bridgeSpace (ruleDoc \"b\" \n (\"2\") \n))) <> (provideDoc bridgeSpace (\"later\")))<^>((((ruleDoc \"a\" \n (\"1\") \n) <> (provideDoc bridgeSpace (ruleDoc \"b\" \n (\"2b\") \n))) <> (provideDoc bridgeNl (\"later\")))<^>((((ruleDoc \"a\" \n (\"1b\") \n) <> (provideDoc bridgeNl (ruleDoc \"b\" \n (\"2\") \n))) <> (provideDoc bridgeSpace (\"later\")))<^>(((ruleDoc \"a\" \n (\"1b\") \n) <> (provideDoc bridgeNl (ruleDoc \"b\" \n (\"2b\") \n))) <> (provideDoc bridgeNl (\"later\")))\n)\n)\n"
+info: "((ruleDoc \"a\" \n ((((\"1\") <> (provideDoc bridgeSpace)) <> (\"\"))<^>(((\"1b\") <> (provideDoc bridgeNl)) <> (\"\"))\n  ) \n) <> (ruleDoc \"b\" \n ((((\"2\") <> (provideDoc bridgeSpace)) <> (\"\"))<^>(((\"2b\") <> (provideDoc bridgeNl)) <> (\"\"))\n  ) \n)) <> (\"later\")"
 -/
 #guard_msgs in
 #eval ((ruleDoc "a" ("1" <_> "" <^> "1b" <$$> "")) <> (ruleDoc "b" ("2" <_> "" <^> "2b" <$$> "")) <> "later").toString
