@@ -18,7 +18,7 @@ partial def prettyPrint  (ppl : Doc) : String :=
   prettyPrint' 0 ppl
 where
   prettyPrint' (indent:Nat): (ppl : Doc) → String
-  | .fail s _ => "\n" ++ s ++ " "
+  | .fail _ => "\n" ++ " "
   | .text s _ => s
   | .newline _ _ => "\n".pushn ' ' indent
   | .choice left right _ => prettyPrint' indent left ++ " | " ++ prettyPrint' indent right
@@ -143,14 +143,19 @@ where
       | _ => {}
     | _ => {}
 
+  def skipFormatting : Syntax → Nat → FormattingDiagnostic → List Syntax → (Doc × Nat × FormattingDiagnostic)
+  | _, n, d, _ => (toDoc "skip", n, d)
+
   structure FormatState where
     options: Options := {}
-    nextId : Nat := 0 -- used to generate ids
+    nextId : Nat := 1 -- used to generate ids
     diagnostic: FormattingDiagnostic := {}
     cacheDistance : Nat := 3
     stx : List Syntax := [] -- note that syntax is in reverse order for performance reasons
-    formattingFunction : (Syntax → Nat → FormattingDiagnostic → List Syntax → (Doc × Nat × FormattingDiagnostic ))
+    formattingFunction : (Syntax → Nat → FormattingDiagnostic → List Syntax → (Doc × Nat × FormattingDiagnostic )) := skipFormatting
   -- deriving Repr
+
+
 
   def FormatState.toReport (s : FormatState) : FormatReport :=
     { missingFormatters := s.diagnostic.missingFormatters.fold (fun acc name _ => acc.insert name (acc.getD name 0 + 1)) Std.HashMap.empty,
@@ -179,6 +184,13 @@ where
     -- however this means that this code is fragile, because we need to make sure that all necessary fields are copied at this point
     set { s with nextId := nextId, diagnostic := diagnostics }
     return doc
+
+  def formatStxs (stx : Array Syntax) : FormatM (Array Doc) := do
+    let mut formatted := #[]
+    for s in stx do
+      let doc ← formatStx s
+      formatted := formatted.push doc
+    return formatted
 
   unsafe def mkPFormatAttr : IO (KeyedDeclsAttribute Rule) :=
     KeyedDeclsAttribute.init {

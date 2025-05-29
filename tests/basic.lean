@@ -7,9 +7,15 @@ open Lean PrettyFormat
 
 -- set_option pf.debugPPL true
 
--- #format
--- def mult (n : Nat) := n * 3
 
+#format
+instance : Singleton Name NameSet where
+  singleton := fun n => (∅ : NameSet).insert n
+
+
+#format
+instance : Add DefaultCost where
+  add := DefaultCost.add
 
 /--
 info:
@@ -74,8 +80,8 @@ set_option pf.lineLength 70 -- Test that the code will be folded if the line len
 /--
 info:
 instance : Inter NameSet where
-  inter := fun s t => s.fold (fun
-    r n => if t.contains n then r.insert n else r) {}
+  inter := fun s t =>
+    s.fold (fun r n => if t.contains n then r.insert n else r) {}
 -/
 #guard_msgs in
 #format
@@ -171,3 +177,4 @@ open PrettyFormat
 
 -- set_option pf.debugLog true
 -- set_option pf.debugSyntax true
+

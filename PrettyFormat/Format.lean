@@ -446,8 +446,49 @@ def printUsage : IO Unit := do
   IO.println "Usage: reformat -file <file> -folder <folder> -o <outputFileName> -noWarnCST -debugSyntax -debugSyntaxAfter -debugErrors -debugMissingFormatters -debugPPL -warnMissingFormatters -lineLength <length>"
 
 -- #eval FormatReport.deserialize "22,22,924900,5504600,463198000,70178900,Lean.guardMsgsCmd;:;:;PrettyFormat.┬½term_<_>_┬╗;:;:;Lean.Parser.Term.letDecl;:;:;┬½term#[_,]┬╗;:;:;PrettyFormat.┬½term_<$$>_┬╗;:;:;str;:;:;Lean.Parser.Term.letRecDecl;:;:;Lean.Parser.Term.cdot;:;:;Lean.Parser.Command.eoi;:;:;┬½termΓêà┬╗;:;:;formatCmd;:;:;PrettyFormat.┬½term_<>_┬╗;:;:;Lean.Parser.Term.structInstLVal;:;:;PrettyFormat.┬½term_<?_┬╗"
+partial def markCachedObject (doc:FormatM Doc) : (Doc × FormatState) :=
+  let (doc, cache) := doc.run {formattingFunction := fun _ _ _ _ =>
+    (toDoc "_", 0, {})}
+  (doc, cache)
+
+partial def nchoicenl : Nat → FormatM Doc
+| 0 => return toDoc "!end!"
+| n + 1 => do
+  let next ← expandSyntax RuleRec.placeHolder (← nchoicenl n)
+  return "a" <_> next <^> "b" <$$> next
+
+
+def theHardCase : IO Unit:= do
+  let ((doc, cache), timeCreate) ← measureTime (fun _ => do
+    -- inFormatMSyntax 0 do
+      return markCachedObject (do
+        let d ← nchoicenl (1000)
+        expandSyntax RuleRec.placeHolder d
+      )
+
+
+    -- return (expandSyntax ruleDoc,s)
+  )
+  -- IO.println s!"{repr doc}"
+  IO.println s!"Time create: {timeCreate.toFloat / 1000000000.0}s \n"
+
+  -- IO.println s!"{cache.nextId}"
+
+  let (out, timeDoc) ← measureTime (fun _ => do
+    let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) doc
+    return out
+  )
+  IO.println s!"Time format: {timeDoc.toFloat / 1000000000.0}s \n{out}"
+
 
 unsafe def main (originalArgs : List String) : IO (Unit) := do
+  -- theHardCase
+  -- IO.println s!"start?"
+  -- let lhs := #[(1, 8), (2, 8), (4, 8), (8, 8), (16, 8)]
+  -- let rhs := #[(1, 1), (2, 1), (4, 1), (8, 1), (16, 1)]
+  -- let a ← measureTime (fun _ => return (perfTests 0 lhs rhs 4200000))
+  -- IO.println s!"measure compiled?{a} ns"
+
   IO.println s!"running main"
   -- let (_,coreEnv) ← parseModule (← IO.FS.readFile "PrettyFormat/CoreFormatters.lean") "PrettyFormat/CoreFormatters.lean"
   -- let _ ← coreEnv.displayStats

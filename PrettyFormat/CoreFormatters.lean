@@ -291,7 +291,11 @@ partial def pfDeclId : Rule
 
 #coreFmt Lean.Parser.Term.app fun
 | #[functionName, arguments]  => do
-  return functionName <_> (combine (.<**>.) arguments.getArgs)
+  let functionName ← formatStx functionName
+  let arguments ← formatStxs arguments.getArgs
+  -- let this := functionName <_> (combine (.<**>.) arguments)
+  -- dbg_trace s!"app_str: {this.toString}"
+  return functionName <_> (combine (.<**>.) arguments)
 | _ => failure
 
 #coreFmt Term.app fun
@@ -819,10 +823,21 @@ def combineParenExpression [ToDoc a] [Inhabited a] (sep: Doc → Doc → Doc) (a
 
 #coreFmt Lean.Parser.Command.instance fun
 | #[kind, instanceAtom, declId, typeSpec, decl, whereStructInst] => do
+  let kind ← formatStx kind
+  let instanceAtom ← formatStx instanceAtom
+  let declId ← formatStx declId
+  let typeSpec ← formatStx typeSpec
+  let decl ← formatStx decl
+  let whereStructInst ← formatStx whereStructInst
+
   let declaration := nestDoc 4 (combine (.<**>.) #[kind, instanceAtom, declId, typeSpec, decl])
   let struct := (toDoc whereStructInst)
+  -- dbg_trace "should have given instance_str"
+  -- dbg_trace s!"instance_str: {(declaration <> bridgeAny !> struct).toString}"
   return declaration <> bridgeAny !> struct
 | _ => failure
+
+
 
 #coreFmt Lean.Parser.Command.universe fun
 | #[universeAtom, variables] =>
@@ -874,12 +889,7 @@ def combineParenExpression [ToDoc a] [Inhabited a] (sep: Doc → Doc → Doc) (a
 | _ => failure
 
 
-#coreFmt Lean.Parser.Command.instance fun
-| #[kind, instanceAtom, declId, typeSpec, decl, whereStructInst] => do
-  let declaration := nestDoc 4 (combine (.<**>.) #[kind, instanceAtom, declId, typeSpec, decl])
-  let struct := (toDoc whereStructInst)
-  return declaration <> bridgeAny !> struct
-| _ => failure
+
 
 #coreFmt Lean.Parser.Term.matchAltsWhereDecls fun
 | #[wheres, suffix, unknown1] => do
@@ -1025,7 +1035,6 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
     return (letSymbol <_> declaration <> bridgeHardNl !> after)
   else
     return (letSymbol <_> declaration <> sep <_> after)
-
 | _ => failure
 
 #coreFmt Lean.Parser.Command.structSimpleBinder fun

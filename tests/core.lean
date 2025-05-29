@@ -4,7 +4,7 @@ import PrettyFormat
 
 open PrettyFormat
 
-set_option pf.debugLog true
+-- set_option pf.debugLog true
 
 #eval
   let d := nestDoc 2 ("def he" <> (" : " <^> Doc.nl <> ": " ) <> "too tll")

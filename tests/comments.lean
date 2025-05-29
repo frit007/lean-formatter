@@ -23,7 +23,8 @@ def ofList (l : List Name) : NameSet := l.foldl (fun s n => s.insert n) {}
 -/
 #guard_msgs in
 #format
-def ofList (l : List Name -- bubbledComment
+def ofList (l : -- bubbledComment
+  List Name
   ) : NameSet :=
   l.foldl (fun s n => s.insert n) {}
 
@@ -94,10 +95,11 @@ info:
 -- snd
 def ofList (l : List Name) : NameSet := l.foldl (fun s n => s.insert n) {}
 -/
-#guard_msgs in
+#guard_msgs in -- TODO: comments somehow destroy whitespace?
 #format
-def ofList (l : List --fst
-    Name --snd
+def ofList (l : --fst
+    List --snd
+    Name
   ) : NameSet :=
   l.foldl ( fun s n => s.insert n) {}
 

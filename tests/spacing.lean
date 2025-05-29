@@ -209,21 +209,29 @@ partial def nchoicenl : Nat → FormatM Doc
   return "a" <_> next <^> "b" <$$> next
 
 
--- #eval (bridgeSpaceNl ||| bridgeHardNl).toString
-
-
-
 
 -- I thought this was instant
 -- with the flat version it used to be 2s
 -- with the new optimization it is 9 s
+
+-- def inFormatMSyntax (cacheId : Nat) (d:FormatM Doc) : (Nat × Doc) :=
+--   let (d,s) := d.run {nextId := cacheId} |>.run
+--   (s.nextId, d)
+
 #eval do
   -- let (doc, cache) := markCachedObject (nchoicenl 599)
   let ((doc, cache), timeCreate) ← measureTime (fun _ => do
-    return markCachedObject (nchoicenl 130)
+    -- inFormatMSyntax 0 do
+      return markCachedObject (do
+        let d ← nchoicenl (599)
+        expandSyntax RuleRec.placeHolder d
+      )
+
+
+    -- return (expandSyntax ruleDoc,s)
   )
   -- IO.println s!"{repr doc}"
-  IO.println s!"Time: {timeCreate.toFloat / 1000000000.0}s \n"
+  IO.println s!"Time create: {timeCreate.toFloat / 1000000000.0}s \n"
 
   -- IO.println s!"{cache.nextId}"
 
@@ -233,7 +241,7 @@ partial def nchoicenl : Nat → FormatM Doc
   )
 
   -- IO.println s!"Time: {timeDoc.toFloat / 1000000000.0}s \n{out} the doc\n{doc.toString}"
-  IO.println s!"Time: {timeDoc.toFloat / 1000000000.0}s \n{out}"
+  IO.println s!"Time format: {timeDoc.toFloat / 1000000000.0}s \n{out}"
 
 
 -- #eval
