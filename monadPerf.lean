@@ -2,6 +2,8 @@ import Std
 import monadPerfImported
 open Std
 
+#eval s!"\{hi}"
+
 -- Non-monadic version (pure recursion)
 -- partial def pureSum (n : Nat) : Nat :=
 --   go 0 0

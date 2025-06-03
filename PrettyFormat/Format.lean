@@ -88,9 +88,9 @@ def parseArguments (args:List String) : Except String InputArguments := do
   | "-debugMissingFormatters"::xs =>
     let res ← parseArguments xs
     return { res with  opts := (res.opts).setBool `pf.debugMissingFormatters true }
-  | "-debugPPL"::xs =>
+  | "-debugNoSolution"::xs =>
     let res ← parseArguments xs
-    return { res with  opts := (res.opts).setBool `pf.debugPPL true }
+    return { res with  opts := (res.opts).setBool `pf.debugNoSolution true }
   | "-warnMissingFormatters"::xs =>
     let res ← parseArguments xs
     return { res with  opts := (res.opts).setBool `pf.warnMissingFormatters true }
@@ -443,7 +443,7 @@ def printReport (report : FormatReport) : IO Unit := do
 
 
 def printUsage : IO Unit := do
-  IO.println "Usage: reformat -file <file> -folder <folder> -o <outputFileName> -noWarnCST -debugSyntax -debugSyntaxAfter -debugErrors -debugMissingFormatters -debugPPL -warnMissingFormatters -lineLength <length>"
+  IO.println "Usage: reformat -file <file> -folder <folder> -o <outputFileName> -noWarnCST -debugSyntax -debugSyntaxAfter -debugErrors -debugMissingFormatters -debugNoSolution -warnMissingFormatters -lineLength <length>"
 
 -- #eval FormatReport.deserialize "22,22,924900,5504600,463198000,70178900,Lean.guardMsgsCmd;:;:;PrettyFormat.┬½term_<_>_┬╗;:;:;Lean.Parser.Term.letDecl;:;:;┬½term#[_,]┬╗;:;:;PrettyFormat.┬½term_<$$>_┬╗;:;:;str;:;:;Lean.Parser.Term.letRecDecl;:;:;Lean.Parser.Term.cdot;:;:;Lean.Parser.Command.eoi;:;:;┬½termΓêà┬╗;:;:;formatCmd;:;:;PrettyFormat.┬½term_<>_┬╗;:;:;Lean.Parser.Term.structInstLVal;:;:;PrettyFormat.┬½term_<?_┬╗"
 partial def markCachedObject (doc:FormatM Doc) : (Doc × FormatState) :=

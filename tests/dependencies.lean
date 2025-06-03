@@ -1,6 +1,9 @@
 import PFMT
 import BaseFormatter
 
+
+
+
 open Lean
 open PrettyFormat
 
@@ -67,170 +70,22 @@ after
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
 
-/--
-info: PrettyFormat.Doc.flatten
-  (PrettyFormat.Doc.concat
-    (PrettyFormat.Doc.choice
-      (PrettyFormat.Doc.concat
-        (PrettyFormat.Doc.text
-          "sp"
-          { id := 0,
-            cacheWeight := 0,
-            collapsesBridges := PrettyFormat.Ternary.yes,
-            flattenPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)],
-            flattenRPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)],
-            flattenLPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)],
-            eventuallyFlattenPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)],
-            path := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)] })
-        (PrettyFormat.Doc.provide
-          8
-          { id := 0,
-            cacheWeight := 1,
-            collapsesBridges := PrettyFormat.Ternary.no,
-            flattenPath := #[(24, 8), (8, 8)],
-            flattenRPath := #[(1, 8), (8, 8)],
-            flattenLPath := #[(1, 8), (8, 8)],
-            eventuallyFlattenPath := #[(1, 8), (8, 8)],
-            path := #[(1, 8), (8, 8)] })
-        { id := 0,
-          cacheWeight := 2,
-          collapsesBridges := PrettyFormat.Ternary.yes,
-          flattenPath := #[(1, 8), (2, 8), (4, 8), (8, 8), (16, 8)],
-          flattenRPath := #[(1, 8), (2, 8), (4, 8), (8, 8), (16, 8)],
-          flattenLPath := #[(1, 8), (2, 8), (4, 8), (8, 8), (16, 8)],
-          eventuallyFlattenPath := #[(1, 8), (2, 8), (4, 8), (8, 8), (16, 8)],
-          path := #[(1, 8), (2, 8), (4, 8), (8, 8), (16, 8)] })
-      (PrettyFormat.Doc.concat
-        (PrettyFormat.Doc.text
-          "nl"
-          { id := 0,
-            cacheWeight := 0,
-            collapsesBridges := PrettyFormat.Ternary.yes,
-            flattenPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)],
-            flattenRPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)],
-            flattenLPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)],
-            eventuallyFlattenPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)],
-            path := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)] })
-        (PrettyFormat.Doc.provide
-          4
-          { id := 0,
-            cacheWeight := 1,
-            collapsesBridges := PrettyFormat.Ternary.no,
-            flattenPath := #[(24, 0), (0, 0)],
-            flattenRPath := #[(1, 4), (4, 4)],
-            flattenLPath := #[(1, 4), (4, 4)],
-            eventuallyFlattenPath := #[(1, 4), (4, 4)],
-            path := #[(1, 4), (4, 4)] })
-        { id := 0,
-          cacheWeight := 2,
-          collapsesBridges := PrettyFormat.Ternary.yes,
-          flattenPath := #[],
-          flattenRPath := #[],
-          flattenLPath := #[(1, 4), (2, 4), (4, 4), (8, 4), (16, 4)],
-          eventuallyFlattenPath := #[(1, 4), (2, 4), (4, 4), (8, 4), (16, 4)],
-          path := #[(1, 4), (2, 4), (4, 4), (8, 4), (16, 4)] })
-      { id := 0,
-        cacheWeight := 3,
-        collapsesBridges := PrettyFormat.Ternary.yes,
-        flattenPath := #[(1, 8), (2, 8), (4, 8), (8, 8), (16, 8)],
-        flattenRPath := #[(1, 8), (2, 8), (4, 8), (8, 8), (16, 8)],
-        flattenLPath := #[(1, 12), (2, 12), (4, 12), (8, 12), (16, 12)],
-        eventuallyFlattenPath := #[(1, 12), (2, 12), (4, 12), (8, 12), (16, 12)],
-        path := #[(1, 12), (2, 12), (4, 12), (8, 12), (16, 12)] })
-    (PrettyFormat.Doc.concat
-      (PrettyFormat.Doc.provide
-        6
-        { id := 0,
-          cacheWeight := 1,
-          collapsesBridges := PrettyFormat.Ternary.no,
-          flattenPath := #[(24, 8), (8, 8), (0, 0)],
-          flattenRPath := #[(1, 6), (2, 2), (4, 4)],
-          flattenLPath := #[(1, 6), (2, 2), (4, 4)],
-          eventuallyFlattenPath := #[(1, 6), (2, 2), (4, 4)],
-          path := #[(1, 6), (2, 2), (4, 4)] })
-      (PrettyFormat.Doc.text
-        "after"
-        { id := 0,
-          cacheWeight := 0,
-          collapsesBridges := PrettyFormat.Ternary.yes,
-          flattenPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)],
-          flattenRPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)],
-          flattenLPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)],
-          eventuallyFlattenPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)],
-          path := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)] })
-      { id := 0,
-        cacheWeight := 2,
-        collapsesBridges := PrettyFormat.Ternary.yes,
-        flattenPath := #[(24, 15), (8, 15)],
-        flattenRPath := #[(1, 15), (2, 15), (4, 15)],
-        flattenLPath := #[(24, 15), (8, 15)],
-        eventuallyFlattenPath := #[(1, 15), (2, 15), (4, 15)],
-        path := #[(1, 15), (2, 15), (4, 15)] })
-    { id := 0,
-      cacheWeight := 0,
-      collapsesBridges := PrettyFormat.Ternary.yes,
-      flattenPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)],
-      flattenRPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)],
-      flattenLPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)],
-      eventuallyFlattenPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)],
-      path := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)] })
-  { id := 0,
-    cacheWeight := 1,
-    collapsesBridges := PrettyFormat.Ternary.yes,
-    flattenPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)],
-    flattenRPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)],
-    flattenLPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)],
-    eventuallyFlattenPath := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)],
-    path := #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)] }
-doc : lb 1 rb 15 kind flatten flatten: 0 :::: flattenDoc (((("sp") <> (provideDoc bridgeSpace))<^>(("nl") <> (provideDoc bridgeHardNl))
-) <> ((provideDoc bridgeNl) <> ("after"))) path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)])
-doc : lb 1 rb 15 kind concat flatten: 4 :::: ((("sp") <> (provideDoc bridgeSpace))<^>(("nl") <> (provideDoc bridgeHardNl))
-) <> ((provideDoc bridgeNl) <> ("after")) path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)])
-concat bridges: 6 5 leftCollapses: true rightCollapses: true
-concat: new right: 24 currentRight: 15  rhs path: #[(24, 15), (8, 15)] lhs : (("sp") <> (provideDoc bridgeSpace))<^>(("nl") <> (provideDoc bridgeHardNl))
- rhs : (provideDoc bridgeNl) <> ("after")
-doc : lb 1 rb 24 kind choice flatten: 6 :::: (("sp") <> (provideDoc bridgeSpace))<^>(("nl") <> (provideDoc bridgeHardNl))
- path:(#[(1, 8), (2, 8), (4, 8), (8, 8), (16, 8)])
-choice::l true val ("sp") <> (provideDoc bridgeSpace) lbridge : 1 rbridge : 24
-choice::r false val ("nl") <> (provideDoc bridgeHardNl) lbridge : 1 rbridge : 24
-doc : lb 1 rb 24 kind concat flatten: 6 :::: ("sp") <> (provideDoc bridgeSpace) path:(#[(1, 8), (2, 8), (4, 8), (8, 8), (16, 8)])
-concat bridges: 6 7 leftCollapses: true rightCollapses: false
-concat: new right: 24 currentRight: 24  rhs path: #[(24, 8), (8, 8)] lhs : "sp" rhs : provideDoc bridgeSpace
-doc : lb 1 rb 24 kind text sp flatten: 6 :::: "sp" path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-center? lb1 rb 24
-doc : lb 1 rb 24 kind text sp flatten: 6 :::: "sp" path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-center? right MeasureSet.set 1 [(rightBridge 1, last:2)]
-doc : lb 1 rb 24 kind provide flatten: 7 :::: provideDoc bridgeSpace path:(#[(24, 8), (8, 8)])
-provide 8 8
-provide gives 8
-doc : lb 8 rb 15 kind concat flatten: 5 :::: (provideDoc bridgeNl) <> ("after") path:(#[(24, 15), (8, 15)])
-concat bridges: 7 5 leftCollapses: false rightCollapses: true
-concat: new right: 31 currentRight: 15  rhs path: #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)] lhs : provideDoc bridgeNl rhs : "after"
-doc : lb 8 rb 31 kind provide flatten: 7 :::: provideDoc bridgeNl path:(#[(24, 8), (8, 8), (0, 0)])
-provide 8 8
-provide gives 8
-doc : lb 8 rb 15 kind text after flatten: 5 :::: "after" path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-sp after
--/
+/-- info: sp after -/
 #guard_msgs in /- If right side demands newline, then it must be chosen-/
 #eval do
   let d := flattenDoc (("sp" <> provideDoc bridgeSpace <^> "nl" <> provideDoc bridgeHardNl) <> (bridgeNl !> "after"))
   let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
-  IO.println s!"{repr d}"
+  -- IO.println s!"{repr d}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
 
-/--
-info: flattenDoc (((("(") <> ((("e") <> (provideDoc bridgeNone))<^>((("sp") <> (provideDoc bridgeSpace)) <> (""))
-)) <> (((((requireDoc bridgeNone) <> ("a")) <> (provideDoc bridgeHardNl)) <> ("nlafter"))<^>((("") <> (provideDoc bridgeSpace)) <> ("spafter"))
-)) <> (")"))
-(sp spafter)
--/
+/-- info: (sp spafter) -/
 #guard_msgs in /- If right side demands space, due to flatten it must be discovered-/
 #eval do
-  let d := flattenDoc ("(" <> ( ("e" <> provideDoc bridgeNone) <^> "sp" <_> "")  <> ((bridgeNone <! "a")<$$$>"nlafter" <^> ""<_>"spafter") <>")")
-  IO.println s!"{d.toString}"
+  let d := flattenDoc ("(" <> ( ("e" <> provideDoc bridgeNone) <^> "sp" <_> "")
+    <> ((bridgeNone <! "a")<$$$>"nlafter" <^> ""<_>"spafter") <>")")
   let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  -- IO.println s!"{d.printDependencies}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
 
@@ -244,6 +99,7 @@ info: flattenDoc (((("(") <> (((("sp") <> (provideDoc bridgeSpace)) <> (""))<^>(
 #eval do
   let d := flattenDoc ("(" <> ("sp" <_> "" <^> ("e" <> provideDoc bridgeNone) )  <> ((bridgeNone <! "a")<$$$>"nlafter" <^> ""<_>"spafter") <>")")
   IO.println s!"{d.toString}"
+  -- let d2 := ((bridgeNone <! "a")<$$$>"nlafter" <^> ""<_>"spafter")
   let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
@@ -262,7 +118,7 @@ center
   IO.println s!"{out}"
 
 /--
-info: (flattenDoc ((("-- comment") <> (provideDoc bridgeHardNl)) <> (""))) <> ("after the comment")
+info: (/-1-/ flattenDoc ((("-- comment") <> (provideDoc bridgeHardNl)) <> (""))) <> ("after the comment")
 -- comment
 after the comment
 -/
@@ -307,8 +163,7 @@ e!e
 info: ((("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (provideDoc bridgeNone))
 )) <> (((((requireDoc bridgeNone) <> ("!e")) <> (provideDoc bridgeHardNl)) <> ("later"))<^>((requireDoc bridgeImmediate) <> ("!i"))
 )) <> (")")
-(e!e
-later)
+(i!i)
 -/
 #guard_msgs in /- Demonstrate that bridgeNone would be chosen if there are no requirements (to inform the next test) -/
 #eval do
@@ -321,8 +176,8 @@ later)
 
 
 /--
-info: flattenDoc ((/-2-/ (("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (provideDoc bridgeNone))
-)) <> ((/-1-/ (((requireDoc bridgeNone) <> ("!e")) <> (provideDoc bridgeHardNl)) <> ("later"))<^>((requireDoc bridgeImmediate) <> ("!i"))
+info: flattenDoc ((/-3-/ (/-1-/ ("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (provideDoc bridgeNone))
+)) <> ((/-2-/ (((requireDoc bridgeNone) <> ("!e")) <> (provideDoc bridgeHardNl)) <> ("later"))<^>((requireDoc bridgeImmediate) <> ("!i"))
 )) <> (")"))
 (i!i)
 -/
@@ -335,8 +190,8 @@ info: flattenDoc ((/-2-/ (("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>((
   IO.println s!"{out}"
 
 /--
-info: flattenDoc ((("(") <> (/-1-/ ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (provideDoc bridgeNone))
-) <> (((((requireDoc bridgeNone) <> ("!e")) <> (provideDoc bridgeHardNl)) <> ("later"))<^>((requireDoc bridgeImmediate) <> ("!i"))
+info: /-3-/ flattenDoc ((("(") <> (/-2-/ ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (provideDoc bridgeNone))
+) <> ((/-1-/ (((requireDoc bridgeNone) <> ("!e")) <> (provideDoc bridgeHardNl)) <> ("later"))<^>((requireDoc bridgeImmediate) <> ("!i"))
 ))) <> (")"))
 (i!i)
 -/
@@ -349,8 +204,8 @@ info: flattenDoc ((("(") <> (/-1-/ ((("i") <> (provideDoc bridgeImmediate))<^>((
   IO.println s!"{out}"
 
 /--
-info: flattenDoc ((/-2-/ (("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (provideDoc bridgeNone))
-)) <> ((/-1-/ (((requireDoc bridgeNone) <> ("!e")) <> (provideDoc bridgeHardNl)) <> ("later"))<^>((requireDoc bridgeImmediate) <> ("!i"))
+info: flattenDoc ((/-3-/ (/-1-/ ("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (provideDoc bridgeNone))
+)) <> ((/-2-/ (((requireDoc bridgeNone) <> ("!e")) <> (provideDoc bridgeHardNl)) <> ("later"))<^>((requireDoc bridgeImmediate) <> ("!i"))
 )) <> (")"))
 (i!i)
 -/
@@ -363,7 +218,7 @@ info: flattenDoc ((/-2-/ (("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>((
   IO.println s!"{out}"
 
 /--
-info: (("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (provideDoc bridgeNone))
+info: (/-1-/ ("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (provideDoc bridgeNone))
 )) <> ((requireDoc bridgeImmediate) <> ("!i"))
 (i!i
 -/
@@ -377,7 +232,7 @@ info: (("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (provideDoc
 
 
 /--
-info: flattenDoc ((("(") <> (flattenDoc ((("--comment") <> (provideDoc bridgeNl)) <> ("")))) <> (")"))
+info: /-2-/ flattenDoc ((("(") <> (/-1-/ flattenDoc ((("--comment") <> (provideDoc bridgeNl)) <> ("")))) <> (")"))
 (--comment )
 -/
 #guard_msgs in /- flatten does not "unflatten", we expect a space from the inner  -/
@@ -392,20 +247,6 @@ info: flattenDoc ((("(") <> (flattenDoc ((("--comment") <> (provideDoc bridgeNl)
 
 /--
 info: (("basic") <> (provideDoc bridgeSpace)) <> ("space")
-doc : lb 1 rb 15 kind concat flatten: 0 :::: (("basic") <> (provideDoc bridgeSpace)) <> ("space") path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)])
-concat bridges: 0 0 leftCollapses: true rightCollapses: true
-concat: new right: 31 currentRight: 15  rhs path: #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)] lhs : ("basic") <> (provideDoc bridgeSpace) rhs : "space"
-doc : lb 1 rb 31 kind concat flatten: 0 :::: ("basic") <> (provideDoc bridgeSpace) path:(#[(1, 8), (2, 8), (4, 8), (8, 8), (16, 8)])
-concat bridges: 0 0 leftCollapses: true rightCollapses: false
-concat: new right: 9 currentRight: 31  rhs path: #[(1, 8), (8, 8)] lhs : "basic" rhs : provideDoc bridgeSpace
-doc : lb 1 rb 9 kind text basic flatten: 0 :::: "basic" path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-center? lb1 rb 9
-doc : lb 1 rb 9 kind text basic flatten: 0 :::: "basic" path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-center? right MeasureSet.set 1 [(rightBridge 1, last:5)]
-doc : lb 1 rb 31 kind provide flatten: 0 :::: provideDoc bridgeSpace path:(#[(1, 8), (8, 8)])
-provide 8 8
-provide gives 8
-doc : lb 8 rb 15 kind text space flatten: 0 :::: "space" path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
 basic space
 -/
 #guard_msgs in /- basics: space after between elements  -/
@@ -419,20 +260,6 @@ basic space
 
 /--
 info: (("basic") <> (provideDoc bridgeAny)) <> ("any")
-doc : lb 1 rb 15 kind concat flatten: 0 :::: (("basic") <> (provideDoc bridgeAny)) <> ("any") path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)])
-concat bridges: 0 0 leftCollapses: true rightCollapses: true
-concat: new right: 31 currentRight: 15  rhs path: #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)] lhs : ("basic") <> (provideDoc bridgeAny) rhs : "any"
-doc : lb 1 rb 31 kind concat flatten: 0 :::: ("basic") <> (provideDoc bridgeAny) path:(#[(1, 14), (2, 14), (4, 14), (8, 14), (16, 14)])
-concat bridges: 0 0 leftCollapses: true rightCollapses: false
-concat: new right: 15 currentRight: 31  rhs path: #[(1, 14), (2, 2), (4, 4), (8, 8)] lhs : "basic" rhs : provideDoc bridgeAny
-doc : lb 1 rb 15 kind text basic flatten: 0 :::: "basic" path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-center? lb1 rb 15
-doc : lb 1 rb 15 kind text basic flatten: 0 :::: "basic" path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-center? right MeasureSet.set 1 [(rightBridge 1, last:5)]
-doc : lb 1 rb 31 kind provide flatten: 0 :::: provideDoc bridgeAny path:(#[(1, 14), (2, 2), (4, 4), (8, 8)])
-provide 14 14
-provide gives 14
-doc : lb 14 rb 15 kind text any flatten: 0 :::: "any" path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
 basic
 any
 -/
@@ -446,61 +273,7 @@ any
 
 
 /--
-info: /-3-/ ((((("Singleton") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Singleton")
-) <> (provideDoc bridgeSpace)) <> ((((/-1-/ (("Name") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Name")
-) <> (provideDoc bridgeAny)) <> ((/-2-/ (("NameSet") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("NameSet")
-))
-doc : lb 1 rb 15 kind concat flatten: 0 :::: /-3-/ ((((("Singleton") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Singleton")
-) <> (provideDoc bridgeSpace)) <> ((((/-1-/ (("Name") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Name")
-) <> (provideDoc bridgeAny)) <> ((/-2-/ (("NameSet") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("NameSet")
-)) path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)])
-concat bridges: 0 0 leftCollapses: true rightCollapses: true
-concat: new right: 31 currentRight: 15  rhs path: #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)] lhs : (((("Singleton") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Singleton")
-) <> (provideDoc bridgeSpace) rhs : (((/-1-/ (("Name") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Name")
-) <> (provideDoc bridgeAny)) <> ((/-2-/ (("NameSet") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("NameSet")
-)
-doc : lb 1 rb 31 kind concat flatten: 0 :::: (((("Singleton") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Singleton")
-) <> (provideDoc bridgeSpace) path:(#[(1, 8), (2, 8), (4, 8), (8, 8), (16, 8)])
-concat bridges: 0 0 leftCollapses: true rightCollapses: false
-concat: new right: 9 currentRight: 31  rhs path: #[(1, 8), (8, 8)] lhs : ((("Singleton") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Singleton")
- rhs : provideDoc bridgeSpace
-doc : lb 1 rb 9 kind choice flatten: 0 :::: ((("Singleton") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Singleton")
- path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-choice::l false val (("Singleton") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")) lbridge : 1 rbridge : 9
-choice::r true val "Singleton" lbridge : 1 rbridge : 9
-doc : lb 1 rb 9 kind text Singleton flatten: 0 :::: "Singleton" path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-center? lb1 rb 9
-doc : lb 1 rb 9 kind text Singleton flatten: 0 :::: "Singleton" path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-center? right MeasureSet.set 1 [(rightBridge 1, last:9)]
-doc : lb 1 rb 31 kind provide flatten: 0 :::: provideDoc bridgeSpace path:(#[(1, 8), (8, 8)])
-provide 8 8
-provide gives 8
-doc : lb 8 rb 15 kind concat flatten: 0 :::: (((/-1-/ (("Name") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Name")
-) <> (provideDoc bridgeAny)) <> ((/-2-/ (("NameSet") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("NameSet")
-) path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 15)])
-concat bridges: 0 0 leftCollapses: true rightCollapses: true
-concat: new right: 31 currentRight: 15  rhs path: #[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)] lhs : ((/-1-/ (("Name") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Name")
-) <> (provideDoc bridgeAny) rhs : (/-2-/ (("NameSet") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("NameSet")
-
-doc : lb 8 rb 31 kind concat flatten: 0 :::: ((/-1-/ (("Name") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Name")
-) <> (provideDoc bridgeAny) path:(#[(1, 14), (2, 14), (4, 14), (8, 14), (16, 14)])
-concat bridges: 0 0 leftCollapses: true rightCollapses: false
-concat: new right: 15 currentRight: 31  rhs path: #[(1, 14), (2, 2), (4, 4), (8, 8)] lhs : (/-1-/ (("Name") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Name")
- rhs : provideDoc bridgeAny
-doc : lb 8 rb 15 kind choice flatten: 0 :::: (/-1-/ (("Name") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Name")
- path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-choice::l false val /-1-/ (("Name") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")) lbridge : 8 rbridge : 15
-choice::r true val "Name" lbridge : 8 rbridge : 15
-doc : lb 8 rb 15 kind text Name flatten: 0 :::: "Name" path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-doc : lb 1 rb 31 kind provide flatten: 0 :::: provideDoc bridgeAny path:(#[(1, 14), (2, 2), (4, 4), (8, 8)])
-provide 14 14
-provide gives 14
-doc : lb 14 rb 15 kind choice flatten: 0 :::: (/-2-/ (("NameSet") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("NameSet")
- path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-choice::l false val /-2-/ (("NameSet") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")) lbridge : 14 rbridge : 15
-choice::r true val "NameSet" lbridge : 14 rbridge : 15
-doc : lb 14 rb 15 kind text NameSet flatten: 0 :::: "NameSet" path:(#[(1, 15), (2, 15), (4, 15), (8, 15), (16, 31)])
-Singleton Name
+info: Singleton Name
 NameSet
 -/
 #guard_msgs in /- complex  -/
@@ -510,154 +283,1757 @@ NameSet
     ) <> (provideDoc bridgeAny)) <> ((/-4-/ (("NameSet") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("NameSet")
     ))
   let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
-  IO.println s!"{d.toString}"
+  -- IO.println s!"{d.toJSON}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
 
-
--- #guard_msgs in /- complex  -/
--- #eval do
---   let d := (nestDoc 4 (((((("instance") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("instance")
--- ) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Command.declSig"
---  (/-6-/ ruleDoc "Lean.Parser.Term.typeSpec"
---    ((((/-1-/ ((":") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":")
---     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
---      (/-5-/ (((/-2-/ (("Singleton") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Singleton")
---       ) <> (provideDoc bridgeSpace)) <> ((((/-3-/ (("Name") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Name")
---       ) <> (provideDoc bridgeAny)) <> ((/-4-/ (("NameSet") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("NameSet")
---       )))
---     ))
---   )
--- ))) <> ((provideDoc bridgeAny) <> (/-34-/ ruleDoc "Lean.Parser.Command.whereStructInst"
---  ((((/-7-/ ((("where") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("where")
---   ) <> (/-33-/ nestDoc 2 ((("") <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Term.structInstFields"
---    (/-32-/ ruleDoc "Lean.Parser.Term.structInstField"
---      (((/-9-/ ruleDoc "Lean.Parser.Term.structInstLVal"
---        ((("") <> ((/-8-/ (("singleton") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("singleton")
---         )) <> (""))
---       ) <> (provideDoc bridgeSpace)) <> (/-31-/ ruleDoc "Lean.Parser.Term.structInstFieldDef"
---        ((((/-10-/ ((":=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":=")
---         ) <> (provideDoc bridgeSpace)) <> ((provideDoc (bridgeSpaceNl|||bridgeSpace|||bridgeImmediate)) <> (ruleDoc "Lean.Parser.Term.fun"
---          (/-30-/ ((((/-27-/ (("fun") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("fun")
---           ) <> (provideDoc bridgeAny)) <> (/-26-/ ruleDoc "Lean.Parser.Term.basicFun"
---            (((/-22-/ (requireDoc bridgeImmediate) <> ((((/-20-/ (("n") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("n")
---             ) <> (provideDoc bridgeSpace)) <> ((/-21-/ (("=>") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("=>")
---             ))) <> ((Doc.newline (some " ")) <> (/-19-/ ruleDoc "Lean.Parser.Term.app"
---              ((/-18-/ (ruleDoc "Lean.Parser.Term.proj"
---                ((/-15-/ (ruleDoc "Lean.Parser.Term.typeAscription"
---                  ((("(") <> (/-14-/ (((/-12-/ (ruleDoc "«term∅»"
---                    (("") <> ((/-11-/ (("∅") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("∅")
---                     ))
---                   ) <> (provideDoc bridgeSpace)) <> ((/-13-/ ((":") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":")
---                   )) <> (provideDoc bridgeSpace)) <> (("") <> ("NameSet")))) <> (")"))
---                 ) <> (".")) <> ((/-16-/ (("insert") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("insert")
---                 ))
---               ) <> (provideDoc bridgeSpace)) <> (((/-17-/ ((("n") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("n")
---               ))
---             )))<^>(/-25-/ ((((/-23-/ (("n") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("n")
---             ) <> (provideDoc bridgeSpace)) <> ((/-24-/ (("=>") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("=>")
---             )) <> ((nestDoc 2 ((Doc.newline (some " ")) <> (/-19-/ ruleDoc "Lean.Parser.Term.app"
---              ((/-18-/ (ruleDoc "Lean.Parser.Term.proj"
---                ((/-15-/ (ruleDoc "Lean.Parser.Term.typeAscription"
---                  ((("(") <> (/-14-/ (((/-12-/ (ruleDoc "«term∅»"
---                    (("") <> ((/-11-/ (("∅") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("∅")
---                     ))
---                   ) <> (provideDoc bridgeSpace)) <> ((/-13-/ ((":") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":")
---                   )) <> (provideDoc bridgeSpace)) <> (("") <> ("NameSet")))) <> (")"))
---                 ) <> (".")) <> ((/-16-/ (("insert") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("insert")
---                 ))
---               ) <> (provideDoc bridgeSpace)) <> (((/-17-/ ((("n") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("n")
---               ))
---             )))<^>((" ") <> (flattenDoc (/-19-/ ruleDoc "Lean.Parser.Term.app"
---              ((/-18-/ (ruleDoc "Lean.Parser.Term.proj"
---                ((/-15-/ (ruleDoc "Lean.Parser.Term.typeAscription"
---                  ((("(") <> (/-14-/ (((/-12-/ (ruleDoc "«term∅»"
---                    (("") <> ((/-11-/ (("∅") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("∅")
---                     ))
---                   ) <> (provideDoc bridgeSpace)) <> ((/-13-/ ((":") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":")
---                   )) <> (provideDoc bridgeSpace)) <> (("") <> ("NameSet")))) <> (")"))
---                 ) <> (".")) <> ((/-16-/ (("insert") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("insert")
---                 ))
---               ) <> (provideDoc bridgeSpace)) <> (((/-17-/ ((("n") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("n")
---               ))
---             )))
---             ))
---             )
---           ))<^>(/-29-/ (((requireDoc bridgeImmediate) <> (" ")) <> ((/-28-/ (("fun") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("fun")
---           )) <> ((provideDoc bridgeImmediate) <> (/-26-/ ruleDoc "Lean.Parser.Term.basicFun"
---            (((/-22-/ (requireDoc bridgeImmediate) <> ((((/-20-/ (("n") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("n")
---             ) <> (provideDoc bridgeSpace)) <> ((/-21-/ (("=>") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("=>")
---             ))) <> ((Doc.newline (some " ")) <> (/-19-/ ruleDoc "Lean.Parser.Term.app"
---              ((/-18-/ (ruleDoc "Lean.Parser.Term.proj"
---                ((/-15-/ (ruleDoc "Lean.Parser.Term.typeAscription"
---                  ((("(") <> (/-14-/ (((/-12-/ (ruleDoc "«term∅»"
---                    (("") <> ((/-11-/ (("∅") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("∅")
---                     ))
---                   ) <> (provideDoc bridgeSpace)) <> ((/-13-/ ((":") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":")
---                   )) <> (provideDoc bridgeSpace)) <> (("") <> ("NameSet")))) <> (")"))
---                 ) <> (".")) <> ((/-16-/ (("insert") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("insert")
---                 ))
---               ) <> (provideDoc bridgeSpace)) <> (((/-17-/ ((("n") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("n")
---               ))
---             )))<^>(/-25-/ ((((/-23-/ (("n") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("n")
---             ) <> (provideDoc bridgeSpace)) <> ((/-24-/ (("=>") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("=>")
---             )) <> ((nestDoc 2 ((Doc.newline (some " ")) <> (/-19-/ ruleDoc "Lean.Parser.Term.app"
---              ((/-18-/ (ruleDoc "Lean.Parser.Term.proj"
---                ((/-15-/ (ruleDoc "Lean.Parser.Term.typeAscription"
---                  ((("(") <> (/-14-/ (((/-12-/ (ruleDoc "«term∅»"
---                    (("") <> ((/-11-/ (("∅") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("∅")
---                     ))
---                   ) <> (provideDoc bridgeSpace)) <> ((/-13-/ ((":") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":")
---                   )) <> (provideDoc bridgeSpace)) <> (("") <> ("NameSet")))) <> (")"))
---                 ) <> (".")) <> ((/-16-/ (("insert") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("insert")
---                 ))
---               ) <> (provideDoc bridgeSpace)) <> (((/-17-/ ((("n") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("n")
---               ))
---             )))<^>((" ") <> (flattenDoc (/-19-/ ruleDoc "Lean.Parser.Term.app"
---              ((/-18-/ (ruleDoc "Lean.Parser.Term.proj"
---                ((/-15-/ (ruleDoc "Lean.Parser.Term.typeAscription"
---                  ((("(") <> (/-14-/ (((/-12-/ (ruleDoc "«term∅»"
---                    (("") <> ((/-11-/ (("∅") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("∅")
---                     ))
---                   ) <> (provideDoc bridgeSpace)) <> ((/-13-/ ((":") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":")
---                   )) <> (provideDoc bridgeSpace)) <> (("") <> ("NameSet")))) <> (")"))
---                 ) <> (".")) <> ((/-16-/ (("insert") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("insert")
---                 ))
---               ) <> (provideDoc bridgeSpace)) <> (((/-17-/ ((("n") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("n")
---               ))
---             )))
---             ))
---             )
---           )))
---           )
---         )))
---       ))
---     )
---   ))))
--- ))
---   let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
---   IO.println s!"{d.toString}"
---   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
---   IO.println s!"{out}"
 
 
 /--
-info: doc : lb 1 rb 15 kind text  flatten: 0 :::: "" path:(#[(1, 1), (2, 2), (4, 4), (8, 8), (16, 16), (32, 32)])
-PrettyFormat.Doc.text
-  ""
-  { id := 0,
-    cacheWeight := 1,
-    collapsesBridges := PrettyFormat.Ternary.no,
-    flattenPath := #[(1, 1), (2, 2), (4, 4), (8, 8), (16, 16), (32, 32)],
-    flattenRPath := #[(1, 1), (2, 2), (4, 4), (8, 8), (16, 16), (32, 32)],
-    flattenLPath := #[(1, 1), (2, 2), (4, 4), (8, 8), (16, 16), (32, 32)],
-    eventuallyFlattenPath := #[(1, 1), (2, 2), (4, 4), (8, 8), (16, 16), (32, 32)],
-    path := #[(1, 1), (2, 2), (4, 4), (8, 8), (16, 16), (32, 32)] }
+info: {
+  "start":{"type": "concat",
+  "meta": {
+    "id": 0,
+    "cacheWeight": 3,
+    "collapsesBridges": "yes",
+    "flattenPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
+    "flattenRPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
+    "flattenLPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
+    "eventuallyFlattenPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
+    "path": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]]
+    },
+  "lhs": {"type": "concat",
+    "meta": {
+      "id": 0,
+      "cacheWeight": 2,
+      "collapsesBridges": "yes",
+      "flattenPath": [[1, 8], [2, 8], [4, 8], [8, 8], [16, 8]],
+      "flattenRPath": [[1, 8], [2, 8], [4, 8], [8, 8], [16, 8]],
+      "flattenLPath": [[1, 14], [2, 14], [4, 14], [8, 14], [16, 14]],
+      "eventuallyFlattenPath": [[1, 14], [2, 14], [4, 14], [8, 14], [16, 14]],
+      "path": [[1, 14], [2, 14], [4, 14], [8, 14], [16, 14]]
+      },
+    "lhs": {"type": "text", "s": "hello",
+      "meta": {
+        "id": 0,
+        "cacheWeight": 1,
+        "collapsesBridges": "yes",
+        "flattenPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
+        "flattenRPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
+        "flattenLPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
+        "eventuallyFlattenPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
+        "path": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]]
+        }},
+    "rhs": {"type": "provide", "value": 14,
+      "meta": {
+        "id": 0,
+        "cacheWeight": 1,
+        "collapsesBridges": "no",
+        "flattenPath": [[1, 8], [8, 8], [0, 0], [8, 8]],
+        "flattenRPath": [[1, 14], [2, 2], [4, 4], [8, 8]],
+        "flattenLPath": [[1, 14], [2, 2], [4, 4], [8, 8]],
+        "eventuallyFlattenPath": [[1, 14], [2, 2], [4, 4], [8, 8]],
+        "path": [[1, 14], [2, 2], [4, 4], [8, 8]]
+        }}},
+  "rhs": {"type": "text", "s": "world",
+    "meta": {
+      "id": 0,
+      "cacheWeight": 1,
+      "collapsesBridges": "yes",
+      "flattenPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
+      "flattenRPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
+      "flattenLPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
+      "eventuallyFlattenPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
+      "path": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]]
+      }}}
+}
+hello
+world
 -/
-#guard_msgs in /- TODO: delete  -/
+#guard_msgs in /- complex  -/
 #eval do
-  let d := (toDoc "")
+  let d := "hello" <**> "world"
   let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  IO.println s!"{d.toJSON}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
-  IO.println s!"{repr d}"
   IO.println s!"{out}"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/-
+-- info: -- TODO: splitOn
+-- theorem split_of_valid (s p) : split s p = (List.splitOnP p s.1).map mk := by simpa [split] using splitAux_of_valid p [] [] s.1 []
+-- -/
+-- #guard_msgs in /- TODO: delete  -/
+-- #eval do
+--   let d := (ruleDoc "Lean.Parser.Command.declaration"
+--  ((/-83-/ ruleDoc "Lean.Parser.Command.theorem"
+--    (((/-73-/ (((/-68-/ (("theorem") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("theorem")
+--     ) <> (provideDoc bridgeAny)) <> (/-72-/ nestDoc 4 (((ruleDoc "Lean.Parser.Command.declId"
+--      (/-70-/ (((/-69-/ (("split_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("split_of_valid")
+--       ) <> (provideDoc bridgeAny)) <> (""))
+--     ) <> (provideDoc bridgeAny)) <> (/-71-/ (ruleDoc "Lean.Parser.Command.declSig"
+--      ((/-8-/ (ruleDoc "Lean.Parser.Term.explicitBinder"
+--        (("(") <> (/-7-/ ((/-1-/ ((((("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--         ) <> (provideDoc bridgeSpace)) <> ("p")) <> ((/-2-/ ((")") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(")")
+--         ))<^>(/-6-/ flattenDoc ((/-4-/ (((/-3-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--         ) <> (provideDoc bridgeSpace)) <> ("p")) <> ((/-5-/ ((")") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(")")
+--         )))
+--         ))
+--       ) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.typeSpec"
+--        (/-29-/ (((/-9-/ ((":") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":")
+--         ) <> (provideDoc bridgeSpace)) <> (ruleDoc "«term_=_»"
+--          (((/-26-/ (((ruleDoc "Lean.Parser.Term.app"
+--            (/-14-/ (((/-10-/ (("split") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("split")
+--             ) <> (provideDoc bridgeSpace)) <> (/-13-/ (((/-11-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--             ) <> (provideDoc bridgeAny)) <> ((/-12-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--             )))
+--           ) <> (provideDoc bridgeAny)) <> ((/-25-/ (("=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("=")
+--           )) <> (provideDoc bridgeSpace)) <> (/-24-/ ruleDoc "Lean.Parser.Term.app"
+--            (((/-22-/ ruleDoc "Lean.Parser.Term.proj"
+--              (((/-20-/ ruleDoc "Lean.Parser.Term.paren"
+--                ((("(") <> (ruleDoc "Lean.Parser.Term.app"
+--                  (/-19-/ (((/-15-/ (("List.splitOnP") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("List.splitOnP")
+--                   ) <> (provideDoc bridgeSpace)) <> (/-18-/ (((/-16-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                   ) <> (provideDoc bridgeAny)) <> (/-17-/ ruleDoc "Lean.Parser.Term.proj"
+--                    ((("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                      ("1")
+--                     ))
+--                   )))
+--                 )) <> (")"))
+--               ) <> (".")) <> ((/-21-/ (("map") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("map")
+--               ))
+--             ) <> (provideDoc bridgeSpace)) <> ((/-23-/ (("mk") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("mk")
+--             ))
+--           ))<^>(/-28-/ ((ruleDoc "Lean.Parser.Term.app"
+--            (/-14-/ (((/-10-/ (("split") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("split")
+--             ) <> (provideDoc bridgeSpace)) <> (/-13-/ (((/-11-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--             ) <> (provideDoc bridgeAny)) <> ((/-12-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--             )))
+--           ) <> (provideDoc bridgeSpace)) <> (((/-27-/ (("=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("=")
+--           ) <> ((provideDoc bridgeImmediate) <> (/-24-/ ruleDoc "Lean.Parser.Term.app"
+--            (((/-22-/ ruleDoc "Lean.Parser.Term.proj"
+--              (((/-20-/ ruleDoc "Lean.Parser.Term.paren"
+--                ((("(") <> (ruleDoc "Lean.Parser.Term.app"
+--                  (/-19-/ (((/-15-/ (("List.splitOnP") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("List.splitOnP")
+--                   ) <> (provideDoc bridgeSpace)) <> (/-18-/ (((/-16-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                   ) <> (provideDoc bridgeAny)) <> (/-17-/ ruleDoc "Lean.Parser.Term.proj"
+--                    ((("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                      ("1")
+--                     ))
+--                   )))
+--                 )) <> (")"))
+--               ) <> (".")) <> ((/-21-/ (("map") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("map")
+--               ))
+--             ) <> (provideDoc bridgeSpace)) <> ((/-23-/ (("mk") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("mk")
+--             ))
+--           ))))
+--           )
+--         ))
+--       ))
+--     ) <> ((("") <> (provideDoc bridgeAny)) <> (""))))))<^>(flattenDoc (/-79-/ (((/-74-/ (("theorem") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("theorem")
+--     ) <> (provideDoc bridgeAny)) <> (/-78-/ nestDoc 4 (((ruleDoc "Lean.Parser.Command.declId"
+--      (/-76-/ (((/-75-/ (("split_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("split_of_valid")
+--       ) <> (provideDoc bridgeAny)) <> (""))
+--     ) <> (provideDoc bridgeAny)) <> (/-77-/ (ruleDoc "Lean.Parser.Command.declSig"
+--      ((/-8-/ (ruleDoc "Lean.Parser.Term.explicitBinder"
+--        (("(") <> (/-7-/ ((/-1-/ ((((("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--         ) <> (provideDoc bridgeSpace)) <> ("p")) <> ((/-2-/ ((")") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(")")
+--         ))<^>(/-6-/ flattenDoc ((/-4-/ (((/-3-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--         ) <> (provideDoc bridgeSpace)) <> ("p")) <> ((/-5-/ ((")") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(")")
+--         )))
+--         ))
+--       ) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.typeSpec"
+--        (/-29-/ (((/-9-/ ((":") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":")
+--         ) <> (provideDoc bridgeSpace)) <> (ruleDoc "«term_=_»"
+--          (((/-26-/ (((ruleDoc "Lean.Parser.Term.app"
+--            (/-14-/ (((/-10-/ (("split") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("split")
+--             ) <> (provideDoc bridgeSpace)) <> (/-13-/ (((/-11-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--             ) <> (provideDoc bridgeAny)) <> ((/-12-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--             )))
+--           ) <> (provideDoc bridgeAny)) <> ((/-25-/ (("=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("=")
+--           )) <> (provideDoc bridgeSpace)) <> (/-24-/ ruleDoc "Lean.Parser.Term.app"
+--            (((/-22-/ ruleDoc "Lean.Parser.Term.proj"
+--              (((/-20-/ ruleDoc "Lean.Parser.Term.paren"
+--                ((("(") <> (ruleDoc "Lean.Parser.Term.app"
+--                  (/-19-/ (((/-15-/ (("List.splitOnP") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("List.splitOnP")
+--                   ) <> (provideDoc bridgeSpace)) <> (/-18-/ (((/-16-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                   ) <> (provideDoc bridgeAny)) <> (/-17-/ ruleDoc "Lean.Parser.Term.proj"
+--                    ((("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                      ("1")
+--                     ))
+--                   )))
+--                 )) <> (")"))
+--               ) <> (".")) <> ((/-21-/ (("map") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("map")
+--               ))
+--             ) <> (provideDoc bridgeSpace)) <> ((/-23-/ (("mk") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("mk")
+--             ))
+--           ))<^>(/-28-/ ((ruleDoc "Lean.Parser.Term.app"
+--            (/-14-/ (((/-10-/ (("split") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("split")
+--             ) <> (provideDoc bridgeSpace)) <> (/-13-/ (((/-11-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--             ) <> (provideDoc bridgeAny)) <> ((/-12-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--             )))
+--           ) <> (provideDoc bridgeSpace)) <> (((/-27-/ (("=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("=")
+--           ) <> ((provideDoc bridgeImmediate) <> (/-24-/ ruleDoc "Lean.Parser.Term.app"
+--            (((/-22-/ ruleDoc "Lean.Parser.Term.proj"
+--              (((/-20-/ ruleDoc "Lean.Parser.Term.paren"
+--                ((("(") <> (ruleDoc "Lean.Parser.Term.app"
+--                  (/-19-/ (((/-15-/ (("List.splitOnP") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("List.splitOnP")
+--                   ) <> (provideDoc bridgeSpace)) <> (/-18-/ (((/-16-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                   ) <> (provideDoc bridgeAny)) <> (/-17-/ ruleDoc "Lean.Parser.Term.proj"
+--                    ((("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                      ("1")
+--                     ))
+--                   )))
+--                 )) <> (")"))
+--               ) <> (".")) <> ((/-21-/ (("map") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("map")
+--               ))
+--             ) <> (provideDoc bridgeSpace)) <> ((/-23-/ (("mk") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("mk")
+--             ))
+--           ))))
+--           )
+--         ))
+--       ))
+--     ) <> ((("") <> (provideDoc bridgeAny)) <> ("")))))))
+--     ) <> (/-82-/ ((requireDoc bridgeSpace) <> ((provideDoc bridgeImmediate) <> (ruleDoc "Lean.Parser.Command.declValSimple"
+--      (/-67-/ (((nestDoc 2 (/-63-/ ((requireDoc (bridgeSpace|||bridgeImmediate)) <> ((/-59-/ ((":=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":=")
+--       )) <> (/-62-/ (/-60-/ (("") <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-58-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-54-/ (/-53-/ (((/-52-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-57-/ (/-56-/ (((/-55-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       ))<^>((("") <> (provideDoc bridgeSpace)) <> (/-61-/ flattenDoc (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-58-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-54-/ (/-53-/ (((/-52-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-57-/ (/-56-/ (((/-55-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       )))
+--       )))<^>(/-66-/ ((requireDoc bridgeImmediate) <> ((/-64-/ ((":=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":=")
+--       )) <> (/-65-/ (provideDoc bridgeImmediate) <> (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-58-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-54-/ (/-53-/ (((/-52-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-57-/ (/-56-/ (((/-55-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       )))
+--       ) <> ("")) <> (""))
+--     )))<^>((/-81-/ ((("") <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Command.declValSimple"
+--      (/-67-/ (((nestDoc 2 (/-63-/ ((requireDoc (bridgeSpace|||bridgeImmediate)) <> ((/-59-/ ((":=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":=")
+--       )) <> (/-62-/ (/-60-/ (("") <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-58-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-54-/ (/-53-/ (((/-52-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-57-/ (/-56-/ (((/-55-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       ))<^>((("") <> (provideDoc bridgeSpace)) <> (/-61-/ flattenDoc (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-58-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-54-/ (/-53-/ (((/-52-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-57-/ (/-56-/ (((/-55-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       )))
+--       )))<^>(/-66-/ ((requireDoc bridgeImmediate) <> ((/-64-/ ((":=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":=")
+--       )) <> (/-65-/ (provideDoc bridgeImmediate) <> (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-58-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-54-/ (/-53-/ (((/-52-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-57-/ (/-56-/ (((/-55-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       )))
+--       ) <> ("")) <> (""))
+--     ))<^>(/-80-/ flattenDoc ((("") <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Command.declValSimple"
+--      (/-67-/ (((nestDoc 2 (/-63-/ ((requireDoc (bridgeSpace|||bridgeImmediate)) <> ((/-59-/ ((":=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":=")
+--       )) <> (/-62-/ (/-60-/ (("") <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-58-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-54-/ (/-53-/ (((/-52-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-57-/ (/-56-/ (((/-55-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       ))<^>((("") <> (provideDoc bridgeSpace)) <> (/-61-/ flattenDoc (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-58-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-54-/ (/-53-/ (((/-52-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-57-/ (/-56-/ (((/-55-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       )))
+--       )))<^>(/-66-/ ((requireDoc bridgeImmediate) <> ((/-64-/ ((":=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":=")
+--       )) <> (/-65-/ (provideDoc bridgeImmediate) <> (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-58-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-54-/ (/-53-/ (((/-52-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-57-/ (/-56-/ (((/-55-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-51-/ (((/-50-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-49-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-32-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-30-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-31-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-48-/ (((/-33-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-47-/ (((/-34-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-46-/ (((/-45-/ (((/-44-/ (((/-35-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-37-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-36-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-39-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-38-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-41-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-40-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-43-/ ((/-42-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       )))
+--       ) <> ("")) <> (""))
+--     )))
+--     ) <> (costDoc 3))
+--     ))
+--   )<^>(flattenDoc (/-167-/ ruleDoc "Lean.Parser.Command.theorem"
+--    (((/-157-/ (((/-152-/ (("theorem") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("theorem")
+--     ) <> (provideDoc bridgeAny)) <> (/-156-/ nestDoc 4 (((ruleDoc "Lean.Parser.Command.declId"
+--      (/-154-/ (((/-153-/ (("split_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("split_of_valid")
+--       ) <> (provideDoc bridgeAny)) <> (""))
+--     ) <> (provideDoc bridgeAny)) <> (/-155-/ (ruleDoc "Lean.Parser.Command.declSig"
+--      ((/-92-/ (ruleDoc "Lean.Parser.Term.explicitBinder"
+--        (("(") <> (/-91-/ ((/-85-/ (((/-84-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--         ) <> (provideDoc bridgeSpace)) <> ("p")) <> ((/-86-/ ((")") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(")")
+--         ))<^>(/-90-/ flattenDoc ((/-88-/ (((/-87-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--         ) <> (provideDoc bridgeSpace)) <> ("p")) <> ((/-89-/ ((")") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(")")
+--         )))
+--         ))
+--       ) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.typeSpec"
+--        (/-113-/ (((/-93-/ ((":") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":")
+--         ) <> (provideDoc bridgeSpace)) <> (ruleDoc "«term_=_»"
+--          (((/-110-/ (((ruleDoc "Lean.Parser.Term.app"
+--            (/-98-/ (((/-94-/ (("split") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("split")
+--             ) <> (provideDoc bridgeSpace)) <> (/-97-/ (((/-95-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--             ) <> (provideDoc bridgeAny)) <> ((/-96-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--             )))
+--           ) <> (provideDoc bridgeAny)) <> ((/-109-/ (("=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("=")
+--           )) <> (provideDoc bridgeSpace)) <> (/-108-/ ruleDoc "Lean.Parser.Term.app"
+--            (((/-106-/ ruleDoc "Lean.Parser.Term.proj"
+--              (((/-104-/ ruleDoc "Lean.Parser.Term.paren"
+--                ((("(") <> (ruleDoc "Lean.Parser.Term.app"
+--                  (/-103-/ (((/-99-/ (("List.splitOnP") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("List.splitOnP")
+--                   ) <> (provideDoc bridgeSpace)) <> (/-102-/ (((/-100-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                   ) <> (provideDoc bridgeAny)) <> (/-101-/ ruleDoc "Lean.Parser.Term.proj"
+--                    ((("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                      ("1")
+--                     ))
+--                   )))
+--                 )) <> (")"))
+--               ) <> (".")) <> ((/-105-/ (("map") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("map")
+--               ))
+--             ) <> (provideDoc bridgeSpace)) <> ((/-107-/ (("mk") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("mk")
+--             ))
+--           ))<^>(/-112-/ ((ruleDoc "Lean.Parser.Term.app"
+--            (/-98-/ (((/-94-/ (("split") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("split")
+--             ) <> (provideDoc bridgeSpace)) <> (/-97-/ (((/-95-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--             ) <> (provideDoc bridgeAny)) <> ((/-96-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--             )))
+--           ) <> (provideDoc bridgeSpace)) <> (((/-111-/ (("=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("=")
+--           ) <> ((provideDoc bridgeImmediate) <> (/-108-/ ruleDoc "Lean.Parser.Term.app"
+--            (((/-106-/ ruleDoc "Lean.Parser.Term.proj"
+--              (((/-104-/ ruleDoc "Lean.Parser.Term.paren"
+--                ((("(") <> (ruleDoc "Lean.Parser.Term.app"
+--                  (/-103-/ (((/-99-/ (("List.splitOnP") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("List.splitOnP")
+--                   ) <> (provideDoc bridgeSpace)) <> (/-102-/ (((/-100-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                   ) <> (provideDoc bridgeAny)) <> (/-101-/ ruleDoc "Lean.Parser.Term.proj"
+--                    ((("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                      ("1")
+--                     ))
+--                   )))
+--                 )) <> (")"))
+--               ) <> (".")) <> ((/-105-/ (("map") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("map")
+--               ))
+--             ) <> (provideDoc bridgeSpace)) <> ((/-107-/ (("mk") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("mk")
+--             ))
+--           ))))
+--           )
+--         ))
+--       ))
+--     ) <> ((("") <> (provideDoc bridgeAny)) <> (""))))))<^>(flattenDoc (/-163-/ (((/-158-/ (("theorem") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("theorem")
+--     ) <> (provideDoc bridgeAny)) <> (/-162-/ nestDoc 4 (((ruleDoc "Lean.Parser.Command.declId"
+--      (/-160-/ (((/-159-/ (("split_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("split_of_valid")
+--       ) <> (provideDoc bridgeAny)) <> (""))
+--     ) <> (provideDoc bridgeAny)) <> (/-161-/ (ruleDoc "Lean.Parser.Command.declSig"
+--      ((/-92-/ (ruleDoc "Lean.Parser.Term.explicitBinder"
+--        (("(") <> (/-91-/ ((/-85-/ (((/-84-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--         ) <> (provideDoc bridgeSpace)) <> ("p")) <> ((/-86-/ ((")") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(")")
+--         ))<^>(/-90-/ flattenDoc ((/-88-/ (((/-87-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--         ) <> (provideDoc bridgeSpace)) <> ("p")) <> ((/-89-/ ((")") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(")")
+--         )))
+--         ))
+--       ) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.typeSpec"
+--        (/-113-/ (((/-93-/ ((":") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":")
+--         ) <> (provideDoc bridgeSpace)) <> (ruleDoc "«term_=_»"
+--          (((/-110-/ (((ruleDoc "Lean.Parser.Term.app"
+--            (/-98-/ (((/-94-/ (("split") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("split")
+--             ) <> (provideDoc bridgeSpace)) <> (/-97-/ (((/-95-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--             ) <> (provideDoc bridgeAny)) <> ((/-96-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--             )))
+--           ) <> (provideDoc bridgeAny)) <> ((/-109-/ (("=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("=")
+--           )) <> (provideDoc bridgeSpace)) <> (/-108-/ ruleDoc "Lean.Parser.Term.app"
+--            (((/-106-/ ruleDoc "Lean.Parser.Term.proj"
+--              (((/-104-/ ruleDoc "Lean.Parser.Term.paren"
+--                ((("(") <> (ruleDoc "Lean.Parser.Term.app"
+--                  (/-103-/ (((/-99-/ (("List.splitOnP") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("List.splitOnP")
+--                   ) <> (provideDoc bridgeSpace)) <> (/-102-/ (((/-100-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                   ) <> (provideDoc bridgeAny)) <> (/-101-/ ruleDoc "Lean.Parser.Term.proj"
+--                    ((("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                      ("1")
+--                     ))
+--                   )))
+--                 )) <> (")"))
+--               ) <> (".")) <> ((/-105-/ (("map") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("map")
+--               ))
+--             ) <> (provideDoc bridgeSpace)) <> ((/-107-/ (("mk") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("mk")
+--             ))
+--           ))<^>(/-112-/ ((ruleDoc "Lean.Parser.Term.app"
+--            (/-98-/ (((/-94-/ (("split") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("split")
+--             ) <> (provideDoc bridgeSpace)) <> (/-97-/ (((/-95-/ (("s") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("s")
+--             ) <> (provideDoc bridgeAny)) <> ((/-96-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--             )))
+--           ) <> (provideDoc bridgeSpace)) <> (((/-111-/ (("=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("=")
+--           ) <> ((provideDoc bridgeImmediate) <> (/-108-/ ruleDoc "Lean.Parser.Term.app"
+--            (((/-106-/ ruleDoc "Lean.Parser.Term.proj"
+--              (((/-104-/ ruleDoc "Lean.Parser.Term.paren"
+--                ((("(") <> (ruleDoc "Lean.Parser.Term.app"
+--                  (/-103-/ (((/-99-/ (("List.splitOnP") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("List.splitOnP")
+--                   ) <> (provideDoc bridgeSpace)) <> (/-102-/ (((/-100-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                   ) <> (provideDoc bridgeAny)) <> (/-101-/ ruleDoc "Lean.Parser.Term.proj"
+--                    ((("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                      ("1")
+--                     ))
+--                   )))
+--                 )) <> (")"))
+--               ) <> (".")) <> ((/-105-/ (("map") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("map")
+--               ))
+--             ) <> (provideDoc bridgeSpace)) <> ((/-107-/ (("mk") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("mk")
+--             ))
+--           ))))
+--           )
+--         ))
+--       ))
+--     ) <> ((("") <> (provideDoc bridgeAny)) <> ("")))))))
+--     ) <> (/-166-/ ((requireDoc bridgeSpace) <> ((provideDoc bridgeImmediate) <> (ruleDoc "Lean.Parser.Command.declValSimple"
+--      (/-151-/ (((nestDoc 2 (/-147-/ ((requireDoc (bridgeSpace|||bridgeImmediate)) <> ((/-143-/ ((":=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":=")
+--       )) <> (/-146-/ (/-144-/ (("") <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-142-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-138-/ (/-137-/ (((/-136-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-141-/ (/-140-/ (((/-139-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       ))<^>((("") <> (provideDoc bridgeSpace)) <> (/-145-/ flattenDoc (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-142-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-138-/ (/-137-/ (((/-136-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-141-/ (/-140-/ (((/-139-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       )))
+--       )))<^>(/-150-/ ((requireDoc bridgeImmediate) <> ((/-148-/ ((":=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":=")
+--       )) <> (/-149-/ (provideDoc bridgeImmediate) <> (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-142-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-138-/ (/-137-/ (((/-136-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-141-/ (/-140-/ (((/-139-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       )))
+--       ) <> ("")) <> (""))
+--     )))<^>((/-165-/ ((("") <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Command.declValSimple"
+--      (/-151-/ (((nestDoc 2 (/-147-/ ((requireDoc (bridgeSpace|||bridgeImmediate)) <> ((/-143-/ ((":=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":=")
+--       )) <> (/-146-/ (/-144-/ (("") <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-142-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-138-/ (/-137-/ (((/-136-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-141-/ (/-140-/ (((/-139-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       ))<^>((("") <> (provideDoc bridgeSpace)) <> (/-145-/ flattenDoc (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-142-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-138-/ (/-137-/ (((/-136-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-141-/ (/-140-/ (((/-139-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       )))
+--       )))<^>(/-150-/ ((requireDoc bridgeImmediate) <> ((/-148-/ ((":=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":=")
+--       )) <> (/-149-/ (provideDoc bridgeImmediate) <> (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-142-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-138-/ (/-137-/ (((/-136-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-141-/ (/-140-/ (((/-139-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       )))
+--       ) <> ("")) <> (""))
+--     ))<^>(/-164-/ flattenDoc ((("") <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Command.declValSimple"
+--      (/-151-/ (((nestDoc 2 (/-147-/ ((requireDoc (bridgeSpace|||bridgeImmediate)) <> ((/-143-/ ((":=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":=")
+--       )) <> (/-146-/ (/-144-/ (("") <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-142-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-138-/ (/-137-/ (((/-136-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-141-/ (/-140-/ (((/-139-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       ))<^>((("") <> (provideDoc bridgeSpace)) <> (/-145-/ flattenDoc (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-142-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-138-/ (/-137-/ (((/-136-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-141-/ (/-140-/ (((/-139-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       )))
+--       )))<^>(/-150-/ ((requireDoc bridgeImmediate) <> ((/-148-/ ((":=") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>(":=")
+--       )) <> (/-149-/ (provideDoc bridgeImmediate) <> (ruleDoc "Lean.Parser.Term.byTactic"
+--        (ruleDoc "by tactic result"
+--          (ruleDoc "immediateBy"
+--            (/-142-/ ((requireDoc bridgeImmediate) <> (" ")) <> (nestDoc 2 ((/-138-/ (/-137-/ (((/-136-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             ))<^>(flattenDoc (/-141-/ (/-140-/ (((/-139-/ ((("by") <> (provideDoc bridgeHardNl)) <> ("")) <> (provideDoc bridgeHardNl)) <> (""))<^>("by")
+--             ) <> (provideDoc bridgeNl)) <> (ruleDoc "Lean.Parser.Tactic.tacticSeq"
+--              (ruleDoc "Lean.Parser.Tactic.tacticSeq1Indented"
+--                (ruleDoc "Lean.Parser.Tactic.simpa"
+--                  (/-135-/ (((/-134-/ (("simpa") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("simpa")
+--                   ) <> (provideDoc bridgeSpace)) <> (nestDoc 2 (/-133-/ ruleDoc "Lean.Parser.Tactic.simpaArgsRest"
+--                    (((/-116-/ ruleDoc "Lean.Parser.Tactic.simpArgs"
+--                      ((/-114-/ ("[") <> (("") <> (ruleDoc "Lean.Parser.Tactic.simpLemma"
+--                        ("split")
+--                       ))) <> ((/-115-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                       ))
+--                     ) <> (provideDoc bridgeSpace)) <> (/-132-/ (((/-117-/ (("using") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("using")
+--                     ) <> (provideDoc bridgeSpace)) <> (ruleDoc "Lean.Parser.Term.app"
+--                      (/-131-/ (((/-118-/ (("splitAux_of_valid") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("splitAux_of_valid")
+--                       ) <> (provideDoc bridgeSpace)) <> (/-130-/ (((/-129-/ (((/-128-/ (((/-119-/ (("p") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("p")
+--                       ) <> (provideDoc bridgeAny)) <> (/-121-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-120-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (/-123-/ ruleDoc "«term[_]»"
+--                        (("[") <> ((/-122-/ (("]") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("]")
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "Lean.Parser.Term.proj"
+--                        (/-125-/ (("s") <> (".")) <> (ruleDoc "fieldIdx"
+--                          ((/-124-/ (("1") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("1")
+--                           )
+--                         ))
+--                       )) <> (provideDoc bridgeAny)) <> (ruleDoc "«term[_]»"
+--                        (("[") <> (/-127-/ ((/-126-/ ((("]") <> (provideDoc bridgeHardNl)) <> ("-- TODO: splitOn")) <> (provideDoc bridgeHardNl)) <> (""))<^>(((costDoc 3) <> (bubbleCommentDoc "-- TODO: splitOn")) <> ("]"))
+--                         ))
+--                       )))
+--                     )))
+--                   )))
+--                 )
+--               )
+--             )))
+--             )))
+--           )
+--         )
+--       )))
+--       ) <> ("")) <> (""))
+--     )))
+--     ) <> (costDoc 3))
+--     ))
+--   ))
+--   )
+--   )
+--   let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+--   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+--   -- IO.println s!"{repr d}"
+--   IO.println s!"{out}"

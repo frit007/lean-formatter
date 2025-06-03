@@ -105,9 +105,20 @@ def ofList (l : --fst
 
 /--
 info:
-def ofList (l : List Name) : NameSet := /- should stay -/ l.foldl (fun s n => s.insert n) {}
+def ofList (l : List Name) : NameSet := /- should stay 123456 -/ l.foldl (fun s n => s.insert n) {}
 -/
 #guard_msgs in
 #format
-def ofList (l : List Name ) : NameSet := /- should stay -/
+def ofList (l : List Name ) : NameSet := /- should stay 123456 -/
+  l.foldl ( fun s n => s.insert n) {}
+
+
+/--
+info:
+def ofList (l : List Name) : NameSet := /- should stay 1234567 -/
+  l.foldl (fun s n => s.insert n) {}
+-/
+#guard_msgs in
+#format
+def ofList (l : List Name ) : NameSet := /- should stay 1234567 -/
   l.foldl ( fun s n => s.insert n) {}

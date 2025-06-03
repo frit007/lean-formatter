@@ -251,15 +251,10 @@ register_option pf.debugMissingFormatters : Bool := {
   group    := "pf"
   descr    := "(pretty format) Output a list of missing formatters above the function"
 }
-register_option pf.debugPPL : Bool := {
+register_option pf.debugNoSolution : Bool := {
   defValue := false
   group    := "pf"
-  descr    := "(pretty format) Output the generated PPL above the function"
-}
-register_option pf.debugPPLGroups : Bool := {
-    defValue := false
-    group    := "pf"
-    descr    := "(pretty format) Add grouping around every PPL formatter"
+  descr    := "(pretty format) Used to debug why there is no solution found"
 }
 register_option pf.debugDoc : Bool := {
     defValue := false
@@ -294,7 +289,7 @@ def getDebugSyntax (o : Options) : Bool := (o.get pf.debugSyntax.name pf.debugSy
 def getDebugSyntaxAfter (o : Options) : Bool := (o.get pf.debugSyntaxAfter.name pf.debugSyntaxAfter.defValue)
 def getDebugErrors (o : Options) : Bool := (o.get pf.debugErrors.name pf.debugErrors.defValue)
 def getDebugMissingFormatters (o : Options) : Bool := (o.get pf.debugMissingFormatters.name pf.debugMissingFormatters.defValue)
-def getDebugPPL (o : Options) : Bool := (o.get pf.debugPPL.name pf.debugPPL.defValue)
+def getDebugNoSolution (o : Options) : Bool := (o.get pf.debugNoSolution.name pf.debugNoSolution.defValue)
 def getDebugDoc (o : Options) : Bool := (o.get pf.debugDoc.name pf.debugDoc.defValue)
 def getWarnCSTmismatch (o : Options) : Bool := (o.get pf.warnCSTmismatch.name pf.warnCSTmismatch.defValue)
 def getDebugTime (o : Options) : Bool := (o.get pf.debugTime.name pf.debugTime.defValue)

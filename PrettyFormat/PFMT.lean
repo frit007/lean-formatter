@@ -17,7 +17,6 @@ private def mergeSet [Cost χ] (lhs rhs : List ((Measure χ))) (acc : List (Meas
   | [], _ => acc.reverse ++ rhs
   | _, [] => acc.reverse ++ lhs
   | l :: ls, r :: rs =>
-    -- TODO: We do not have to compare bridge here because we know that they have the same bridge
     if l.bridgeR < r.bridgeR then
       mergeSet ls rhs (l :: acc)
     else if r.bridgeR < l.bridgeR then
@@ -33,7 +32,7 @@ private def mergeSet [Cost χ] (lhs rhs : List ((Measure χ))) (acc : List (Meas
         mergeSet lhs rs (r :: acc)
 termination_by lhs.length + rhs.length
 
-
+def enableDebugging := false
 
 structure FlattenState where
   nextId : Nat
@@ -276,10 +275,20 @@ def MeasureSet.merge [Cost χ] (left right : MeasureSet χ) : MeasureSet χ :=
   | set lhs, set rhs =>
     let lhs' := lhs.filter (fun s => !s.fail)
     let rhs' := rhs.filter (fun s => !s.fail)
+
     if (lhs'.length == 0 && rhs'.length == 0) then
       left
     else
-      .set (mergeSet lhs' rhs')
+      if lhs'.length != lhs.length then
+        let l := lhs.filter (fun s => s.fail) |>.map (fun x => x.layout [])
+        dbg_trace s!"lhs contained failure {l}"
+        .set (mergeSet lhs' rhs')
+      else if rhs'.length != rhs.length then
+        let r := rhs.filter (fun s => s.fail) |>.map (fun x => x.layout [])
+        dbg_trace s!"rhs contained failure {r}"
+        .set (mergeSet lhs' rhs')
+      else
+        .set (mergeSet lhs' rhs')
   | set lhs, _ => .set lhs
   | _, set rhs => .set rhs
   | tainted lhs true, tainted _ true  => .tainted lhs true
@@ -287,48 +296,51 @@ def MeasureSet.merge [Cost χ] (left right : MeasureSet χ) : MeasureSet χ :=
   | tainted lhs false, _  => .tainted lhs false
 
 def possibilitiesToMeasureSet [Cost χ] (possibilities : Bridge) (col indent widthLimit : Nat) (text : String) (expect:Bool) : MeasureSet χ := Id.run do
-  let mut options : MeasureSet χ := impossibleMeasureSet
+  let mut options : List (MeasureSet χ) := []
   -- dbg_trace s!"to measureset {possibilities}"
 
   if possibilities.overlapsWith bridgeNl then
     -- dbg_trace s!"huh newline?"
-    options := options.merge (MeasureSet.set [{
+    options := (MeasureSet.set [{
       last := indent,
       bridgeR := bridgeFlex,
       cost := Cost.nl + Cost.text widthLimit 0 (text.length + indent)
       layout := fun ss => text :: "".pushn ' ' indent :: "\n" :: ss
-    }])
+    }])::options
     -- options := Doc.newline " " {collapsesBridges := Ternary.yes, paths := acceptFlex}::options
   -- In any other case we we let the child handle the separation
   if possibilities.overlapsWith bridgeSpace then
-    options := options.merge (MeasureSet.set [{
+    options := (MeasureSet.set [{
       last := col + text.length + 1,
       bridgeR := bridgeFlex,
       cost := Cost.text widthLimit col (text.length + 1)
       layout := fun ss => text :: " " :: ss
-    }])
+    }])::options
     -- options := Doc.text " " {collapsesBridges := Ternary.yes, paths := acceptFlex}::options
 
   -- anything other than space or newline get shortened to nothing
   if expect then -- TODO:
     -- To accept an immediate bridge you must expect it, to avoid accidental immediate bridges
     if (possibilities.erase (bridgeSpace ||| bridgeNl)) != 0 then
-      options := options.merge (MeasureSet.set [{
+      options := (MeasureSet.set [{
         last := col + text.length,
         bridgeR := bridgeFlex,
         cost := Cost.text widthLimit col (text.length)
         layout := fun ss => text :: ss
-      }])
+      }])::options
   else
     if possibilities.overlapsWith bridgeNone then
-      options := options.merge (MeasureSet.set [{
+      options := (MeasureSet.set [{
         last := col + text.length,
         bridgeR := bridgeFlex,
         cost := Cost.text widthLimit col (text.length)
         layout := fun ss => text :: ss
-      }])
+      }]) :: options
 
-  options
+  if options.length == 0 then
+    impossibleMeasureSet s!"possibilites to set:: no options {possibilities.str}"
+  else
+    options.foldl (fun acc x => x.merge acc) (MeasureSet.set [])
 
 
 def placeComment (indent : Nat) (comment : String) : List String → List String
@@ -414,7 +426,8 @@ partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (col inde
   -- If we were to exceed the widthLimit we delay any attempt to optimize
   -- the layout of `doc1` in hopes that another branch of this function finds
   -- a non tainted `MeasureSet`.
-    -- dbg_trace s!"doc : lb {leftBridge} rb {rightBridge} kind {doc.kind} flatten: {flatten} :::: {doc.toString} path:({doc.meta.findPath flatten})"
+    if enableDebugging then
+      dbg_trace s!"doc : lb {leftBridge} rb {rightBridge} kind {doc.kind} flatten: {repr flatten} :::: {doc.toString} path:({doc.meta.findPath flatten})"
     if doc.meta.shouldBeCached then
       match ← getCached doc.meta.id indent col leftBridge rightBridge flatten with
       | some x =>
@@ -471,11 +484,25 @@ where
         else
           possibilitiesToMeasureSet leftBridge col indent widthLimit s false
 
-        return ms
+        if col + widthLimit > 0 then
+          match ms with
+          | .set s =>
+            let s' := s.filter (fun m => m.last < widthLimit)
+            if s'.length > 0 then
+              return .set s'
+            else
+              match s with
+              | head::_ =>
+                return .tainted (TaintedTrunk.value head) (false)
+              | _ => panic ""
+            -- return .set s
+          | _ => panic! ""
+        else
+          return ms
           -- let expandedBridge := possibilitiesToDoc leftBridge false <> (toDoc s|>.setMeta {collapsesBridges := Ternary.yes, paths := acceptFlex}) |>.setMeta {collapsesBridges := Ternary.yes, paths := acceptFlex}
           -- core expandedBridge trace col indent widthLimit bridgeFlex forceExpand
     | .newline flattened _ =>
-      if flatten.shouldFlatten then
+      if flatten.shouldFlattenNl then
         -- TODO: should we learn
         match flattened with
         | some s =>
@@ -485,7 +512,9 @@ where
               layout := fun ss => s :: ss
               bridgeR := bridgeFlex
             }
-        | none => return impossibleMeasureSet
+        | none =>
+          dbg_trace "nl::unable to flatten"
+          return impossibleMeasureSet "nl::unable to flatten"
       else
         if leftBridge == bridgeFlex || leftBridge.overlapsWith bridgeAny then
           leafSet {
@@ -495,29 +524,56 @@ where
             bridgeR := bridgeFlex
           }
         else
-          return impossibleMeasureSet
+          dbg_trace s!"nl:: no overlap with {leftBridge}"
+          return impossibleMeasureSet s!"nl:: no overlap with {leftBridge}"
     | .concat lhs rhs m =>
       -- measureDiff "before calc concat"
 
       let (flattenLhs, flattenRhs) :=
-        if flatten == flattenEventually then
-          if rhs.meta.collapses && lhs.meta.collapses then
-            (flatten ||| flattenRight, flatten ||| flattenLeft)
+        match (flatten, lhs.meta.collapses, rhs.meta.collapses) with
+        | (Flatten.flattened, _, _) =>
+          (flatten, flatten)
+        | (Flatten.flattenEventually, true, true) =>
+          (Flatten.flattenRight, Flatten.flattenLeft)
+        | (Flatten.flattenEventually, false, true) =>
+          (Flatten.notFlattened, Flatten.flattenEventually)
+        | (Flatten.flattenEventually, true, false) =>
+          (Flatten.flattenEventually, Flatten.notFlattened)
+        | (Flatten.flattenEventually, false, false) =>
+          (Flatten.notFlattened, Flatten.notFlattened)
+        | (Flatten.flattenLeft, _, f) =>
+          if f then
+            (Flatten.flattened, Flatten.flattenLeft)
           else
-            (flatten, flatten)
-        else
-          (
-            if rhs.meta.collapses && flatten == flattenLeft then flattened else flatten,
-            if lhs.meta.collapses && flatten == flattenRight then flattened else flatten
-          )
+            (Flatten.flattenLeft, Flatten.notFlattened)
+        | (Flatten.flattenRight, f, _) =>
+          if f then
+            (Flatten.flattenRight, Flatten.flattened)
+          else
+            (Flatten.notFlattened, Flatten.flattenRight)
+        | _ =>
+          (flatten, flatten)
+
+        -- if flatten != Flatten.notFlattened then
+        --   if rhs.meta.collapses && lhs.meta.collapses then
+        --     (flatten ||| flattenRight, flatten ||| flattenLeft)
+        --   else
+        --     (flatten, flatten)
+        -- else
+        --   (
+        --     if rhs.meta.collapses && flatten == flattenLeft then flattened else flatten,
+        --     if lhs.meta.collapses && flatten == flattenRight then flattened else flatten
+        --   )
 
       -- let flattenRhs := if flatten.shouldFlatten && lhs.meta.collapses then
       --   flatten ||| flattenRight
       -- else
       --   flatten
-      -- dbg_trace s!"concat bridges: {flattenLhs} {flattenRhs} leftCollapses: {lhs.meta.collapses} rightCollapses: {rhs.meta.collapses}"
+      if enableDebugging then
+        dbg_trace s!"concat bridges: {repr flattenLhs} {repr flattenRhs} leftCollapses: {lhs.meta.collapses} rightCollapses: {rhs.meta.collapses}"
       let newRight := (rhs.meta.findPath flattenRhs).foldl (fun acc (rl, rr) => if rr.overlapsWith rightBridge then rl ||| acc else acc) bridgeNull
-      -- dbg_trace s!"concat: new right: {newRight} currentRight: {rightBridge}  rhs path: {rhs.meta.findPath flattenRhs} lhs : {lhs.toString} rhs : {rhs.toString}"
+      if enableDebugging then
+        dbg_trace s!"concat: new right: {newRight} currentRight: {rightBridge}  rhs path: {rhs.meta.findPath flattenRhs} lhs : {lhs.toString} rhs : {rhs.toString}"
       -- Do we need this calculation?
       -- no because
       -- if leftbridge does not fit then it will be discarded later
@@ -546,8 +602,10 @@ where
       -- Should failure be tainted? maybe, but then I need to mark tainted as failure or not, and results over failures
       let leftHasSolution := (lhs.meta.findPath flatten).any (fun (l, r) => l.overlapsWith leftBridge && r.overlapsWith rightBridge)
       let rightHasSolution := (rhs.meta.findPath flatten).any (fun (l, r) => l.overlapsWith leftBridge && r.overlapsWith rightBridge)
-      -- dbg_trace s!"choice::l {leftHasSolution} val {lhs.toString} lbridge : {leftBridge} rbridge : {rightBridge}"
-      -- dbg_trace s!"choice::r {rightHasSolution} val {rhs.toString} lbridge : {leftBridge} rbridge : {rightBridge}"
+
+      if enableDebugging then
+        dbg_trace s!"choice::l {leftHasSolution} val {lhs.toString} lbridge : {leftBridge} rbridge : {rightBridge}"
+        dbg_trace s!"choice::r {rightHasSolution} val {rhs.toString} lbridge : {leftBridge} rbridge : {rightBridge}"
       -- let leftHasSolution := true
       -- let rightHasSolution := true
       -- measureDiff "after checkSol"
@@ -579,7 +637,8 @@ where
       let possibilities := leftBridge.provideIntersection b
       -- dbg_trace s!"provide {b} {possibilities}"
       if possibilities == bridgeNull then
-        return impossibleMeasureSet
+        -- dbg_trace s!"provide::no overlap between leftbridge {leftBridge} and b:{b}"
+        return impossibleMeasureSet s!"provide::no overlap between leftbridge {leftBridge} and b:{b}"
         -- (Doc.fail "impossible bridge").resolve trace col indent widthLimit (bridgeFlex) forceExpand
       else
         -- dbg_trace s!"provide gives {possibilities}"
@@ -593,16 +652,17 @@ where
       --   inner.resolve trace col indent widthLimit possibilities forceExpand
     | .require b _ =>
       let b := if flatten.isFlat then b.flatten else b
-      if leftBridge == bridgeFlex then
+      if leftBridge == bridgeFlex && b != bridgeFlex then
         -- let fail : Doc := Doc.fail "require given no bridges"
         -- fail.resolve trace col indent widthLimit bridgeFlex forceExpand
-        return impossibleMeasureSet
+        -- dbg_trace "require::leftBridge is missing"
+        return impossibleMeasureSet "require::leftBridge is missing"
       else
         let possibilities := leftBridge.requireIntersection b
         -- let choices := (possibilitiesToDoc possibilities true)
         -- (choices).resolve trace col indent widthLimit bridgeFlex bridgeFlex forceExpand
         return possibilitiesToMeasureSet possibilities col indent widthLimit "" true
-    | .rule s doc _ =>
+    | .rule _ doc _ =>
       doc.resolve col indent widthLimit leftBridge rightBridge flatten
     | .flatten inner _ =>
       -- doc.resolve trace col indent widthLimit leftBridge NewRightBridge expectBridge true forceExpand
@@ -648,13 +708,6 @@ where
       -- in a tainted thunk, thus prunning it away.
       -- dbg_trace s!"tainted lb{state.leftBridge} rb{state.rightBridge}"
       return .tainted (TaintedTrunk.leftTainted leftThunk right state concatId) e
-      -- .tainted (fun _ =>
-      --   let left := expandTainted leftThunk
-      --   match processLeft left with
-      --   | .tainted rightThunk => left ++ rightThunk ()
-      --   | .set (right :: _) => left ++ right
-      --   | .set [] => panic! "Empty measure sets are impossible"
-      -- )
     | .set lefts =>
        let concatOneWithRight (l : Measure χ) : MeasureResult χ (MeasureSet χ) := do
         -- This is an optimized version of dedup from the paper. We use it to maintain
@@ -675,12 +728,19 @@ where
         -- dbg_trace s!"call again? {l.bridgeR}"
         match ← (right.resolve l.last state.indent widthLimit l.bridgeR rightBridge flattenRhs) with
         | .tainted rightThunk e => return .tainted (TaintedTrunk.rightTainted l rightThunk {state with rightBridge := rightBridge} concatId) e
-        | .set (r :: rights) => return .set (dedup rights [] (l.concat r))
-        | .set [] => return impossibleMeasureSet
+        | .set (r :: rights) => return .set (dedup rights [] (l.concat r)) --TODO: dedup probably does not work if there are different bridges.
+        | .set [] =>
+          dbg_trace "concat::no right solution"
+          return impossibleMeasureSet "concat::no right solution"
 
        let rec concatAllWithRight  : List (Measure χ) →  MeasureResult χ (MeasureSet χ)
-         | [] => return impossibleMeasureSet
+         | [] =>
+            dbg_trace "concat::no left solution"
+           return impossibleMeasureSet "concat::no left solution"
          | [l] => concatOneWithRight l
+          -- Do we need to sort the bridges?
+          -- no because
+
          | l :: ls => do return MeasureSet.merge (← concatOneWithRight l) (← concatAllWithRight ls)
        concatAllWithRight lefts
 
@@ -723,7 +783,7 @@ partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrun
     match r with
     | .tainted t _ => return leftMeasure.concat (← expandTainted t)
     | .set (m::_) => return leftMeasure.concat m
-    | _ => return impossibleMeasure
+    | _ => return impossibleMeasure "tainted::no right solution"
   | .rightTainted left right _ _ => do
     let r ← expandTainted right
     return left.concat r
@@ -784,15 +844,16 @@ Find an optimal layout for a document and render it.
 -/
 partial def Doc.print (χ : Type) [Inhabited χ] [Repr χ] [Cost χ] (doc : Doc) (cacheSize col widthLimit : Nat) (log : Option (List String)): IO (PrintResult χ) := do
   -- let (preferredGroups, cache) := ((doc.resolve (χ := χ) [] col 0 widthLimit bridgeFlex bridgeFlex false false).run (initCache cacheSize log)).run
-  if (doc.meta.findPath notFlattened).size == 0 then
+  if (doc.meta.findPath Flatten.notFlattened).size == 0 then
     dbg_trace s!"WARNING: document does not contain a solution"
     -- let errs := doc.findErr "" {}
     -- dbg_trace s!"WARNING: {repr errs}"
     -- dbg_trace s!"WARNING: {printOrder doc}"
-  let (preferredGroups, cache) ← ((doc.resolve (χ := χ) col 0 widthLimit bridgeFlex bridgeEnding notFlattened).run (initCache cacheSize log))
+  let (preferredGroups, cache) ← ((doc.resolve (χ := χ) col 0 widthLimit bridgeFlex bridgeEnding Flatten.notFlattened).run (initCache cacheSize log))
 
   match preferredGroups with
-  | .set (m::_) =>
+  | .set (m::ms) =>
+    -- dbg_trace "taken first response, ignored{ms.length}"
     return {
       log := cache.log,
       layout := String.join (m.layout []).reverse,
@@ -800,6 +861,7 @@ partial def Doc.print (χ : Type) [Inhabited χ] [Repr χ] [Cost χ] (doc : Doc)
       cost := m.cost
     }
   | .set ([]) =>
+    -- dbg_trace "it was empty set"
     return {
       log := cache.log,
       layout := "No solution found",
@@ -807,6 +869,7 @@ partial def Doc.print (χ : Type) [Inhabited χ] [Repr χ] [Cost χ] (doc : Doc)
       cost := Cost.text 0 0 0
     }
   | .tainted t _ =>
+    -- dbg_trace "tainted it was tainted..."
     let (m, cache) ← ((expandTainted t)|>.run cache)
     return {
       log := cache.log,

@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Doc Viewer (Bottom-Up)</title>
+  <style>
+    body {
+      font-family: monospace;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    svg {
+      width: 100vw;
+      height: 80vh;
+    }
+
+    #output {
+      width: 100vw;
+      height: 20vh;
+    }
+
+    .node rect {
+      fill: #eee;
+      stroke: #999;
+      stroke-width: 1px;
+      rx: 5;
+      ry: 5;
+    }
+
+    .node text {
+      font-size: 12px;
+      user-select: none;
+    }
+
+    .toggle-button {
+      cursor: pointer;
+      fill: lightblue;
+      stroke: #555;
+    }
+
+    .prefered-bridge {
+      display: block;
+      width: 100%;
+      padding: 0.375rem 0.75rem;
+      font-size: 1rem;
+      line-height: 1.5;
+      color: #495057;
+      background-color: #fff;
+      background-clip: padding-box;
+      border: 1px solid #ced4da;
+      border-radius: 0.375rem;
+      transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+      appearance: none;
+      -moz-appearance: none;
+      -webkit-appearance: none;
+    }
+    
+    .prefered-bridge:focus {
+      border-color: #86b7fe;
+      outline: 0;
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+
+    #import-button {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+
+      width: 50px;
+      height: 50px;
+
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      /* makes it round */
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+
+    #import-button :active {
+      background-color: #012f5f;
+    }
+  </style>
+</head>
+
+<body>
+  <button id="import-button">Import</button>
+  <svg id="graph"></svg>
+  <textarea name="" id="output"></textarea>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+    // Bridge constants
+    const bridgeNull = 0;
+    const bridgeFlex = 1;
+    const bridgeSpaceNl = 2;   // flattens to a space
+    const bridgeHardNl = 4;    // flattens to fail
+    const bridgeNl = bridgeSpaceNl | bridgeHardNl;
+    const bridgeSpace = 8;
+    const bridgeNone = 16;
+    const bridgeImmediate = 32;
+    const bridgeAny = bridgeSpace | bridgeNl | bridgeHardNl;
+    const bridgeEnding = bridgeAny | bridgeFlex;
+
+    function provideIntersection(l, r) {
+      if (l === bridgeFlex) {
+        return r;
+      } else if (r === bridgeFlex) {
+        return l;
+      } else {
+        return l & r;
+      }
+    }
+
+    function requireIntersection(l, r) {
+      const allowed = bridgeAny | bridgeNone;
+
+      if (l === bridgeFlex && (r & ~allowed) === 0) {
+        return r;
+      } else if (r === bridgeFlex && (l & ~allowed) === 0) {
+        return l;
+      } else {
+        return l & r;
+      }
+    }
+
+    /**
+     * Returns a string representation of a Bridge bitmask
+     * @param {number} b - bitmask representing the bridge type(s)
+     * @returns {string}
+     */
+    function bridgeStr(b) {
+      const str = [];
+      let bridge = b;
+
+      if (bridge === bridgeNull) return "null";
+
+      function check(flag, name) {
+        if ((bridge & flag) === flag) {
+          str.push(name);
+          bridge &= ~flag;
+        }
+      }
+
+      check(bridgeAny, "Any");
+      check(bridgeNl, "Nl");
+      check(bridgeHardNl, "HardNl");
+      check(bridgeSpaceNl, "SpaceNl");
+      check(bridgeSpace, "Space");
+      check(bridgeImmediate, "Immediate");
+      check(bridgeNone, "None");
+      check(bridgeFlex, "Flex");
+
+      if (bridge !== 0) {
+        str.push(String(bridge));
+        bridge &= ~bridgeNone; // emulate the final erase in Lean (though this line might be superfluous in JS)
+      }
+
+      return str.length === 1 ? str[0] : `(${str.join("|||")})`;
+    }
+
+    const docData = {
+      type: "concat",
+      lhs: {
+        type: "text",
+        s: "Hello"
+      },
+      rhs: {
+        type: "choice",
+        // lhs: { type: "text", s: " world!" },
+        lhs: { type: "choice", lhs: { type: "text", s: "world1" }, rhs: { type: "text", s: "world2" } },
+        rhs: { type: "newline", s: null }
+      }
+    };
+
+    function transformDoc(node) {
+      if (!node) return null;
+      let children = [];
+      let name = node.type + (node.s !== undefined ? `: "${node.s}"` : "")
+
+      switch (node.type) {
+        case "concat":
+          const left = transformDoc(node.lhs)
+          children.push(left);
+          const right = transformDoc(node.rhs)
+          rightBridge = right.rightBridge
+          children.push(right);
+          break;
+        case "choice":
+          console.log("=============NODE==========", node)
+
+          node._children = [transformDoc(node.lhs), transformDoc(node.rhs)];
+          try {
+            node._showAlt = node.rhs.meta.path.length > node.lhs.meta.path.length
+          } catch(e) {
+            node._showAlt = false
+          }
+          // node._showAlt = false
+          children.push(node._children[node._showAlt ? 1 : 0]);
+          break;
+        case "require":
+          name = `require: ${bridgeStr(node.value)}`
+          break;
+        case "provide":
+          name = `provide: ${bridgeStr(node.value)}`
+          break;
+        case "rule":
+          name = `rule: ${node.name}`
+          children.push(transformDoc(node.inner));
+          break;
+        case "nest": // fallthrough
+          name = `nest: ${node.indent}`
+          children.push(transformDoc(node.inner));
+          break;
+        case "align":
+          name = `align:`
+          children.push(transformDoc(node.inner));
+          break;
+        case "reset":
+          name = `reset:`
+          children.push(transformDoc(node.inner));
+          break;
+        case "flatten":
+          name = `flatten:`
+          children.push(transformDoc(node.inner));
+          break;
+        case "cost":
+          name = `cost: ${node.value}`
+          break;
+        case "bubbleComment":
+          name = `bubbleComment: ${node.comment}`
+          break;
+        default:
+          break;
+      }
+
+      return {
+        name: name,
+        leftBridge : 0,
+        rightBridge : 0,
+        preferredBridge : bridgeSpace,
+        type: node.type,
+        raw: node,
+        children: children.filter(d => d)
+      };
+    }
+    /**
+     * @typedef {Object} Measure
+     * @property {string} output - The name of the user.
+     * @property {number} col - 
+     * @property {number} indent - 
+     * @property {number} rightBridge
+     */
+
+    /**
+     * @param {Object} node
+     * @param {Measure} doc
+     * @param {int} leftBridge
+     * @returns {Measure} updated doc
+     */
+    // note output also updates the bridge calculation
+    function output(node, flatten, doc, leftBridge) {
+      // debugger
+      console.log("node?", node, "flatten", flatten, "doc", doc, "leftBridge", leftBridge)
+      node.leftBridge = leftBridge
+      // function updateSelect
+
+      function bridgeToDoc (bridge, doc) {
+        if ((bridgeNl & bridge) != 0) {
+          console.log("yep added a newline")
+          return { ...doc, col: doc.indent, output: doc.output + "\n" + " ".repeat(doc.indent), rightBridge : bridgeFlex }
+        } else if ((bridgeSpace & bridge) != 0) {
+          console.log("yep added a space")
+          return { ...doc, col: doc.col + 1, output: doc.output + " ", rightBridge : bridgeFlex }
+        } else {
+          return {...doc, rightBridge : bridgeFlex}
+        }
+
+      }
+      function tryPreferedBridge (bridge, doc) {
+        if ((node.preferredBridge & bridge) == node.preferredBridge && node.preferredBridge != 0) {
+          console.log("we are doing preffered!!!")
+          return bridgeToDoc(node.preferredBridge, doc)
+        }
+        return bridgeToDoc(bridge, doc)
+        
+      }
+
+      console.log("output with", node, doc)
+      if (!node) return doc;
+      switch (node.type) {
+        case "concat":
+          const updatedDoc = output(node.children[0], flatten, doc, leftBridge)
+          const rightDoc = output(node.children[1], flatten, updatedDoc, updatedDoc.rightBridge)
+          node.rightBridge = node.children[1].rightBridge
+          return rightDoc
+          break;
+        case "choice":
+          const index = node._showAlt ? 1 : 0
+          const docChoice = output(node.children[index], flatten, doc, leftBridge)
+          node.rightBridge = node.children[index].rightBridge
+          return docChoice
+        case "nest":
+          const docNest = output(node.children[0], flatten, { ...doc, indent: doc.indent }, leftBridge)
+          node.rightBridge = node.children[0].rightBridge
+          return docNest
+        case "align":
+          // return output(node, flatten, {...doc, indent : doc.indent}, leftBridge)
+          throw "align not supported yet"
+        case "reset":
+          const resetDoc = output(node.children[0], flatten, { ...doc, indent: 0 }, leftBridge)
+          node.rightBridge = node.children[0].rightBridge
+          return resetDoc
+        case "rule":
+          const ruleDoc = output(node.children[0], flatten, doc, leftBridge)
+          node.rightBridge = node.children[0].rightBridge
+          return ruleDoc
+        case "flatten":
+          const flattenDoc = output(node.children[0], flatten, doc, leftBridge)
+          node.rightBridge = node.children[0].rightBridge
+          return flattenDoc
+        case "provide":
+          node.rightBridge = provideIntersection(leftBridge, node.raw.value)
+          console.log("update rightbridge!!", node, )
+          return { ...doc, rightBridge : node.rightBridge}        
+        case "require":
+          const remainingBridges = requireIntersection(leftBridge, node.raw.value)
+          node.rightBridge = bridgeFlex
+          if (remainingBridges == bridgeNull) {
+            return { ...doc, output : doc.output + "{!!NoSolution!!}",rightBridge : bridgeNull}
+          } else { // aaaaaaaa
+            doc = tryPreferedBridge(leftBridge, doc)
+            return { ...doc, rightBridge : bridgeFlex}
+          }
+        case "newline":
+          // if leftBridge 
+          if (leftBridge == bridgeNull) {
+            return { ...doc, rightBridge : bridgeNull}
+          } else {
+            return { ...doc, col: doc.indent, output: doc.output + "\n" + " ".repeat(doc.indent) }
+          }
+        case "cost":
+          node.rightBridge = leftBridge
+          return doc
+        case "text":
+          if (node.raw.s.length == 0) {
+            node.rightBridge = leftBridge
+            return doc
+          } else {
+            if (leftBridge == bridgeNull) {
+              node.rightBridge = bridgeNull 
+              return {...doc, output: doc.output + "{!!NoSolution!!}",rightBridge : bridgeNull}
+            } else {
+              node.rightBridge = bridgeFlex
+              doc = tryPreferedBridge(leftBridge, doc)
+              return { ...doc, col: node.raw.s.length + doc.col, output: `${doc.output}${node.raw.s}` }
+            }
+            
+          }
+        case "bubbleComment":
+          node.rightBridge = leftBridge
+          return { ...doc, output: doc.output + `comment: ${comment}` } // TODO: move comment to correct spot
+          break;
+        default:
+          break;
+      }
+
+      return doc
+    }
+
+
+
+    const notFlattened = "notFlattened"
+    const flattenLeft = "flattenLeft"
+    const flattenRight = "flattenRight"
+    const flattenEventually = "flattenEventually"
+    const flattened = "flattened"
+
+    let rootData = transformDoc(docData);
+
+    const svg = d3.select("#graph")
+      .call(d3.zoom()
+        .scaleExtent([0.1, 5])
+        .on("zoom", (event) => {
+          d3.select("#viewport").attr("transform", event.transform);
+        }));
+    const graph = document.getElementById("graph");
+    const outputBox = document.getElementById("output");
+    const importButton = document.getElementById("import-button")
+    const width = graph.getBoundingClientRect().width;
+    const height = graph.getBoundingClientRect().height;
+
+    // The format is compressed during transport, to reduce parsing time.
+    function reconstruct(d, map) {
+      if (typeof d == "object" && "$ref" in d) {
+        const lookupKey = d["$ref"]
+        map[lookupKey] = reconstruct(map[lookupKey], map)
+        console.log("lookup", lookupKey, "value", map[lookupKey])
+        return map[lookupKey]
+      }
+      for (const k in d) {
+        const v = d[k]
+        if (typeof v == "object") {
+          if ("$ref" in v) {
+            const lookupKey = v["$ref"] + ""
+            const prevValue = map[lookupKey]
+            map[lookupKey] = reconstruct(map[lookupKey], map)
+            console.log("updating", k, "key", lookupKey, "newvalue", map[lookupKey], "was", prevValue, "the value was", v)
+            d[k] = map[lookupKey]
+          } else {
+            d[k] = reconstruct(v, map)
+          }
+        }
+
+      }
+      return d
+    }
+
+
+    async function updateTransform() {
+      const docs = JSON.parse(outputBox.value)
+      console.log("the doc", docs)
+      const start = reconstruct(docs.start, docs)
+      // console.log("newRootData", start, rootData)
+      rootData = transformDoc(start)
+      render(rootData)
+    }
+
+    importButton.onclick = updateTransform
+
+    // const g = svg.append("g").attr("transform", `translate(${width / 2},${height - 50})`);
+    const g = svg.append("g").attr("id", "viewport")
+      .append("g").attr("transform", `translate(${width / 2},${height - 50})`);
+
+    function render(data) {
+      outputBox.value = output(data, notFlattened, { col: 0, indent: 0, output: "", rightBridge: 1 }, bridgeFlex).output
+      g.selectAll("*").remove();
+      const root = d3.hierarchy(data);
+
+      const treeLayout = d3.tree()
+        .nodeSize([200, 140]); // reduced vertical spacing
+
+      treeLayout(root);
+
+      // Flip Y and invert X to grow bottom-up
+      g.selectAll(".link")
+        .data(root.links())
+        .enter()
+        .append("line")
+        .attr("stroke", "#ccc")
+        .attr("stroke-width", 2)
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => -d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => -d.target.y);
+
+      const node = g.selectAll(".node")
+        .data(root.descendants())
+        .enter()
+        .append("g")
+        .attr("class", "node")
+        .attr("transform", d => `translate(${d.x},${-d.y})`);
+
+      node.append("rect")
+        .attr("x", -40)
+        .attr("y", -12)
+        .attr("width", 120)
+        .attr("height", 48)
+        .attr("rx", 6)
+        .attr("ry", 6)
+        .style("stroke-width", (d => {
+          console.log("stroke", d)
+          try {
+            if (d.data.raw.meta.path.length == 0) {
+              return "3px"
+            }
+          } catch (e) {}
+          return "1px"
+        }))
+        .style("stroke", (d => {
+          console.log("stroke", d)
+          try {
+            if (d.data.raw.meta.path.length == 0) {
+              return "#ff0f0f"
+            }
+          } catch (e) {}
+          return "#999"
+        }))
+        .style("fill", d => {
+          if (d.data.leftBridge == bridgeNull || d.data.rightBridge == bridgeNull) {
+            return "#ffc2c2"
+          } else {
+            return d.data.raw.type === "choice" ? "#def" : "#eee"
+          }
+          // return "#fff"
+        }
+       );
+
+      // node.append("text")
+      //   .attr("dy", "0.32em")
+      //   .attr("dx", -35)
+      //   .text(d => d.data.name);
+      node.append("text")
+        .attr("dy", 0)
+        .attr("dx", 0)
+        .selectAll("tspan")
+        .data(d => 
+          [d.data.name, `leftBridge: ${bridgeStr(d.data.leftBridge)}`, `right bridge: ${bridgeStr(d.data.rightBridge)}`]) 
+        .enter()
+        .append("tspan")
+        .attr("x", -35)
+        .attr("dy", (d, i) => `${i === 0 ? 0 : 1.2}em`)
+        .text(d => d);
+
+      node.filter(d => {
+        if (d.data.raw.type === "choice") {
+          return true
+        } else if (d.data.raw.type === "text" || d.data.raw.type === "require") {
+          let count = 0
+          count += ((d.data.leftBridge & bridgeNl) != 0) ? 1 : 0
+          count += ((d.data.leftBridge & bridgeSpace) != 0) ? 1 : 0
+          count += ((d.data.leftBridge & ~(bridgeSpace | bridgeNl)) != 0) ? 1 : 0
+          console.log("what", count,d)
+          return count > 1
+        }
+      })
+        .append("text")
+        .attr("class", "toggle-button")
+        .attr("dx", 20)
+        .attr("dy", "0.32em")
+        .attr("fill", "blue")
+        .style("text-decoration", "underline")
+        .text("[toggle]")
+        .on("click", function (event, d) {
+          if (d.data.raw.type === "choice") {
+            // console.log(node, d.data.raw)
+            d.data.raw._showAlt = !d.data.raw._showAlt;
+            const choiceChildren = d.data.raw._children;
+            // console.log("children???",choiceChildren)
+            d.data.children = [choiceChildren[d.data.raw._showAlt ? 1 : 0]];
+            // console.log("the root", rootData)
+          } else {
+            const rotation = [bridgeNl, bridgeSpace, bridgeNone|bridgeImmediate].filter(a => (a & d.data.leftBridge) != 0)
+            let index = rotation.indexOf(d.data.preferredBridge) + 1
+            if (index >= rotation.length) {
+              index = 0
+            }
+            d.data.preferredBridge = rotation[index]
+            console.log("new prefered:",d.data.preferredBridge , index, rotation)
+          }
+          render(rootData); // Re-render tree
+        });
+    }
+
+    render(rootData);
+  </script>
+</body>
+
+</html>

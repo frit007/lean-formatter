@@ -822,8 +822,12 @@ def FormatResult.preservesCst (res : FormatResult) : Bool :=
       for (kind,stx) in state.diagnostic.failures do
         errString := errString ++ s!"{kind}:({stx.length}) \n"
 
-    if (PrettyFormat.getDebugPPL opts) then
+    if (PrettyFormat.getDebugDoc opts) then
       errString := errString ++ "\n---- Generated PPL ----\n" ++ (ppl.toString)
+
+    if (PrettyFormat.getDebugNoSolution opts) then
+      -- errString := errString ++ "\n---- Path  ----\n" ++ (ppl.printDependencies)
+      errString := errString ++ "\n---- Path  ----\n" ++ (ppl.toJSON)
 
     if (PrettyFormat.getDebugTime opts) then
       errString := errString ++ s!"\n---- timingPPL ----\ntimePF{nanosecondsToSeconds res.timePF}s\ntimeDoc{nanosecondsToSeconds res.timeDoc}s\ntimeReparse{nanosecondsToSeconds res.timeReparse}s"

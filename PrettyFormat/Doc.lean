@@ -4,33 +4,38 @@ open Std
 namespace PrettyFormat
 
 
-abbrev Flatten := UInt32
-
+inductive Flatten where
+| notFlattened
+| flattenLeft
+| flattenRight
+| flattenEventually
+| flattened
+deriving DecidableEq, Repr
 /--
 Why do we need so many flattens?
 The issue is that flatten should be delayed until the outer bridges have found a value
 
 This structure is a little strange, because we optimize flatten to be usable as an index in a contiguous array with 5 element
 -/
--- def flattenEventually : Flatten := 1
-def notFlattened : Flatten := 0
-def flattenLeft : Flatten := 5
-def flattenRight : Flatten := 6
-def flattenEventually: Flatten := 4
-def flattened : Flatten := flattenLeft ||| flattenRight ||| flattenEventually
 
-def Flatten.overlapsWith (l r: Flatten) : Bool :=
-  l &&& r != 0
+
+
+-- def Flatten.overlapsWith (l r: Flatten) : Bool :=
+--   l &&& r != 0
 
 -- flattening has started, but not yet completed
-def Flatten.shouldFlatten (f : Flatten) : Bool :=
-  f > 0
+def Flatten.shouldFlattenNl (f : Flatten) : Bool :=
+  f != Flatten.notFlattened
 
 def Flatten.isFlat (f : Flatten) : Bool :=
   f == flattened
 
-def Flatten.startFlatten (f : Flatten) : Flatten :=
-  f ||| flattenEventually
+def Flatten.startFlatten : Flatten → Flatten
+| notFlattened => flattenEventually
+| f => f
+
+
+  -- f ||| flattenEventually
 
 
 abbrev Bridge := UInt32
@@ -111,8 +116,7 @@ def Bridge.replaceIfExists (bridge old new : Bridge) :Bridge :=
     bridge
 
 def Bridge.flatten (bridge : Bridge) : Bridge :=
-  bridge.replaceIfExists bridgeFlex (bridgeSpace ||| bridgeNone)
-    |>.replaceIfExists bridgeSpaceNl (bridgeSpace)
+  bridge.replaceIfExists bridgeSpaceNl (bridgeSpace)
     |>.erase bridgeHardNl
 
 def Bridge.str (b : Bridge) : String := Id.run do
@@ -291,6 +295,11 @@ def Ternary.eq : Ternary → Ternary → Bool
 | .maybe, .maybe => true
 | _, _ => false
 
+def Ternary.toString : Ternary → String
+| .yes => "yes"
+| .no => "no"
+| .maybe => "maybe"
+
 def Ternary.neq (lhs rhs :Ternary) : Bool :=
   !lhs.eq rhs
 
@@ -334,19 +343,19 @@ def DocMeta.collapses (meta : DocMeta) : Bool :=
 
 def DocMeta.findPath (meta : DocMeta) (flatten : Flatten) : Path :=
   match flatten with
-  | 5 /-flattenLeft-/=>
+  | Flatten.flattenLeft =>
     --dbg_trace "we are reading flattenLeft"
     meta.flattenLPath
-  | 6 /-flattenRight-/=>
+  | Flatten.flattenRight =>
     --dbg_trace "we are reading flattenRight"
    meta.flattenRPath
-  | 7 /-flattened-/ =>
+  | Flatten.flattened =>
     --dbg_trace "we are reading flattenPath"
     meta.flattenPath
-  | 4 /-flattenEventually-/=>
+  | Flatten.flattenEventually =>
     --dbg_trace "we are reading eventuallyFlatten"
     meta.eventuallyFlattenPath
-  | _ /-Can only be 0-/=>
+  | Flatten.notFlattened =>
     --dbg_trace "we are reading path"
     meta.path
 
@@ -565,19 +574,19 @@ inductive MeasureSet (χ : Type)
   | set (s : List (Measure χ))
   | tainted (tainted: TaintedTrunk χ) (fail:Bool)
 
-def impossibleMeasure [Cost χ] : Measure χ := {
+def impossibleMeasure [Cost χ] (err:String) : Measure χ := {
       last := 0,
       cost := Cost.text 0 0 0,
-      layout := fun ss => "(no possible formatter)" :: ss
+      layout := fun ss => s!"(no possible formatter::{err})" :: ss
       fail := true
       bridgeR := bridgeFlex
     }
-def impossibleMeasureSet [Cost χ] : MeasureSet χ :=
-  .set [impossibleMeasure]
+def impossibleMeasureSet [Cost χ] (err:String): MeasureSet χ :=
+  .set [impossibleMeasure err]
 
 instance [Cost χ]: Inhabited (MeasureSet χ) where
   -- default := MeasureSet.set []
-  default := MeasureSet.tainted (TaintedTrunk.value (impossibleMeasure)) true
+  default := MeasureSet.tainted (TaintedTrunk.value (impossibleMeasure "default")) true
 
 instance : Repr (MeasureSet χ) where
   reprPrec
@@ -858,7 +867,12 @@ partial def concatDoc [ToDoc α] [ToDoc β] (l : α) (r : β) : Doc :=
   let l := toDoc l
   let r := toDoc r
 
-  Doc.concat l r {collapsesBridges := l.meta.collapsesBridges.or r.meta.collapsesBridges}
+  if isEmpty l then
+    r
+  else if isEmpty r then
+    l
+  else
+    Doc.concat l r {collapsesBridges := l.meta.collapsesBridges.or r.meta.collapsesBridges}
 where
   listToChoices : List Doc → Doc
   | a::[] => a
@@ -905,6 +919,13 @@ def nestDoc [ToDoc α] (n : Nat) (s: α) : Doc:=
 def Doc.group (doc : Doc) : Doc :=
   (doc <^> (flattenDoc doc))
 
+def costDoc (cost:Nat) : Doc :=
+  Doc.cost cost {collapsesBridges := Ternary.no}
+
+def Doc.preferFlatten (doc : Doc) : Doc :=
+  -- TODO: at the moment the penalty is equivalent to a full newline.
+  ((doc <> costDoc 1) <^> (flattenDoc doc))
+
 -- def spacing (s : Bridge) (d:Doc) : Doc := (Doc.provideL s d {containsWhiteSpace:=d.meta.containsWhiteSpace})
 
 def alignDoc [ToDoc α] (s: α): Doc:=
@@ -924,8 +945,6 @@ def Doc.alignedConcat [ToDoc α] [ToDoc β] (lhs : α) (rhs : β) : Doc := conca
 -- -/
 def Doc.flattenedAlignedConcat [ToDoc α] [ToDoc β] (lhs : α) (rhs : β) : Doc := Doc.alignedConcat (flattenDoc (toDoc lhs)) rhs
 
-def costDoc (cost:Nat) : Doc :=
-  Doc.cost cost {collapsesBridges := Ternary.no}
 
 def bubbleCommentDoc (s:String) : Doc :=
   Doc.bubbleComment s {collapsesBridges := Ternary.no}
@@ -949,17 +968,18 @@ def measureDiff (str:String): MeasureResult χ Unit := do
 
 def formatThen [ToDoc α] [ToDoc β] (sep : α) (ppl : β) : Doc :=
   let p := toDoc ppl
-  if isEmpty p then
+  if PrettyFormat.isEmpty p then
     toDoc ""
   else
     p <> sep
 
-def formatBefore [ToDoc a] [ToDoc b] (sep : a) (ppl : b) : Doc :=
-  let p := toDoc ppl
-  if isEmpty p then
+def formatBefore [ToDoc a] [ToDoc b] (sep : a) (doc : b) : Doc :=
+  let d := toDoc doc
+  let sep := toDoc sep
+  if PrettyFormat.isEmpty d then
     toDoc ""
   else
-    sep <> p
+    sep <> d
 
 infixr:45 " ?> " => fun l r => formatThen r l
 infixr:45 " <? " => fun l r => formatBefore l r
@@ -1043,11 +1063,11 @@ def printNodes (d : Doc) (indentation : Nat) (sharedNodes : Std.HashMap Nat Nat)
       if isShared then
         -- dbg_trace s!"printing node {d.meta.id} with sharedNodes: is shared"
         let (v, results) := printNode 0 d
-        (s!"{v}", results.insert d.meta.id v)
+        (s!"/-{d.meta.id}-/", results.insert d.meta.id v)
       else
         -- dbg_trace s!"printing node {d.meta.id} with sharedNodes: not shared"
         let (v, results) := printNode indentation d
-        return (s!"/-{v}-/", results)
+        return (s!"{v}", results)
   else
     return printNode indentation d
 where
@@ -1056,43 +1076,43 @@ where
   printMeta (indentation:Nat): DocMeta → String
   | m => s!"meta: \{ id := {m.id},{printNl indentation}cacheWeight := {m.cacheWeight},{printNl indentation}collapsesBridges := {repr m.collapsesBridges},{printNl indentation}flattenPath := {m.flattenPath},{printNl indentation}flattenRPath := {m.flattenRPath},{printNl indentation}flattenLPath := {m.flattenLPath},{printNl indentation}eventuallyFlattenPath := {m.eventuallyFlattenPath},{printNl indentation}path := {m.path} }"
   printNode (indentation:Nat): Doc → (String × Std.HashMap Nat String)
-  | .fail _ => (s!"(Doc.fail {printNl indentation}{printMeta indentation d.meta})", results)
-  | .text s _ => (s!"(Doc.text \"{s}\" {printNl indentation}{printMeta indentation d.meta})", results)
-  | .newline s _ => (s!"(Doc.newline {s} {printNl indentation}{printMeta indentation d.meta})", results)
-  | .choice left right _ =>
+  | .fail m => (s!"(Doc.fail {printNl indentation}{printMeta indentation m})", results)
+  | .text s m => (s!"(Doc.text \"{s}\" {printNl indentation}{printMeta indentation m})", results)
+  | .newline s m => (s!"(Doc.newline {s} {printNl indentation}{printMeta indentation m})", results)
+  | .choice left right m =>
     let (l, results) := printNodes left (indentation + 2) sharedNodes results
     let (r, results) := printNodes right (indentation + 2) sharedNodes results
-    (s!"(Doc.choice {printNl indentation}{printMeta indentation d.meta}{printNl indentation}l: {l}{printNl indentation}r: {r})", results)
-  | .flatten inner _ =>
+    (s!"(Doc.choice {printNl indentation}{printMeta indentation m}{printNl indentation}l: {l}{printNl indentation}r: {r})", results)
+  | .flatten inner m =>
     let (i, results) := printNodes inner (indentation + 2) sharedNodes results
-    (s!"(Doc.flatten {i} {printNl indentation}{printMeta indentation d.meta} {printNl indentation}inner: {i})", results)
-  | .align inner _ =>
+    (s!"(Doc.flatten {i} {printNl indentation}{printMeta indentation m} {printNl indentation}inner: {i})", results)
+  | .align inner m =>
     let (i, results) := printNodes inner (indentation + 2) sharedNodes results
-    (s!"(Doc.align {printNl indentation}{printMeta indentation d.meta} {printNl indentation}inner: {i})", results)
-  | .nest n inner _ =>
+    (s!"(Doc.align {printNl indentation}{printMeta indentation m} {printNl indentation}inner: {i})", results)
+  | .nest n inner m =>
     let (i, results) := printNodes inner (indentation + 2) sharedNodes results
-    (s!"(Doc.nest {n} {printNl indentation}{printMeta indentation d.meta} {printNl indentation}inner: {i})", results)
-  | .concat left right _ =>
+    (s!"(Doc.nest {n} {printNl indentation}{printMeta indentation m} {printNl indentation}inner: {i})", results)
+  | .concat left right m =>
     let (l, results) := printNodes left (indentation + 2) sharedNodes results
     let (r, results) := printNodes right (indentation + 2) sharedNodes results
-    (s!"(Doc.concat {printNl indentation}{printMeta indentation d.meta}{printNl indentation}l: {l}{printNl indentation}r: {r})", results)
+    (s!"(Doc.concat {printNl indentation}{printMeta indentation m}{printNl indentation}l: {l}{printNl indentation}r: {r})", results)
   | .stx _ _ => ("stx", results)
-  | .reset inner _ =>
+  | .reset inner m =>
     let (i, results) := printNodes inner (indentation + 2) sharedNodes results
-    (s!"(Doc.reset {printNl indentation}{printMeta indentation d.meta}{printNl indentation}inner: {i})", results)
-  | .rule name inner _ =>
+    (s!"(Doc.reset {printNl indentation}{printMeta indentation m}{printNl indentation}inner: {i})", results)
+  | .rule name inner m =>
     let (i, results) := printNodes inner (indentation + 2) sharedNodes results
-    (s!"(Doc.rule {name} {printNl indentation}{printMeta indentation d.meta}{printNl indentation}inner: {i})", results)
-  | .provide b _ =>
-    (s!"(Doc.provide {b} {printNl indentation}{printMeta indentation d.meta}{printNl indentation})", results)
-  | .require b _ =>
-    (s!"(Doc.require {b} {printNl indentation}{printMeta indentation d.meta}{printNl indentation})", results)
-  | .bubbleComment s _ =>
-    (s!"(Doc.bubbleComment \"{s}\" {printNl indentation}{printMeta indentation d.meta}{printNl indentation})", results)
-  | .cost n _ =>
-    (s!"(Doc.cost \"{n}\" {printNl indentation}{printMeta indentation d.meta}{printNl indentation})", results)
+    (s!"(Doc.rule {name} {printNl indentation}{printMeta indentation m}{printNl indentation}inner: {i})", results)
+  | .provide b m =>
+    (s!"(Doc.provide {b} {printNl indentation}{printMeta indentation m}{printNl indentation})", results)
+  | .require b m =>
+    (s!"(Doc.require {b} {printNl indentation}{printMeta indentation m}{printNl indentation})", results)
+  | .bubbleComment s m =>
+    (s!"(Doc.bubbleComment \"{s}\" {printNl indentation}{printMeta indentation m}{printNl indentation})", results)
+  | .cost n m =>
+    (s!"(Doc.cost \"{n}\" {printNl indentation}{printMeta indentation m}{printNl indentation})", results)
 
-def printOrder (d : Doc) : String := Id.run do
+def Doc.printDependencies (d : Doc) : String := Id.run do
   let sharedNodes := findSharedNodes {} d
   let (s, n) := printNodes d 0 sharedNodes {}
   let mut res := s!"{s}\n\n"
@@ -1100,6 +1120,157 @@ def printOrder (d : Doc) : String := Id.run do
     if v.length > 1 then
       res := res ++ s!"{k} -> {v}\n"
   res
+
+
+def verifyChoiceInvariant (path:String): Doc → List String
+  | .fail _=> []
+  | .text s _=> []
+  | .newline _ _=> []
+  | .choice left right m =>
+    let l := verifyChoiceInvariant (s!"{path}/choice") left
+    let r := verifyChoiceInvariant (s!"{path}/choice") right
+    let a := l.append r
+    if m.collapsesBridges.eq Ternary.maybe then
+      (s! "{path} left {left.toString} {right.toString}")::a
+    else
+      a
+  | .flatten inner _=> verifyChoiceInvariant (s!"{path}/flatten") inner
+  | .align inner _=> verifyChoiceInvariant (s!"{path}/align") inner
+  | .nest _ inner _=> verifyChoiceInvariant (s!"{path}/nest") inner
+  | .concat left right _=>
+    let l := verifyChoiceInvariant (s!"{path}/concat") left
+    let r := verifyChoiceInvariant (s!"{path}/concat") right
+    l.append r
+  | .stx s _=> []
+  | .reset inner _=> verifyChoiceInvariant (s!"{path}/reset") inner
+  | .rule _ inner _=> verifyChoiceInvariant (s!"{path}/rule") inner
+  | .provide _ _=> []
+  | .require _ _=> []
+  /-
+  Note that this means that cost and bubble comments will be discarded if they are not attached to a relevant object
+  -/
+  | .bubbleComment _ _=> []
+  | .cost _ _=> []
+
+-- hack because \{ breaks highlight in vscode
+def lparen := "{"
+-- convert to JSON, but try to compress it by reducing repetitions
+partial def Doc.toJSON (d : Doc) : String :=
+  let (main, results) := jsonInternal d 2 {}
+  let maps := results.fold (fun acc k v => s!"{acc},\n  \"{k}\" : {v}") ""
+  -- results
+  s!"{lparen}\n  \"start\":{main}{maps}\n}"
+where
+  jsonInternal (d : Doc) (indentation : Nat) (results : Std.HashMap Nat String): (String × Std.HashMap Nat String) := Id.run do
+    if d.meta.id != 0 then
+      match results.get? d.meta.id with
+      | some _ => return (s!"{lparen}\"$ref\": {d.meta.id}}", results)
+      | none =>
+        let (v, results) := printNode 4 results d
+        return (s!"{lparen}\"$ref\": {d.meta.id}}", results.insert d.meta.id v)
+    else
+      return printNode indentation results d
+  printNl : Nat → String
+  | indent => "\n".pushn ' ' indent
+
+  approximation (path:Path): String :=
+    let x := path.foldl (fun acc v =>
+      if acc.length > 0 then
+        acc  ++ s!", [{v.fst}, {v.snd}]"
+      else
+        s!"[{v.fst}, {v.snd}]"
+      ) ""
+    s!"[{x}]"
+  printMeta (indentation : Nat) (m:DocMeta): String :=
+    let nl := printNl (indentation + 2)
+    s!"\"meta\": {lparen}" ++
+    s!"{nl}\"id\": {m.id}," ++
+    s!"{nl}\"cacheWeight\": {m.cacheWeight}," ++
+    s!"{nl}\"collapsesBridges\": \"{m.collapsesBridges.toString}\"," ++
+    s!"{nl}\"flattenPath\": {approximation m.flattenPath}," ++
+    s!"{nl}\"flattenRPath\": {approximation m.flattenRPath}," ++
+    s!"{nl}\"flattenLPath\": {approximation m.flattenLPath}," ++
+    s!"{nl}\"eventuallyFlattenPath\": {approximation m.eventuallyFlattenPath}," ++
+    s!"{nl}\"path\": {approximation m.path}" ++
+    s!"{nl}}"
+  printNode (indentation:Nat) (results : Std.HashMap Nat String): Doc → (String × Std.HashMap Nat String)
+  | .fail m =>
+    (s!"{lparen}\"type\": \"fail\",{printNl indentation}{printMeta indentation m}}", results)
+
+  | .text s m =>
+    (s!"{lparen}\"type\": \"text\", \"s\": \"{s}\",{printNl indentation}{printMeta indentation m}}", results)
+
+  | .newline s m =>
+    (s!"{lparen}\"type\": \"newline\", \"flattened\": {s},{printNl indentation}{printMeta indentation m}}", results)
+
+  | .choice left right m =>
+    let (l, results) := jsonInternal left (indentation + 2) results
+    let (r, results) := jsonInternal right (indentation + 2) results
+    (
+      s!"{lparen}\"type\": \"choice\",{printNl indentation}{printMeta indentation m},{printNl indentation}\"lhs\": {l},{printNl indentation}\"rhs\": {r}}",
+      results
+    )
+  | .flatten inner m =>
+    let (i, results) := jsonInternal inner (indentation + 2) results
+    (
+      s!"{lparen}\"type\": \"flatten\",{printNl indentation}{printMeta indentation m},{printNl indentation}\"inner\": {i}}",
+      results
+    )
+
+  | .align inner m =>
+    let (i, results) := jsonInternal inner (indentation + 2) results
+    (
+      s!"{lparen}\"type\": \"align\",{printNl indentation}{printMeta indentation m},{printNl indentation}\"inner\": {i}}",
+      results
+    )
+
+  | .nest n inner m =>
+    let (i, results) := jsonInternal inner (indentation + 2) results
+    (
+      s!"{lparen}\"type\": \"nest\", \"indent\": {n},{printNl indentation}{printMeta indentation m},{printNl indentation}\"inner\": {i}}",
+      results
+    )
+  | .concat left right m =>
+    let (l, results) := jsonInternal left (indentation + 2) results
+    let (r, results) := jsonInternal right (indentation + 2) results
+    (
+      s!"{lparen}\"type\": \"concat\",{printNl indentation}{printMeta indentation m},{printNl indentation}\"lhs\": {l},{printNl indentation}\"rhs\": {r}}",
+      results
+    )
+  | .stx _ m =>
+    (s!"{lparen}\"type\": \"stx\",{printNl indentation}{printMeta indentation m}}", results)
+  | .reset inner m =>
+    let (i, results) := jsonInternal inner (indentation + 2) results
+    (
+      s!"{lparen}\"type\": \"reset\",{printNl indentation}{printMeta indentation m},{printNl indentation}\"inner\": {i}}",
+      results
+    )
+  | .rule name inner m =>
+    let (i, results) := jsonInternal inner (indentation + 2) results
+    (
+      s!"{lparen}\"type\": \"rule\", \"name\": \"{name}\",{printNl indentation}{printMeta indentation m},{printNl indentation}\"inner\": {i}}",
+      results
+    )
+  | .provide b m =>
+    (
+      s!"{lparen}\"type\": \"provide\", \"value\": {b},{printNl indentation}{printMeta indentation m}}",
+      results
+    )
+  | .require b m =>
+    (
+      s!"{lparen}\"type\": \"require\", \"value\": {b},{printNl indentation}{printMeta indentation m}}",
+      results
+    )
+  | .bubbleComment s m =>
+    (
+      s!"{lparen}\"type\": \"bubbleComment\", \"comment\": \"{s}\",{printNl indentation}{printMeta indentation m}}",
+      results
+    )
+  | .cost n m =>
+    (
+      s!"{lparen}\"type\": \"cost\", \"value\": {n},{printNl indentation}{printMeta indentation m}}",
+      results
+    )
 
 
 end PrettyFormat
