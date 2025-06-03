@@ -622,13 +622,6 @@ where
     | .nest indentOffset doc _ => doc.resolve col (indent + indentOffset) widthLimit leftBridge rightBridge flatten
     | .align doc _ => doc.resolve col col widthLimit leftBridge rightBridge flatten
     | .reset doc _ => doc.resolve col 0 widthLimit leftBridge rightBridge flatten
-    | .fail _ => leafSet {
-      last := 0
-      cost := Cost.nl
-      bridgeR := bridgeNull
-      layout := (fun _ => ["fail"])
-      fail := true
-    }
     -- At the moment we can't narrow down the spacing options for a `spacing` document.
     -- this could be done by
     -- desugaring spacing to choice
@@ -821,7 +814,6 @@ def Doc.findErr (d : Doc) (path : String) (errs : Std.HashMap String Nat) : (Std
     )
   else
     match d with
-      | .fail _=> errs
       | .text _ _=> errs
       | .newline _ _=> errs
       | .choice left right _=> right.findErr path (left.findErr path errs)

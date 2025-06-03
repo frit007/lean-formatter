@@ -14,25 +14,6 @@ open Lean.Elab.Command
 
 namespace PrettyFormat
 
-partial def prettyPrint  (ppl : Doc) : String :=
-  prettyPrint' 0 ppl
-where
-  prettyPrint' (indent:Nat): (ppl : Doc) → String
-  | .fail _ => "\n" ++ " "
-  | .text s _ => s
-  | .newline _ _ => "\n".pushn ' ' indent
-  | .choice left right _ => prettyPrint' indent left ++ " | " ++ prettyPrint' indent right
-  | .flatten inner _ => prettyPrint' indent inner
-  | .align inner _ => prettyPrint' indent inner
-  | .nest n inner _ => prettyPrint' (indent + n) inner
-  | .concat left right _ => prettyPrint' indent left ++ prettyPrint' indent right
-  | .stx stx _ => s!"stx {stx}"
-  | .reset s _ => s!"reset {prettyPrint' 0 s}"
-  | .rule name s _ => s!"rule {name} ({prettyPrint' indent s})"
-  | .provide s _ => s!"provide"
-  | .require s _ => s!"require {s}"
-  | .cost s _ => s!"cost {s}"
-  | .bubbleComment s _ => s!"bubbleComment {s}"
 
   def escapeQuotes (s : String) : String :=
     s.replace "\"" "\\\""
@@ -67,11 +48,11 @@ where
   deriving Inhabited
 
   instance : Repr (IO.Ref FormattingDiagnostic) where
-    reprPrec a n :=
-      "ref Formatting diagnostic" --we cannot
+    reprPrec _ _ :=
+      "ref Formatting diagnostic"
 
   instance : Repr FormattingDiagnostic where
-    reprPrec a n :=
+    reprPrec a _ :=
       let failuresRepr := a.failures.foldl (fun acc (err, num) => s!"{acc}{repr err}:{num}\n") ""
       let missingFormattersRepr := a.missingFormatters.fold (fun acc name stx => s!"{acc}{name}:{stx}\n") ""
       s!"failures:\n{failuresRepr}\nmissingFormatters:\n{missingFormattersRepr}"

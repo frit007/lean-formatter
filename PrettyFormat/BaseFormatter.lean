@@ -30,82 +30,6 @@ partial def findPatternStart (s pattern : String) : Option String :=
   findPatternStartAux s pattern
 
 
--- def calculatePaths: Doc → (Array (Bridge × Bridge))
--- | .fail _ _=> #[]
--- | .text s _=>
---   if s.length == 0 then
---     passthrough
---   else
---     acceptFlex
--- | .newline _ _=> acceptFlex
--- | .choice left right _=>
-  -- #[]
-  -- mergePaths left.meta.paths right.meta.paths
--- | .flatten inner _=> inner.meta.paths -- TODO:
--- | .align inner _=> inner.meta.paths
--- | .nest _ inner _=> inner.meta.paths
--- | .concat left right _=>
-  -- concatPaths left.meta.paths right.meta.paths
--- | .stx _ _=> panic! "Syntax should have been handled before this"
--- | .reset inner _=> inner.meta.paths
--- | .rule _ inner _=> inner.meta.paths
--- | .provide b _=>
---   let parts := b.parts
---   parts.foldl (fun acc b' =>
---     acc.push (b',b')
---   ) #[(bridgeFlex, b)] -- based on the assumption that bridgeFlex is smaller than the bridge they are requiring
--- | .require b _=>
---   let parts := b.parts
---   parts.foldl (fun acc b' =>
---     acc.push (b',b')
---   ) #[(bridgeFlex, b)]
--- | .bubbleComment _ _=> passthrough
--- | .cost _ _=> passthrough
-
-partial def verifyInvariant (path:String): Doc → Option String
-  | .fail m => if !m.hasBeenExpanded then some (path++"_") else none
-  | .text _ m => if !m.hasBeenExpanded then some (path++"_") else none
-  | .newline _ m => if !m.hasBeenExpanded then some (path++"_") else none
-  | .choice left right m=>
-    if !m.hasBeenExpanded then
-      some (path++"_")
-    else
-      verifyInvariant (path++"r'") left |>.or (verifyInvariant (path++"r'") right)
-  | .flatten inner m => if !m.hasBeenExpanded then
-      some (path++"_")
-    else
-      verifyInvariant (path++"`") inner
-  | .align inner m => if !m.hasBeenExpanded then
-      some (path++"_")
-    else
-      verifyInvariant (path++"`") inner
-  | .nest _ inner m => if !m.hasBeenExpanded then
-      some (path++"_")
-    else
-      verifyInvariant (path++"`") inner
-  | .concat left right m =>
-    if !m.hasBeenExpanded then
-      some (path++"_")
-    else
-      verifyInvariant (path++"l`") left |>.or (verifyInvariant (path++"r`") right)
-  | .stx s m => if !m.hasBeenExpanded && isSyntaxEmpty s then some (path++"_") else none
-  | .reset inner m => if !m.hasBeenExpanded then
-      some (path++"_")
-    else
-      verifyInvariant (path++"`") inner
-  | .rule r inner m => if !m.hasBeenExpanded then
-      some (path++"_")
-    else
-      verifyInvariant (path ++ "/" ++ r) inner
-  | .provide _ m => if !m.hasBeenExpanded then some (path++"_") else none
-  | .require _ m => if !m.hasBeenExpanded then some (path++"_") else none
-  /-
-  Note that this means that cost and bubble comments will be discarded if they are not attached to a relevant object
-  -/
-  | .bubbleComment _ m => if !m.hasBeenExpanded then some (path++"_") else none
-  | .cost _ m => if !m.hasBeenExpanded then some (path++"_") else none
-
-
 -- since the result might contain Syntax we expand it now
 -- At this point we also tag the syntax with Ids, bug only if they should be cached
 -- At this point we want to add bridgeInformation
@@ -114,14 +38,8 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
   -- -- dbg_trace s!"expanding: {repr ppl}"
   if doc.meta.hasBeenExpanded then
     return doc
-    -- match verifyInvariant "s" doc with
-    -- | some s =>
-    --   dbg_trace s!"doc is not expanded correctly {s} ::::::: {repr doc}"
-    --   return doc
-    -- | _ => return doc
 
   match doc with
-  | .fail m => return (.fail m)
   | .text s m =>
     let path := if s.length == 0 then passthrough else acceptFlex
     cachePPL (.text s {m with flattenLPath := path, flattenRPath := path, flattenPath := path, eventuallyFlattenPath := path, path := path}) 0
@@ -134,20 +52,14 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
   | .choice originalLeft originalRight m => do
     let left ← expandSyntax r originalLeft
     let right ← expandSyntax r originalRight
-    match left, right with
-    | .fail _, _ =>
-      return right
-    | _, .fail _=>
-      return left
-    | _, _ =>
-      cachePPL (.choice left right {m with
-        path := mergePaths left.meta.path right.meta.path,
-        flattenLPath := mergePaths left.meta.flattenLPath right.meta.flattenLPath,
-        flattenRPath := mergePaths left.meta.flattenRPath right.meta.flattenRPath,
-        flattenPath := mergePaths left.meta.flattenPath right.meta.flattenPath,
-        eventuallyFlattenPath := mergePaths left.meta.eventuallyFlattenPath right.meta.eventuallyFlattenPath,
-        collapsesBridges := left.meta.collapsesBridges.and right.meta.collapsesBridges
-      }) (max left.meta.cacheWeight right.meta.cacheWeight)
+    cachePPL (.choice left right {m with
+      path := mergePaths left.meta.path right.meta.path,
+      flattenLPath := mergePaths left.meta.flattenLPath right.meta.flattenLPath,
+      flattenRPath := mergePaths left.meta.flattenRPath right.meta.flattenRPath,
+      flattenPath := mergePaths left.meta.flattenPath right.meta.flattenPath,
+      eventuallyFlattenPath := mergePaths left.meta.eventuallyFlattenPath right.meta.eventuallyFlattenPath,
+      collapsesBridges := left.meta.collapsesBridges.and right.meta.collapsesBridges
+    }) (max left.meta.cacheWeight right.meta.cacheWeight)
   | .flatten inner m =>
     let inner ← expandSyntax r inner
     -- if inner.isDead then
@@ -188,42 +100,36 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
   | .concat left right m =>
     let left ← expandSyntax r left
     let right ← expandSyntax r right
-    match left, right with
-    | .fail s, _ =>
-      return Doc.fail s
-    | _, .fail s =>
-      return Doc.fail s
-    | _, _ =>
-      -- Note that in case of unknown we over estimate the bridges required
-      -- dbg_trace s!"cachePPL {repr left.meta.cacheWeight} {repr right.meta.cacheWeight}"
-      -- if (left.meta.containsWhiteSpace || right.meta.containsWhiteSpace) then
-      --   cachePPL (concatDoc left right) (max left.meta.cacheWeight right.meta.cacheWeight)
-      -- else
-      let combinedPath := concatPaths left.meta.path right.meta.path
-      let flattenedPath := concatPaths left.meta.flattenPath right.meta.flattenPath
-      -- dbg_trace s!"bridges: {(left.meta.collapses, right.meta.collapses)} , left: {left.toString} right: {right.toString}"
-      cachePPL (.concat left right { m with
-        path := concatPaths left.meta.path right.meta.path,
-        flattenPath := flattenedPath,
-        eventuallyFlattenPath :=
-          match (left.meta.collapses, right.meta.collapses) with
-          | (true, true) => concatPaths left.meta.flattenRPath right.meta.flattenLPath
-          | (false, true) => concatPaths left.meta.path right.meta.eventuallyFlattenPath
-          | (true, false) => concatPaths left.meta.eventuallyFlattenPath right.meta.path
-          |_ => combinedPath
-        flattenLPath :=
-          match (right.meta.collapses) with
-          | true => concatPaths left.meta.flattenPath right.meta.flattenLPath
-          | false => concatPaths left.meta.flattenLPath right.meta.path
-        /-
-        imagine the following cases where we start with flattenR:
-        ("collapse") <> "" -- this is the left collapses case
-        "" <> ("no collapse") -- in this case left does not collapse
-        -/
-        flattenRPath :=
-          match (left.meta.collapses) with
-          | true => concatPaths left.meta.flattenRPath right.meta.flattenPath
-          | false => concatPaths left.meta.path right.meta.flattenRPath
+    -- Note that in case of unknown we over estimate the bridges required
+    -- dbg_trace s!"cachePPL {repr left.meta.cacheWeight} {repr right.meta.cacheWeight}"
+    -- if (left.meta.containsWhiteSpace || right.meta.containsWhiteSpace) then
+    --   cachePPL (concatDoc left right) (max left.meta.cacheWeight right.meta.cacheWeight)
+    -- else
+    let combinedPath := concatPaths left.meta.path right.meta.path
+    let flattenedPath := concatPaths left.meta.flattenPath right.meta.flattenPath
+    -- dbg_trace s!"bridges: {(left.meta.collapses, right.meta.collapses)} , left: {left.toString} right: {right.toString}"
+    cachePPL (.concat left right { m with
+      path := concatPaths left.meta.path right.meta.path,
+      flattenPath := flattenedPath,
+      eventuallyFlattenPath :=
+        match (left.meta.collapses, right.meta.collapses) with
+        | (true, true) => concatPaths left.meta.flattenRPath right.meta.flattenLPath
+        | (false, true) => concatPaths left.meta.path right.meta.eventuallyFlattenPath
+        | (true, false) => concatPaths left.meta.eventuallyFlattenPath right.meta.path
+        |_ => combinedPath
+      flattenLPath :=
+        match (right.meta.collapses) with
+        | true => concatPaths left.meta.flattenPath right.meta.flattenLPath
+        | false => concatPaths left.meta.flattenLPath right.meta.path
+      /-
+      imagine the following cases where we start with flattenR:
+      ("collapse") <> "" -- this is the left collapses case
+      "" <> ("no collapse") -- in this case left does not collapse
+      -/
+      flattenRPath :=
+        match (left.meta.collapses) with
+        | true => concatPaths left.meta.flattenRPath right.meta.flattenPath
+        | false => concatPaths left.meta.path right.meta.flattenRPath
       }) (max left.meta.cacheWeight right.meta.cacheWeight)
 
       -- cachePPL (.concat left right { m with
@@ -433,18 +339,6 @@ info: [{ isBlockComment := true, comment := "/-once-/" },
 #guard_msgs in
 #eval parseComments [] "/-on/- nested-/ ce-/".toList
 
-
-partial def unknownStringCommentsStr (s:String) : List String :=
-if s.contains '\n' then
-  s.split (fun c => c == '\n')
-  |>.filterMap (fun s => findPatternStart s "--")
-  -- |>.filter (fun (s:String) => s.trim.length > 0)
-  |>.map (fun (s:String) => "-- " ++ s.trim)
-else
-  if s.length > 0 then
-    []
-  else
-    []
 
 
 def hasNewlineBeforeNonWhitespace (s : String) : Bool :=
@@ -839,7 +733,7 @@ def FormatResult.preservesCst (res : FormatResult) : Bool :=
 
   def pfTopLevel (stx : Syntax) (formatters : List (Name → Option Rule)) (options : Options) : (Doc × FormatState) :=
     let introduceContext := pf formatters stx
-    let introduceState := introduceContext.run {nextId := 0, diagnostic:= {failures := [], missingFormatters := Std.HashMap.empty}, formattingFunction := (fun _ _ _ _ => (Doc.fail, 0, {}))}
+    let introduceState := introduceContext.run {nextId := 0, diagnostic:= {failures := [], missingFormatters := Std.HashMap.empty}, formattingFunction := (fun _ _ _ _ => (Doc.text "Missing syntax transformer", 0, {}))}
     introduceState.run
 
 

@@ -330,11 +330,11 @@ structure DocMeta where
   -/
   collapsesBridges : Ternary
 
-  flattenPath : Path := #[]
-  flattenRPath : Path := #[]
-  flattenLPath : Path := #[]
-  eventuallyFlattenPath : Path := #[]
   path : Path := #[]
+  flattenPath : Path := #[]
+  eventuallyFlattenPath : Path := #[]
+  flattenLPath : Path := #[]
+  flattenRPath : Path := #[]
 deriving Inhabited, Repr
 
 
@@ -412,11 +412,6 @@ Reset the indentation level to 0.
 -/
 | reset (doc : Doc) (meta : DocMeta)
 /--
-Fail will never be rendered.
-This error will propagate until the next choice, where branches containing errors are eliminated.
--/
-| fail (meta : DocMeta := {collapsesBridges := Ternary.yes})
-/--
 The special spacing options are
 - `space` which is a single space
 - `nl` which is a newline, which is converted to a `space` in `flatten`
@@ -455,7 +450,6 @@ def Doc.meta : Doc → DocMeta
   | .align _ meta => meta
   | .choice _ _ meta => meta
   | .reset _ meta => meta
-  | .fail meta => meta
   | .provide _ meta => meta
   | .require _ meta => meta
   | .rule _ _ meta => meta
@@ -473,7 +467,6 @@ def Doc.setMeta (doc : Doc) (meta : DocMeta) : Doc :=
   | .align d _ => .align d meta
   | .choice l r _ => .choice l r meta
   | .reset d _ => .reset d meta
-  | .fail _ => .fail meta
   | .provide s _ => .provide s meta
   | .require s _ => require s meta
   | .rule r d _ => .rule r d meta
@@ -650,7 +643,6 @@ def Doc.toString (ppl:Doc) : String :=
 where
   output' (indent : Nat) (d:Doc): String :=
   let inner := match d with
-  | .fail _ => s!"Doc.fail"
   | .text s _ => s!"\"{s}\""
   | .newline s _ => s!"Doc.newline {newlineString s}"
   | .choice left right _ => s!"({output' indent left})<^>({output' indent right}){newline indent}"
@@ -675,7 +667,6 @@ where
   | some s => s!"(some \"{s}\")"
 
 def Doc.kind : Doc → String
-  | .fail _ => "fail"
   | .text s _ => s!"text {s}"
   | .newline s _ => s!"Doc.newline {s}"
   | .choice _ _ _ => s!"choice"
@@ -761,7 +752,6 @@ partial def isEmpty [ToDoc α] (ppl : α) : Bool :=
   isEmpty' (toDoc ppl)
 where
   isEmpty' : Doc → Bool
-  | .fail _=> false
   | .text s _=> s.length == 0
   | .newline _ _=> false
   | .choice left right _=> isEmpty' left && isEmpty' right
@@ -1033,7 +1023,6 @@ def findSharedNodes (map:Std.HashMap Nat Nat) (d : Doc): (Std.HashMap Nat Nat) :
       -- if this is the first time we see this node, then we can add it to the map
       return map
   match d with
-  | .fail _=> return map
   | .text _ _=> return map
   | .newline _ _=> return map
   | .choice left right _=>
@@ -1076,7 +1065,6 @@ where
   printMeta (indentation:Nat): DocMeta → String
   | m => s!"meta: \{ id := {m.id},{printNl indentation}cacheWeight := {m.cacheWeight},{printNl indentation}collapsesBridges := {repr m.collapsesBridges},{printNl indentation}flattenPath := {m.flattenPath},{printNl indentation}flattenRPath := {m.flattenRPath},{printNl indentation}flattenLPath := {m.flattenLPath},{printNl indentation}eventuallyFlattenPath := {m.eventuallyFlattenPath},{printNl indentation}path := {m.path} }"
   printNode (indentation:Nat): Doc → (String × Std.HashMap Nat String)
-  | .fail m => (s!"(Doc.fail {printNl indentation}{printMeta indentation m})", results)
   | .text s m => (s!"(Doc.text \"{s}\" {printNl indentation}{printMeta indentation m})", results)
   | .newline s m => (s!"(Doc.newline {s} {printNl indentation}{printMeta indentation m})", results)
   | .choice left right m =>
@@ -1123,7 +1111,6 @@ def Doc.printDependencies (d : Doc) : String := Id.run do
 
 
 def verifyChoiceInvariant (path:String): Doc → List String
-  | .fail _=> []
   | .text s _=> []
   | .newline _ _=> []
   | .choice left right m =>
@@ -1194,9 +1181,6 @@ where
     s!"{nl}\"path\": {approximation m.path}" ++
     s!"{nl}}"
   printNode (indentation:Nat) (results : Std.HashMap Nat String): Doc → (String × Std.HashMap Nat String)
-  | .fail m =>
-    (s!"{lparen}\"type\": \"fail\",{printNl indentation}{printMeta indentation m}}", results)
-
   | .text s m =>
     (s!"{lparen}\"type\": \"text\", \"s\": \"{s}\",{printNl indentation}{printMeta indentation m}}", results)
 
