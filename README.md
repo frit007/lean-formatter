@@ -1,9 +1,7 @@
-# run
-
 ## Standalone
-### build
+### Build
 lake build
-### run
+### Run
 
 Format specific files
 ``` sh
@@ -17,7 +15,7 @@ lake exe Format -folder ../batteries/Batteries -include ../batteries/.lake/build
 [!CAUTION]
 At the moment when formatting a folder we expect the toolchain bin to be part of the users path, because it is used to interpret files in the folder. This could be this folder ".elan\toolchains\leanprover--lean4---v4.17.0-rc1\bin" depending on the version.
 
-# installation
+# Installation
 Add the project as a dependency to your project
 ```
 require LSP from git
@@ -44,7 +42,7 @@ open PrettyFormat
 import LSPformat
 open PrettyFormat
 ```
-### adding a new formatter
+### Adding a new formatter
 For example this would be the formatter for the `termIfThenElse` Syntax.
 ```
 -- use #fmt during development, but #coreFmt if your formatter gets added to Coreformatters

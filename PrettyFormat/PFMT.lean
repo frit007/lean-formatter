@@ -825,6 +825,50 @@ def Doc.findErr (d : Doc) (path : String) (errs : Std.HashMap String Nat) : (Std
       | .bubbleComment _ _=> errs
       | .cost _ _=> errs
 
+-- def fastStringJoin (strs: List String) : String :=
+--   strJoin [] strs
+-- where
+--   strJoin (acc : List Char) : List String → String
+--   | [] => String.mk acc
+--   | x::xs => strJoin (x.data ++ acc) xs
+
+-- #eval fastStringJoin ["Hello", " ", "World"]
+
+-- def longStr (acc: List String): Nat → List String
+-- | 0 => acc
+-- | n + 1 => longStr ((s!"{n}") :: acc) n
+
+
+-- def mains : IO (Nat × Nat) := do
+--   let str := longStr [] 5000000
+
+--   let (res, diff) ← measureTime (fun _ =>
+--     return String.join str
+--     -- return fastStringJoin str
+--   )
+--   -- let before ← IO.monoNanosNow
+--   -- let combined := fastStringJoin str
+--   -- let after ← IO.monoNanosNow
+--   return (res.length, diff)
+
+-- #eval mains
+def maybeBadConcat (acc: List String → List String): Nat → (List String → List String)
+| 0 => acc
+| n + 1 => maybeBadConcat (fun a => "thing"::a) n
+
+def mains : IO (Nat × Nat) := do
+
+  let (res, diff) ← measureTime (fun _ =>
+    let str := maybeBadConcat (fun _ => []) 50000
+    return String.join (str [])
+  )
+  -- let before ← IO.monoNanosNow
+  -- let combined := fastStringJoin str
+  -- let after ← IO.monoNanosNow
+  return (res.length, diff)
+
+#eval mains
+
 
 
 /--
@@ -846,7 +890,7 @@ partial def Doc.print (χ : Type) [Inhabited χ] [Repr χ] [Cost χ] (doc : Doc)
     -- dbg_trace "taken first response, ignored{ms.length}"
     return {
       log := cache.log,
-      layout := String.join (m.layout []).reverse,
+      layout := String.join (m.layout []).reverse, -- omg don't do String.join
       isTainted := false,
       cost := m.cost
     }

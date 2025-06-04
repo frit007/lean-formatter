@@ -37,8 +37,7 @@ def a (b:Nat) : Nat := b * 2
 
 /--
 info:
-instance : Singleton Name NameSet where
-  singleton := fun n => (∅ : NameSet).insert n
+instance : Singleton Name NameSet where singleton := fun n => (∅ : NameSet).insert n
 -/
 #guard_msgs in
 #format
@@ -57,7 +56,8 @@ namespace Lean.NameSet
 /--
 info:
 /-- Create a `Lean.NameSet` from a `List`. This operation is `O(n)` in the length of the list. -/
-def ofList (l : List Name) : NameSet := l.foldl (fun s n => s.insert n) {}
+def ofList (l : List Name) : NameSet :=
+  l.foldl (fun s n => s.insert n) {}
 -/
 #guard_msgs in
 #format

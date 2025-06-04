@@ -4,17 +4,10 @@ defaultTargets = ["Format", "BaseFormatter", "LSPformat"]
 
 
 [[lean_lib]]
-name = "SimpleMeta"
-
-[[lean_lib]]
 name = "PrettyFormat"
 root = "PrettyFormat"
 srcDir = "PrettyFormat"
 
-[[lean_lib]]
-name = "FormatterExtension"
-root = "FormatterExtension"
-srcDir = "PrettyFormat"
 
 [[lean_lib]]
 name = "BaseFormatter"

@@ -563,7 +563,7 @@ partial def pf (formatters : Formatters) (stx: Syntax): FormatM Doc := updateSyn
 
         let inner ← pfCombine formattingRule args
 
-        expandSyntax formattingRule ((Doc.rule (toString kind) inner) {collapsesBridges := inner.meta.collapsesBridges})
+        expandSyntax formattingRule ((Doc.rule (toString kind) inner))
   | .atom (info : SourceInfo) (val : String) =>
     expandSyntax formattingRule (surroundWithComments info (toDoc val))
 

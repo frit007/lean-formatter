@@ -140,7 +140,17 @@ open PrettyFormat
   let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
   out
 
+/-- info: "Hello:=\n     world" -/
+#guard_msgs in
+#eval
+  let d := ("Hello" <+> (":="<$$>"world"))
+  -- dbg_trace s!"({repr d})"
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
+  out
+
 /--
+---
 info: ":=2"
 -/
 #guard_msgs in
@@ -246,3 +256,24 @@ info: ":=2"
 /-- info: false -/
 #guard_msgs in
 #eval bridgeNull.subsetOf bridgeSpace
+
+
+/-- info: "bridgeSpace" -/
+#guard_msgs in
+#eval bridgeAny.flatten.str
+
+/-- info: "bridgeFlex" -/
+#guard_msgs in
+#eval bridgeFlex.flatten.str
+
+/-- info: "bridgeImmediate" -/
+#guard_msgs in
+#eval bridgeImmediate.flatten.str
+
+/-- info: "bridgeNull" -/
+#guard_msgs in
+#eval bridgeHardNl.flatten.str
+
+/-- info: "bridgeSpace" -/
+#guard_msgs in
+#eval (bridgeSpaceNl.flatten).str
