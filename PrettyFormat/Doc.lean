@@ -1182,10 +1182,10 @@ where
     s!"{nl}}"
   printNode (indentation:Nat) (results : Std.HashMap Nat String): Doc → (String × Std.HashMap Nat String)
   | .text s m =>
-    (s!"{lparen}\"type\": \"text\", \"s\": \"{s}\",{printNl indentation}{printMeta indentation m}}", results)
+    (s!"{lparen}\"type\": \"text\", \"s\": \"{s.replace "\"" "\\\""}\",{printNl indentation}{printMeta indentation m}}", results)
 
   | .newline s m =>
-    (s!"{lparen}\"type\": \"newline\", \"flattened\": {s},{printNl indentation}{printMeta indentation m}}", results)
+    (s!"{lparen}\"type\": \"newline\", \"flattened\": \"{s}\",{printNl indentation}{printMeta indentation m}}", results)
 
   | .choice left right m =>
     let (l, results) := jsonInternal left (indentation + 2) results

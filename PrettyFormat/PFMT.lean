@@ -117,10 +117,6 @@ where mergePaths' (lhs rhs merged: Array (Bridge × Bridge)) (li ri : Nat): (Arr
     merged
 
 
-
-def sortPaths (p : Array (Bridge × Bridge)): Array (Bridge × Bridge):=
-  p.qsort (fun a b => a.fst < b.fst)
-
 def concatPaths (lhs rhs : Array (Bridge × Bridge)) : Array (Bridge × Bridge) :=
   lhs.foldl (fun acc (ll, lr) =>
     let leadsTo :Bridge := rhs.foldl (fun acc (rl, rr) =>
@@ -138,7 +134,6 @@ def concatPaths (lhs rhs : Array (Bridge × Bridge)) : Array (Bridge × Bridge) 
   ) #[]
 
 #eval mergePaths #[(bridgeSpace, bridgeSpace)] #[(bridgeNl, bridgeNl), (bridgeSpace, bridgeNl)]
-#eval sortPaths #[(bridgeSpace, bridgeNl), (bridgeNl, bridgeNl)]
 
 def perfTest (n:Nat) (lhs rhs : Array (Nat × Nat)): Nat :=
   let leftBridge := n
@@ -417,6 +412,7 @@ expectBridge: the bridges after this document, these limit the types of document
 forceExpand: When evaluating tainted TODO: remove
 -/
 partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (col indent widthLimit : Nat) (leftBridge rightBridge: Bridge) (flatten : Flatten) : MeasureResult χ (MeasureSet χ) := do
+  -- dbg_trace s!"doc : lb {leftBridge} rb {rightBridge} kind {doc.kind} flatten: {repr flatten}"
   -- if (← get).giveUp == 0 then
   --   -- let
   --   return impossibleMeasureSet trace
@@ -838,6 +834,8 @@ partial def Doc.print (χ : Type) [Inhabited χ] [Repr χ] [Cost χ] (doc : Doc)
   -- let (preferredGroups, cache) := ((doc.resolve (χ := χ) [] col 0 widthLimit bridgeFlex bridgeFlex false false).run (initCache cacheSize log)).run
   if (doc.meta.findPath Flatten.notFlattened).size == 0 then
     dbg_trace s!"WARNING: document does not contain a solution"
+    IO.FS.writeFile ("doc_print.json") (s!"{doc.toJSON}")
+    dbg_trace s!"WARNING: after writting "
     -- let errs := doc.findErr "" {}
     -- dbg_trace s!"WARNING: {repr errs}"
     -- dbg_trace s!"WARNING: {printOrder doc}"

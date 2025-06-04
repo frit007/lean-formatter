@@ -1,21 +1,25 @@
 import Doc
 import PFMT
 import PrettyFormat
+import BaseFormatter
 
 open PrettyFormat
 
--- set_option pf.debugLog true
 
+/-- info: "def he : too tll" -/
+#guard_msgs in
 #eval
   let d := nestDoc 2 ("def he" <> (" : " <^> Doc.nl <> ": " ) <> "too tll")
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 10) d
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
   out
 
-/-- info: "def he\n  : too tl\n  more" -/
+/-- info: "def he : too tl\n  more" -/
 #guard_msgs in
 #eval
   let d := nestDoc 2 ("def he" <> (" : " <^> Doc.nl <> ": " ) <> "too tl" <> (" " <^> Doc.nl) <> "more")
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 10) d
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
   out
 
 
@@ -23,7 +27,8 @@ open PrettyFormat
 #guard_msgs in
 #eval
   let d := "a" <> "b"
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) d
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
   out
 
 -- Basic minimal choice
@@ -32,35 +37,40 @@ open PrettyFormat
 #guard_msgs in
 #eval
   let d := ("short"<^>"longer") <> "b"
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) d
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
   out
 
 /-- info: "shortb" -/
 #guard_msgs in
 #eval
   let d := ("longer"<^>"short") <> "b"
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) d
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
   out
 
 /-- info: "ashort" -/
 #guard_msgs in
 #eval
   let d := "a" <> ("short" <^> "longer")
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) d
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
   out
 
 /-- info: "ashort" -/
 #guard_msgs in
 #eval
   let d := "a" <> ("longer" <^> "short")
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) d
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
   out
 
 /-- info: ":= short" -/
 #guard_msgs in
 #eval
   let d := ((":=" <$$> "") <^> (":=" <_> "")) <> ("longer" <^> "short")
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) d
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
   out
 
 
@@ -68,93 +78,71 @@ open PrettyFormat
 #guard_msgs in
 #eval
   let d := ((":=s" <_> "") <^> (":=n" <$$> "")) <> ("longer" <^> "short")
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) d
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
   out
 
 /-- info: ":=s after" -/
 #guard_msgs in
 #eval
   let d := (":=s" <_> "after")
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) d
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
   out
 
 /-- info: ":=s after" -/
 #guard_msgs in
-#eval Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) (":=s" <**> "after")
+#eval
+  let d := ":=s" <**> "after"
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+  out
 
 /-- info: ":=s\n  after" -/
 #guard_msgs in
 #eval
   let d := nestDoc 2 (":=s" <$$> "after")
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) d
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
   out
 
 /-- info: ":=s\n  after" -/
 #guard_msgs in
 #eval
-  let d := nestDoc 2 ((":=s" <> (provideDoc' bridgeImmediate <^> provideDoc' bridgeNl)) <> "after")
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) d
+  let d := nestDoc 2 ((":=s" <> (provideDoc bridgeImmediate <^> provideDoc bridgeNl)) <> "after")
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
   out
 
 /-- info: ":=safter" -/
 #guard_msgs in
 #eval
-  let d := nestDoc 2 ((":=s" <> (provideDoc' bridgeImmediate <^> provideDoc' bridgeNl)) <> ((Doc.require bridgeImmediate <^> Doc.require bridgeNl) <>"after"))
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) d
+  let d := nestDoc 2 ((":=s" <> (provideDoc bridgeImmediate <^> provideDoc bridgeNl)) <> ((Doc.require bridgeImmediate <^> Doc.require bridgeNl) <>"after"))
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
   out
 
 
-/-- info: "five5\n  longer h" -/
+/-- info: "five5longer\n  h" -/
 #guard_msgs in
 #eval
-  let d := nestDoc 2 (("five5" <> (provideDoc' bridgeImmediate <^> provideDoc' bridgeNl)) <> ((Doc.require bridgeImmediate <^> Doc.require bridgeNl) <> "longer" <> (" h"<^> Doc.nl<>"h")))
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 10) d
+  let d := nestDoc 2 (("five5" <> (provideDoc bridgeImmediate <^> provideDoc bridgeNl)) <> ((Doc.require bridgeImmediate <^> Doc.require bridgeNl) <> "longer" <> (" h"<^> Doc.nl<>"h")))
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
   out
 
-/--
-info: (PrettyFormat.Doc.concat
-  (PrettyFormat.Doc.text
-    "Hello"
-    { leftBridge := 1,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := false,
-      delayedProvide := none,
-      shouldBeExpanded := false })
-  (PrettyFormat.Doc.provide
-    8
-    (PrettyFormat.Doc.text
-      "world"
-      { leftBridge := 1,
-        id := 0,
-        cacheWeight := 0,
-        containsWhiteSpace := false,
-        delayedProvide := none,
-        shouldBeExpanded := false })
-    { leftBridge := 8,
-      id := 0,
-      cacheWeight := 0,
-      containsWhiteSpace := false,
-      delayedProvide := none,
-      shouldBeExpanded := false })
-  { leftBridge := 1,
-    id := 0,
-    cacheWeight := 0,
-    containsWhiteSpace := false,
-    delayedProvide := none,
-    shouldBeExpanded := false })
----
-info: "Hello world"
--/
+/-- info: "Hello world" -/
 #guard_msgs in
 #eval
   let d := flattenDoc ("Hello" <**> "world")
-  let d := runFlatten 3 d
-  dbg_trace s!"({repr d})"
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 10) d
+  -- dbg_trace s!"({repr d})"
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
   out
 
-/-- info: ":=2" -/
+/--
+info: ":=2"
+-/
 #guard_msgs in
 #eval
   let d := (ruleDoc "Lean.Parser.Command.declValSimple"
@@ -183,49 +171,15 @@ info: "Hello world"
       )
       )
     )
-  let d := runFlatten 3 d
-  -- dbg_trace s!"({repr d})"
-  let out := Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 10) d
+
+  let (d, cache) := simpleFormattingContext (do return d)
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
   out
 
 
-#eval Doc.prettyPrintLog DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) ("a"<>(provideDoc' bridgeImmediate <^> provideDoc' bridgeNl) <>"b")
+#eval Doc.prettyPrintLog DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) ("a"<>(provideDoc bridgeImmediate <^> provideDoc bridgeNl) <>"b")
 
 #eval Doc.prettyPrintLog DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) (flattenDoc ("a" <> Doc.nl <> "b"))
-
--- #eval Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) (Doc.flatten (Doc.rule "termIfThenElse"
---                          ((Doc.flatten ((((((((Doc.text "if") <> (Doc.text " ")) <> (Doc.rule "Lean.Parser.Term.app"
---                            (((Doc.text "t.contains") <> (provideDoc' 8)) <> (Doc.text "n"))
---                           )) <> (Doc.text " ")) <> (Doc.text "then")) <> (nestDoc 2 ((Doc.newline none) <> (Doc.rule "Lean.Parser.Term.app"
---                            (((Doc.text "r.insert") <> (provideDoc' 8)) <> (Doc.text "n"))
---                           )))) <> (provideDoc' 6)) <> ((Doc.text "else") <> (nestDoc 2 ((provideDoc' 6) <> (Doc.text "r"))))))<^>((((((((Doc.text "if") <> (Doc.text " ")) <> (Doc.rule "Lean.Parser.Term.app"
---                            (((Doc.text "t.contains") <> (provideDoc' 8)) <> (Doc.text "n"))
---                           )) <> (Doc.text " ")) <> (Doc.text "then")) <> (nestDoc 2 ((Doc.newline none) <> (Doc.rule "Lean.Parser.Term.app"
---                            (((Doc.text "r.insert") <> (provideDoc' 8)) <> (Doc.text "n"))
---                           )))) <> (provideDoc' 6)) <> ((Doc.text "else") <> (nestDoc 2 ((provideDoc' 6) <> (Doc.text "r")))))
---   )))
-
-
--- #eval Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) (flattenDoc ((((((Doc.text "if") <> (Doc.text " ")) <> (Doc.rule "Lean.Parser.Term.app"
---                            (((Doc.text "t.contains") <> (provideDoc' 8)) <> (Doc.text "n"))
---                           )) <> (Doc.text " ")) <> (Doc.text "then"))))
-
--- #eval Doc.prettyPrint DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) (flattenDoc ((((((((Doc.text "if") <> (Doc.text " ")) <> (Doc.rule "Lean.Parser.Term.app"
---                            (((Doc.text "t.contains") <> (provideDoc' 8)) <> (Doc.text "n"))
---                           )) <> (Doc.text " ")) <> (Doc.text "then")) <> (nestDoc 2 ((Doc.newline none) <> (Doc.rule "Lean.Parser.Term.app"
---                            (((Doc.text "r.insert") <> (provideDoc' 8)) <> (Doc.text "n"))
---                           )))) <> (provideDoc' 6)) <> ((Doc.text "else") <> (nestDoc 2 ((provideDoc' 6) <> (Doc.text "r"))))))
-
--- #eval
---   let d := "a" <> "b"
---   output d
-
-
-
-
-
-
-
 
 
 /-- info: "bridgeHardNl" -/

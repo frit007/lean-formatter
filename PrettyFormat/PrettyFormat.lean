@@ -132,6 +132,8 @@ namespace PrettyFormat
     nextId : Nat := 1 -- used to generate ids
     diagnostic: FormattingDiagnostic := {}
     cacheDistance : Nat := 3
+    -- avoid calculating the syntax multiple times
+    stxCache : Std.HashMap Nat Doc
     stx : List Syntax := [] -- note that syntax is in reverse order for performance reasons
     formattingFunction : (Syntax → Nat → FormattingDiagnostic → List Syntax → (Doc × Nat × FormattingDiagnostic )) := skipFormatting
   -- deriving Repr
@@ -225,17 +227,17 @@ register_option pf.debugSyntaxAfter : Bool := {
 register_option pf.debugErrors : Bool := {
   defValue := false
   group    := "pf"
-  descr    := "(pretty format) Output the errors"
+  descr    := "(pretty format) Get information about failed formatting rules, this is usually caused by a formatting rule not handling all of its cases"
 }
 register_option pf.debugMissingFormatters : Bool := {
   defValue := false
   group    := "pf"
-  descr    := "(pretty format) Output a list of missing formatters above the function"
+  descr    := "(pretty format) List syntax that do not have an associated formatting rule"
 }
 register_option pf.debugNoSolution : Bool := {
   defValue := false
   group    := "pf"
-  descr    := "(pretty format) Used to debug why there is no solution found"
+  descr    := "(pretty format) Output the document as JSON, which can be viewed using the debugDependencies.html document. Pase the JSON in the textfield and press import"
 }
 register_option pf.debugDoc : Bool := {
     defValue := false
@@ -261,7 +263,7 @@ register_option pf.debugLog : Bool := {
 register_option pf.cacheDistance : Nat := {
     defValue := 2
     group    := "pf"
-    descr    := "(pretty format) To reduce memory usage we do not have cache every element. A larger cache distance means fewer elements gets cached"
+    descr    := "(pretty format) To reduce memory usage we do not have cache every element. A larger cache distance means fewer elements get cached"
 }
 
 def getPFLineLength (o : Options) : Nat := o.get pf.lineLength.name pf.lineLength.defValue

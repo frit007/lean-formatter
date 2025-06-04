@@ -19,18 +19,6 @@ def runPrettyExpressive (fileName : String) : IO Unit := do
   else
     IO.println "failure"
 
--- unsafe def prettifyPPL (filename:String) (ppl: PPL) : IO String := do
---   let template ← IO.FS.readFile "template.ml"
---   let ocamlOutput := toOcaml ppl
---   let templateWithConttent := template.replace "$$$FORMAT$$$" (ocamlOutput)
---   let ocamlFile := filename++".lean.ml"
---   IO.FS.writeFile ocamlFile templateWithConttent
---   IO.println "done"
---   let _ ← runPrettyExpressive filename
---   let result ← IO.FS.readFile (filename++".out.lean")
-
---   return result
-
 partial def findAllLeanFilesInProject (projectFolder:String) : IO (List String) := do
   IO.println projectFolder
   let files ← System.FilePath.readDir projectFolder
@@ -151,53 +139,6 @@ def cleanArguments (args : List String) : List String:= Id.run do
       | _ => newParams := a::newParams
   return newParams.reverse
 
-
--- unsafe def mainOutputPPL (args : List String) : MetaM (Array Syntax) := do
---   let [fileName] := args | failWith "Usage: reformat file"
---   initSearchPath (← findSysroot)
---   IO.println "loading file ???"
---   let input ← IO.FS.readFile (fileName++".lean")
---   IO.println "loading file !!!"
-
---   let (moduleStx, env) ← parseModule input fileName
---   let options ← getOptions
---   IO.println (getPFLineLength options)
---   let values := pFormatAttr.getValues env `«arith_+_»
-
---   IO.println s!"lengths? {values.length}"
-
---   -- leadUpdated update trailing and leading. And the characters the content is assigned to atoms and ident
---   let leadingUpdated := mkNullNode (moduleStx.map (·.stx)) |>.updateLeading |>.getArgs
---   -- let withComments := introduceCommentsToTheCST leadingUpdated
-
---   -- The Env of the program that reformats the other program. In case that the formatted code does not include the standard annotations
---   let currentEnv := (← getEnv)
---   -- let _ ← modify fun s => {s with nextId := 0, MyState.otherEnv}
---   let initialState : FormatState := {nextId := 0, diagnostic:= {failures := [], missingFormatters := Std.HashMap.empty}}
---   let introduceContext := ((pfCombineWithSeparator (PPL.nl<>PPL.nl) leadingUpdated).run { envs:= [currentEnv, env], options:= options})
-
---   let introduceState := introduceContext.run initialState
---   let (ppl, state) := introduceState.run
---   IO.FS.writeFile (fileName++".lean.syntax") (s!"{leadingUpdated}")
-
-
---   for key in (state.diagnostic).missingFormatters.keys do
---     IO.println s!"missing formatter for: {key}"
-
---   let doc := toDoc ppl
---   let pretty := doc.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := 100)
---   IO.println "START"
---   IO.println ""
---   IO.println s!"{pretty}"
---   IO.println ""
---   IO.println ""
---   IO.println "END"
-
-
-  -- let _ ← prettifyPPL fileName ppl
-
-  -- return leadingUpdated
-
 unsafe def formatFile (fileName : String) (args : InputArguments): IO (String × FormatReport) := do
   let ((moduleStx, env), timeReadAndParse) ← measureTime (fun _ => do
     let input ← IO.FS.readFile (fileName)
@@ -210,7 +151,6 @@ unsafe def formatFile (fileName : String) (args : InputArguments): IO (String ×
   -- let withComments := introduceCommentsToTheCST leadingUpdated
 
   -- The Env of the program that reformats the other program. In case that the formatted code does not include the standard annotations
-  -- let _ ← modify fun s => {s with nextId := 0, MyState.otherEnv}
   let mut formatted := ""
   let mut report : FormatReport := {}
 
@@ -260,41 +200,28 @@ partial def RunnerState.waitUntilAtLeastOneProcessIsDone (state : RunnerState) :
   let mut state := state
   let mut foundOne := false
 
-  -- IO.println "wait one..."
   let now ← IO.monoNanosNow
   for p in state.running do
     let child := p.process
-    -- foundOne := true
-    -- IO.println "fake run?"
-    -- state := {state with re}
     if p.timeOutAtNs < now then
       IO.println s!"kill {p.arguments}"
       let output ← IO.ofExcept p.outputStream.get
       IO.println s!"it would have the following output {output}"
-      -- p.process.kill
     else
       match ← child.tryWait with
       | some code =>
-        -- IO.println "yay success"
-        -- let output ← IO.asTask (IO.FS.Handle.readToEnd (child.stdout)) Task.Priority.dedicated
-        -- let output ← IO.FS.Handle.readToEnd (child.stdout)
         let output ← IO.ofExcept p.outputStream.get
-        -- let output ← p.outputStream
 
         let serializedString := "serialized: "
         let updatedResults := output.split (fun c => c == '\n')
           |>.filter (fun s => s.startsWith serializedString)
           |>.map (fun s => s.drop serializedString.length)
           |>.foldl (fun acc s => (FormatReport.deserialize s).combineReports acc) state.results
-        -- IO.println s!"sss:{output.split (fun c => c == '\n')
-          -- |>.filter (fun s => s.startsWith serializedString)}"
 
         let stderr ← IO.ofExcept p.errorStream.get
-        -- let stderr ← child.stderr.readToEnd
         if stderr != "" then
           IO.println s!"err ({p.arguments})\n: {stderr}"
-        -- IO.println s!"output: {output}"
-        -- let report := FormatReport.deserialize output
+
         state := { state with
           results := updatedResults
           errs := (if code != 0 then p.arguments :: state.errs else state.errs)
@@ -317,18 +244,12 @@ partial def RunnerState.startUpToNProcesses (state : RunnerState) : IO RunnerSta
   if state.running.length < state.maxWorkers && state.remainingFiles.length > 0 then
 
     let args := state.remainingFiles.take state.filesPrWorker |>.flatMap (fun s => ["-file", s.replace "\\" "/"])
-    let args := args.append (state.includeFolders.flatMap (fun s => ["-include", s]) )
+        let args := args.append (state.includeFolders.flatMap (fun s => ["-include", s]) )
     let args := args.append state.configArguments
     let args := "-serializedOutput"::args
 
     let arguments := s!".lake/build/bin/Format.exe {String.join (args|>.intersperse " ")}"
-    -- IO.println s!"command: {arguments}"
-    -- let child :ChildI ← IO.Process.spawn {cmd := "lake", args := ("exe" :: "Format" :: args).toArray, stdout := .piped, stderr := .piped, stdin := .null}
-    -- let child :ChildI ← IO.Process.spawn {cmd := "lake", args := ("exe" :: "Format" :: args).toArray, stdout := .piped, stderr := .piped, stdin := .null}
-    -- let child :ChildI ← IO.Process.spawn {cmd := "cat", args := (args).toArray, stdout := .piped, stderr := .piped, stdin := .null}
-    -- let child :ChildI ← IO.Process.spawn {cmd := "cmd", args := ["/c", "echo", "findable.txt"].toArray, stdout := .piped, stderr := .piped, stdin := .null}
     let child :ChildI ← IO.Process.spawn {cmd := ".lake/build/bin/Format.exe", args := args.toArray, stdout := .piped, stderr := .piped, stdin := .null}
-    -- let child ← spawn { cmd := "cmd.exe", args := #["/c", "echo", "1 1"], stdout := .piped, stderr := .piped, stdin := .null }
 
     -- Start reading the output from child processes, to avoid child processes being blocked by writing to a buffer that is not being cleared
     let readOutput ← IO.asTask (IO.FS.Handle.readToEnd (child.stdout)) Task.Priority.dedicated
@@ -360,29 +281,6 @@ partial def RunnerState.delegateWork (state : RunnerState) : IO RunnerState := d
     let state ← state.waitUntilAtLeastOneProcessIsDone
     state.delegateWork
 
--- #eval do
---   let a : RunnerState := {remainingFiles := ["a.lean"]}
---   let res ← a.delegateWork 2
---   return res.results.serialize
-
--- def maina : IO Unit := do
---   -- IO.println "simple"
---   let child ← spawn { cmd := "lake", args := #["exe", "Format"], stdin :=.null, stderr := .piped, stdout:=.piped}
---   -- let child ← spawn { cmd := "cmd.exe", args := #["/C", "echo.exe", "hello world"], stdin :=.null, stderr := .piped, stdout:=.piped}
-
---   IO.sleep 1
-
---   let result ← child.tryWait
---   match result with
---   | some code =>
---     IO.println s!"Exited with code {code}"
---     let s ← IO.FS.Handle.readToEnd child.stdout
---     let e ← IO.FS.Handle.readToEnd child.stderr
---     IO.println s!"s:{s} {e}"
---   | none      => IO.println "Still running!"
-
--- #eval maina
-
 unsafe def formatFolder (folderName : String) (args : InputArguments) (cleanedArguments : List String) : IO (List (FormatReport)) := do
   let files ← findAllLeanFilesInProject folderName
   let before ← IO.monoNanosNow
@@ -399,35 +297,6 @@ unsafe def formatFolder (folderName : String) (args : InputArguments) (cleanedAr
   IO.println s!"error files: {r.errs |>.intersperse "\n" |> String.join}"
 
   return [r.results]
-  -- let mut report' : FormatReport := {}
-  -- for file in files do
-  --   IO.println s!"before {file}"
-  --   let (_, report) ← formatFile file args
-  --   report' := report'.combineReports report
-  --   -- reports := report::reports
-  -- return [report']
-
--- def main (args : List String) : IO (Unit):= do
---   let inputArgs := parseArguments args
---   match inputArgs with
---   | Except.error e => IO.println e
---   | Except.ok args => do
---     match args.fileName with
---     | some fileName => do
---       let a := (formatASingleFile fileName args)
---       let b := a.toIO
---       -- let b := a.run'
---       -- let c := b.run' {fileName := fileName, fileMap := {source := "", positions := #[0]}}
---       -- let d := c {}
---       let _ ← (formatASingleFile fileName args) |>.run' |>.run' {fileName := fileName, fileMap := {source := "", positions := #[0]}}
---       -- let _ ← (formatASingleFile fileName args) |>.run' |>.run' {fileName := fileName, fileMap}
---     | none => match args.folder with
---       | some folder => do
---         let files ← findAllLeanFilesInProject folder
---         for file in files do
---           formatASingleFile file args
---       | none => IO.println "No file or folder specified"
---   return ()
 
 def nanoToS (ns:Nat) : Float :=
   (ns.toFloat) / 1000000000.0
@@ -445,59 +314,10 @@ def printReport (report : FormatReport) : IO Unit := do
 def printUsage : IO Unit := do
   IO.println "Usage: reformat -file <file> -folder <folder> -o <outputFileName> -noWarnCST -debugSyntax -debugSyntaxAfter -debugErrors -debugMissingFormatters -debugNoSolution -warnMissingFormatters -lineLength <length>"
 
--- #eval FormatReport.deserialize "22,22,924900,5504600,463198000,70178900,Lean.guardMsgsCmd;:;:;PrettyFormat.┬½term_<_>_┬╗;:;:;Lean.Parser.Term.letDecl;:;:;┬½term#[_,]┬╗;:;:;PrettyFormat.┬½term_<$$>_┬╗;:;:;str;:;:;Lean.Parser.Term.letRecDecl;:;:;Lean.Parser.Term.cdot;:;:;Lean.Parser.Command.eoi;:;:;┬½termΓêà┬╗;:;:;formatCmd;:;:;PrettyFormat.┬½term_<>_┬╗;:;:;Lean.Parser.Term.structInstLVal;:;:;PrettyFormat.┬½term_<?_┬╗"
-partial def markCachedObject (doc:FormatM Doc) : (Doc × FormatState) :=
-  let (doc, cache) := doc.run {formattingFunction := fun _ _ _ _ =>
-    (toDoc "_", 0, {})}
-  (doc, cache)
-
-partial def nchoicenl : Nat → FormatM Doc
-| 0 => return toDoc "!end!"
-| n + 1 => do
-  let next ← expandSyntax RuleRec.placeHolder (← nchoicenl n)
-  return "a" <_> next <^> "b" <$$> next
-
-
-def theHardCase : IO Unit:= do
-  let ((doc, cache), timeCreate) ← measureTime (fun _ => do
-    -- inFormatMSyntax 0 do
-      return markCachedObject (do
-        let d ← nchoicenl (1000)
-        expandSyntax RuleRec.placeHolder d
-      )
-
-
-    -- return (expandSyntax ruleDoc,s)
-  )
-  -- IO.println s!"{repr doc}"
-  IO.println s!"Time create: {timeCreate.toFloat / 1000000000.0}s \n"
-
-  -- IO.println s!"{cache.nextId}"
-
-  let (out, timeDoc) ← measureTime (fun _ => do
-    let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) doc
-    return out
-  )
-  IO.println s!"Time format: {timeDoc.toFloat / 1000000000.0}s \n{out}"
-
-
 unsafe def main (originalArgs : List String) : IO (Unit) := do
-  -- theHardCase
-  -- IO.println s!"start?"
-  -- let lhs := #[(1, 8), (2, 8), (4, 8), (8, 8), (16, 8)]
-  -- let rhs := #[(1, 1), (2, 1), (4, 1), (8, 1), (16, 1)]
-  -- let a ← measureTime (fun _ => return (perfTests 0 lhs rhs 4200000))
-  -- IO.println s!"measure compiled?{a} ns"
-
-  IO.println s!"running main"
-  -- let (_,coreEnv) ← parseModule (← IO.FS.readFile "PrettyFormat/CoreFormatters.lean") "PrettyFormat/CoreFormatters.lean"
-  -- let _ ← coreEnv.displayStats
-  -- let a := pFormatAttr.getValues coreEnv `Lean.Parser.Command.declId
-  -- IO.println s!"found formatters: {a.length}"
 
   let inputArgs := parseArguments originalArgs
 
-  -- initSearchPath (← findSysroot)
   match inputArgs with
   | Except.error e =>
     IO.println e
@@ -533,105 +353,3 @@ unsafe def mainLog (args : List String) : IO (Unit) := do
     main args
   catch e =>
     IO.println e
-
--- set_option maxRecDepth 10000000
-
--- def deepRec (n : Nat) : Nat :=
---   if n = 0 then 0 else deepRec (n - 1) + 1
-
--- #eval deepRec 10000  -- Might fail without increasing recursion depth
-
--- set_option trace.profiler true
--- #eval mainLog ["-file", "../../batteries/Batteries/Logic.lean", "-include", "../../batteries/.lake/build/lib"]
--- #eval mainLog ["-file", "../../batteries/Batteries/Logic.lean",]
--- #eval main []
--- #eval main ["-file", "../../lean4/src/Init/Tactics.lean"]
--- #eval main ["-file", "../../lean4/src/Std/Time.lean"]
--- #eval main ["-file", "../../lean4/src/Lean/Attributes.lean"]
--- #eval main ["-folder", "../../lean4/src/Std"]
-
--- def main2 (args : List String) : MetaM (Unit):= do
---   -- Get all declarations with `myAttr`
---   let decls := (pFormatAttr.getValues (← getEnv) `Lean.Parser.Term.letIdDecl)
---   let _ ← IO.println s!"{decls.length}"
-
--- #eval main2 ["hello"]
-
--- unsafe def mainInterpret (args : List String) : MetaM (Array Syntax) := do
---   let [fileName] := args | failWith "Usage: reformat file"
---   initSearchPath (← findSysroot)
---   let input ← IO.FS.readFile (fileName++".lean")
-
---   let template ← IO.FS.readFile "template.ml"
---   let (env) ← interpretFormat input fileName
-
---   return #[]
-
-def main3 : IO Unit := do
-  let mut a : Std.HashMap Nat String := {}
-  for i in [1:50001] do
-    a := a.insert (i) (toString i)
-
-
--- #eval measureTime (fun _ => main3)
-#eval do
-  let o ← getOptions
-  return 2
-
-partial def tellMeAbout (kind: SyntaxNodeKind) (args: Array Syntax): MetaM (Array Syntax) := do
-  let o ← getOptions
-
-  let res : MetaM (Option (Array Syntax)) := args.foldlM (fun (acc: Option (Array Syntax)) (arg : Syntax) => do
-    match acc with
-    | some p => return some p
-    | none =>
-        match arg with
-        | Syntax.node _ k args => do
-          if k == kind then
-            return some args
-          else
-            try
-              let result ← tellMeAbout kind args
-              return some result
-            catch _ =>
-              return none
-        | _ => return none
-      ) none
-  match ← res with
-  | some p => return p
-  | none => failure
-
-
--- declare_syntax_cat fmtCase
--- syntax num : fmtCase
--- syntax "| " term " => " term: fmtCase
--- syntax "| " term " => " term fmtCase: fmtCase
-
-
--- syntax (name:=coreFmCmd)"#coreFm " ident fmtCase : command
-
-
--- initialize IO.println "helllo"
-
--- macro_rules
--- | `(#coreFm $i:ident $a:fmtCase) =>
---   -- `(initialize IO Unit := IO.mkref fun a => 2)
---   -- let ccc := match a with
---   -- | `("| " $a:term " => " $b:term) => 2
---   -- | _ => 3
-
---   `(initialize IO.println "some commend??aarst")
-
-
--- #coreFm name
--- | `($a + $b) => IO.println "what"
-
-
--- macro_rules
--- | `($a + $b) => `(println! "matched addition!")
-
-
--- macro_rules
--- | `(command | #coreFmt ppline ($a:term) ) => `("matched repeated addition")
-
--- #eval 1 + 2

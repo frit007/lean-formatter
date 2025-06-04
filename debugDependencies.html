@@ -413,6 +413,7 @@
           if ("$ref" in v) {
             const lookupKey = v["$ref"] + ""
             const prevValue = map[lookupKey]
+            console.log("lookup", lookupKey)
             map[lookupKey] = reconstruct(map[lookupKey], map)
             console.log("updating", k, "key", lookupKey, "newvalue", map[lookupKey], "was", prevValue, "the value was", v)
             d[k] = map[lookupKey]

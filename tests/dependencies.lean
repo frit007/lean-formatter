@@ -7,12 +7,6 @@ import BaseFormatter
 open Lean
 open PrettyFormat
 
--- this functions assumes that there are no Syntax objects in the doc
-partial def markCachedObject (doc:FormatM Doc) : (Doc × FormatState) :=
-  let (doc, cache) := doc.run {formattingFunction := fun _ _ _ _ =>
-    (toDoc "_", 0, {})}
-  (doc, cache)
-
 -- without restrictions it will choose the hard newline
 /--
 info: nl
@@ -21,7 +15,7 @@ after
 #guard_msgs in
 #eval do
   let d := ("nl" <$$$> ""<^> "sp" <_> "") <> "after"
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
 
@@ -35,7 +29,7 @@ after
 #eval do
   let d := ("nl" <$$$> "") <> "after"
   IO.println s!"{d.toString}"
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
 
@@ -52,7 +46,7 @@ after
 #eval do
   let d := ("sp" <_> "" <^> "nl" <$$$> "") <> (""<$$>"after")
   IO.println s!"{d.toString}"
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
 
@@ -66,7 +60,7 @@ after
 #eval do
   let d := ( "nl" <$$$> "" <^> "sp" <_> "")  <> (""<$$>"after")
   IO.println s!"{d.toString}"
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
 
@@ -74,7 +68,7 @@ after
 #guard_msgs in /- If right side demands newline, then it must be chosen-/
 #eval do
   let d := flattenDoc (("sp" <> provideDoc bridgeSpace <^> "nl" <> provideDoc bridgeHardNl) <> (bridgeNl !> "after"))
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   -- IO.println s!"{repr d}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
@@ -84,7 +78,7 @@ after
 #eval do
   let d := flattenDoc ("(" <> ( ("e" <> provideDoc bridgeNone) <^> "sp" <_> "")
     <> ((bridgeNone <! "a")<$$$>"nlafter" <^> ""<_>"spafter") <>")")
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   -- IO.println s!"{d.printDependencies}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
@@ -100,7 +94,7 @@ info: flattenDoc (((("(") <> ((("sp") <> (provideDoc bridgeSpace))<^>(("e") <> (
   let d := flattenDoc ("(" <> ("sp" <_> "" <^> ("e" <> provideDoc bridgeNone) )  <> ((bridgeNone <! "a")<$$$>"nlafter" <^> ""<_>"spafter") <>")")
   IO.println s!"{d.toString}"
   -- let d2 := ((bridgeNone <! "a")<$$$>"nlafter" <^> ""<_>"spafter")
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
 
@@ -113,7 +107,7 @@ center
 #eval do
   let d := "before"<>flattenDoc ("" <$$> "center")
   IO.println s!"{d.toString}"
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
 
@@ -125,7 +119,7 @@ after the comment
 #guard_msgs in /- allow bridges on the right side inside flatten-/
 #eval do
   let d := flattenDoc ("-- comment" <$$$> "") <> "after the comment"
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
@@ -140,7 +134,7 @@ after the comment
 #eval do
   let d := "before"<>flattenDoc (""<$$$>"("<>"center"<$$>"cookie"<>")" <> "-- comment" <$$$> "") <> "after the comment"
   IO.println s!"{d.toString}"
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
 
@@ -155,7 +149,7 @@ e!e
 #eval do
   let d := ("e" <>provideDoc bridgeNone <^> "i" <> provideDoc bridgeImmediate) <> (bridgeNone<!"!e" <^> bridgeImmediate<!"!i")
   IO.println s!"{d.toString}"
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
 
@@ -169,7 +163,7 @@ info: ((("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (provideDo
 #eval do
   let d := "("<>("i" <> provideDoc bridgeImmediate <^> "e" <>provideDoc bridgeNone) <> ((bridgeNone<!"!e" <$$$> "later")<^> bridgeImmediate<!"!i") <> ")"
   IO.println s!"{d.toString}"
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
 
@@ -184,7 +178,7 @@ info: flattenDoc ((/-3-/ (/-1-/ ("(") <> ((("i") <> (provideDoc bridgeImmediate)
 #guard_msgs in /- bridgeNone can no longer be chosen because it leads to a hard newline -/ --TODO:
 #eval do
   let d := flattenDoc ("("<>("i" <> provideDoc bridgeImmediate <^> "e" <>provideDoc bridgeNone) <> ((bridgeNone<!"!e" <$$$> "later") <^> bridgeImmediate<!"!i") <> ")")
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
@@ -198,7 +192,7 @@ info: /-3-/ flattenDoc ((("(") <> (/-2-/ ((("i") <> (provideDoc bridgeImmediate)
 #guard_msgs in /- bridgeNone can no longer be chosen because it leads to a hard newline -/
 #eval do
   let d := flattenDoc ("("<>(("i" <> provideDoc bridgeImmediate <^> "e" <>provideDoc bridgeNone) <> ((bridgeNone<!"!e" <$$$> "later") <^> bridgeImmediate<!"!i")) <> ")")
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
@@ -212,7 +206,7 @@ info: flattenDoc ((/-3-/ (/-1-/ ("(") <> ((("i") <> (provideDoc bridgeImmediate)
 #guard_msgs in /- bridgeNone can no longer be chosen because it leads to a hard newline, why would order of operations change it? -/ --TODO:
 #eval do
   let d := flattenDoc (("("<>("i" <> provideDoc bridgeImmediate <^> "e" <>provideDoc bridgeNone)) <> ((bridgeNone<!"!e" <$$$> "later") <^> bridgeImmediate<!"!i") <> ")")
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
@@ -225,7 +219,7 @@ info: (/-1-/ ("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (prov
 #guard_msgs in /- The right bridge constraint should persist even when going through children -/
 #eval do
   let d := ("("<>("i" <> provideDoc bridgeImmediate <^> "e" <>provideDoc bridgeNone)) <> bridgeImmediate<!"!i"
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
@@ -238,7 +232,7 @@ info: flattenDoc ((/-1-/ ("(") <> (flattenDoc (("--comment") <> (provideDoc brid
 #guard_msgs in /- flatten does not "unflatten", we expect a space from the inner  -/
 #eval do
   let d := flattenDoc ("("<>(flattenDoc ("--comment" <$$> ""))<>")")
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
@@ -252,7 +246,7 @@ basic space
 #guard_msgs in /- basics: space after between elements  -/
 #eval do
   let d := "basic" <_> "space"
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
@@ -266,7 +260,7 @@ any
 #guard_msgs in /- basics: any  -/
 #eval do
   let d := "basic" <**> "any"
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
@@ -282,7 +276,7 @@ NameSet
     ) <> (provideDoc bridgeSpace)) <> ((((/-3-/ (("Name") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("Name")
     ) <> (provideDoc bridgeAny)) <> ((/-4-/ (("NameSet") <> (provideDoc bridgeSpace)) <> ((("") <> (provideDoc bridgeHardNl)) <> ("")))<^>("NameSet")
     ))
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   -- IO.println s!"{d.toJSON}"
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"
@@ -290,70 +284,22 @@ NameSet
 
 
 /--
-info: {
-  "start":{"type": "concat",
-  "meta": {
-    "id": 0,
-    "cacheWeight": 3,
-    "collapsesBridges": "yes",
-    "flattenPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
-    "flattenRPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
-    "flattenLPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
-    "eventuallyFlattenPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
-    "path": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]]
-    },
-  "lhs": {"type": "concat",
-    "meta": {
-      "id": 0,
-      "cacheWeight": 2,
-      "collapsesBridges": "yes",
-      "flattenPath": [[1, 8], [2, 8], [4, 8], [8, 8], [16, 8]],
-      "flattenRPath": [[1, 8], [2, 8], [4, 8], [8, 8], [16, 8]],
-      "flattenLPath": [[1, 14], [2, 14], [4, 14], [8, 14], [16, 14]],
-      "eventuallyFlattenPath": [[1, 14], [2, 14], [4, 14], [8, 14], [16, 14]],
-      "path": [[1, 14], [2, 14], [4, 14], [8, 14], [16, 14]]
-      },
-    "lhs": {"type": "text", "s": "hello",
-      "meta": {
-        "id": 0,
-        "cacheWeight": 1,
-        "collapsesBridges": "yes",
-        "flattenPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
-        "flattenRPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
-        "flattenLPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
-        "eventuallyFlattenPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
-        "path": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]]
-        }},
-    "rhs": {"type": "provide", "value": 14,
-      "meta": {
-        "id": 0,
-        "cacheWeight": 1,
-        "collapsesBridges": "no",
-        "flattenPath": [[1, 8], [8, 8], [0, 0], [8, 8]],
-        "flattenRPath": [[1, 14], [2, 2], [4, 4], [8, 8]],
-        "flattenLPath": [[1, 14], [2, 2], [4, 4], [8, 8]],
-        "eventuallyFlattenPath": [[1, 14], [2, 2], [4, 4], [8, 8]],
-        "path": [[1, 14], [2, 2], [4, 4], [8, 8]]
-        }}},
-  "rhs": {"type": "text", "s": "world",
-    "meta": {
-      "id": 0,
-      "cacheWeight": 1,
-      "collapsesBridges": "yes",
-      "flattenPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
-      "flattenRPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
-      "flattenLPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
-      "eventuallyFlattenPath": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]],
-      "path": [[1, 15], [2, 15], [4, 15], [8, 15], [16, 15]]
-      }}}
-}
-hello
+info: hello
 world
 -/
 #guard_msgs in /- complex  -/
 #eval do
   let d := "hello" <**> "world"
-  let (d, cache) := markCachedObject (do expandSyntax RuleRec.placeHolder d)
-  IO.println s!"{d.toJSON}"
+  let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  IO.println s!"{out}"
+
+
+/-- info: a b -/
+#guard_msgs in
+#eval do
+  -- let d := "" <_> ("" <_> "b" <^> "" <$$> "c")
+  let d := "a" <_> ("" <_> "b" <^> "" <$$> "a")
+  let (d, cache) := simpleFormattingContext (do return d)
   let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
   IO.println s!"{out}"

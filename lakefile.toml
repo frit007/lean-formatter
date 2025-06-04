@@ -38,15 +38,6 @@ srcDir = "PrettyFormat"
 
 
 [[lean_lib]]
-name = "simple_imported"
-root = "simple_imported"
-
-
-[[lean_lib]]
-name = "monadPerfImported"
-root = "monadPerfImported"
-
-[[lean_lib]]
 name = "LSPformat"
 root = "LSPformat"
 srcDir = "PrettyFormat"

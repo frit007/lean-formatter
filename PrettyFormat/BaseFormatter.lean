@@ -29,7 +29,70 @@ partial def findPatternStartAux (s pattern : String) : Option String :=
 partial def findPatternStart (s pattern : String) : Option String :=
   findPatternStartAux s pattern
 
+/--
+Assign an id to every syntax element, reuse the position to store the id
+-/
+partial def uniqueSyntaxIds (nextId : Nat) (stx:Syntax): (Nat × Syntax) :=
+  -- dbg_trace s!"working on ids {nextId}"
+  match stx with
+  | .missing => (nextId, stx)
+  | .node (si : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
+    let (nextId, newSi) := setSourceInfoId nextId si
+    let (nextId, newArgs) := args.foldl (fun (nextId, arr) (stx) =>
+      let (nextId, stx) := uniqueSyntaxIds nextId stx
+      (nextId, arr.push stx)
+    ) (nextId, #[])
+    -- dbg_trace s!"updated node {getId newSi}"
 
+    (nextId, Syntax.node newSi kind newArgs)
+  | .atom (si : SourceInfo) (val : String) =>
+    let (nextId, si) := setSourceInfoId nextId si
+    (nextId, .atom si val)
+  | .ident  (si : SourceInfo) (rawVal : Substring) name preresolved =>
+    let (nextId, si) := setSourceInfoId nextId si
+    (nextId, .ident si rawVal name preresolved)
+where
+  setSourceInfoId (nextId : Nat) (si : SourceInfo): (Nat × SourceInfo) :=
+  match si with
+  | .original (leading : Substring) (_ : String.Pos) (trailing : Substring) (endPos : String.Pos) =>
+    (nextId + 1, SourceInfo.original leading {byteIdx := nextId} trailing endPos)
+  | .synthetic (_ : String.Pos) (endPos : String.Pos) (canonical : Bool) =>
+    (nextId + 1, SourceInfo.synthetic {byteIdx := nextId} endPos canonical)
+  | _ =>
+    (nextId + 1, SourceInfo.synthetic {byteIdx := nextId} {byteIdx := nextId} false)
+
+  getId (si : SourceInfo): (Option Nat) :=
+  match si with
+  | .original _ (p : String.Pos) _ _ =>
+    return p.byteIdx
+  | .synthetic (p : String.Pos) _ _ =>
+    return p.byteIdx
+  | _ => none
+
+
+partial def printAllIds (stx:Syntax): Nat :=
+  -- dbg_trace s!"working on ids {nextId}"
+  match stx with
+  | .missing =>
+    dbg_trace "missing"
+    1
+  | .node (si : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
+    dbg_trace s!"node id {getId si}"
+    args.foldl (fun acc stx => printAllIds stx +1) 0
+  | .atom (si : SourceInfo) (val : String) =>
+    dbg_trace s!"atom id {getId si}"
+    1
+  | .ident  (si : SourceInfo) (rawVal : Substring) name preresolved =>
+    dbg_trace s!"ident id {getId si}"
+    1
+where
+  getId (si : SourceInfo): (Option Nat) :=
+  match si with
+  | .original _ (p : String.Pos) _ _ =>
+    return p.byteIdx
+  | .synthetic (p : String.Pos) _ _ =>
+    return p.byteIdx
+  | _ => none
 -- since the result might contain Syntax we expand it now
 -- At this point we also tag the syntax with Ids, bug only if they should be cached
 -- At this point we want to add bridgeInformation
@@ -44,7 +107,7 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
     let path := if s.length == 0 then passthrough else acceptFlex
     cachePPL (.text s {m with flattenLPath := path, flattenRPath := path, flattenPath := path, eventuallyFlattenPath := path, path := path}) 0
   | .newline s m =>
-    if s == "" then
+    if s.isSome then
       -- dbg_trace s!"newline
       cachePPL (.newline s {m with flattenLPath := acceptFlex, flattenRPath := acceptFlex, flattenPath := acceptFlex, eventuallyFlattenPath := acceptFlex, path := acceptFlex}) 0
     else
@@ -161,7 +224,18 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
       flattenPath := passthrough
       }) 0
   | .stx stx _ =>
-    expandSyntax r (← r stx)
+    match getSyntaxId stx with
+    | .some syntaxId =>
+      let s ← get
+      match s.stxCache.get? syntaxId with
+      | some cachedDoc =>
+        return cachedDoc
+      | _ =>
+        let value ← (expandSyntax r (← r stx))
+        modify (fun s => {s with stxCache := s.stxCache.insert syntaxId value})
+        return value
+    | _ =>
+      expandSyntax r (← r stx)
   | .reset inner m =>
     let inner ← expandSyntax r inner
     -- if inner.isDead then
@@ -218,10 +292,12 @@ where
     -- if childCacheWeight >= 1 then
       -- return doc leftBridge (← FormatM.genId) 0 true
       -- dbg_trace s!"cachePPL we generate a new id"
+      let newId ← FormatM.genId
+      -- dbg_trace s!"gedId: {newId}"
       return doc.setMeta {
         doc.meta with
         cacheWeight := 0,
-        id := ← FormatM.genId
+        id := newId
       }
     else
       -- dbg_trace s!"cachePPL we skip new id"
@@ -230,7 +306,32 @@ where
         cacheWeight := childCacheWeight + 1,
         id := 0
       }
+  getSyntaxId : Syntax → Option Nat
+  | .missing => none
+  | .node (si : SourceInfo) _ _ =>
+    getSourceId si
+  | .atom (si : SourceInfo) _ =>
+    getSourceId si
+  | .ident  (si : SourceInfo) _ _ _ =>
+    getSourceId si
 
+  getSourceId : SourceInfo → Option Nat
+    | .original _ (pos : String.Pos) _ _ =>
+      some pos.byteIdx
+    | .synthetic (pos : String.Pos) _ _ =>
+      some pos.byteIdx
+    | _ =>
+      none
+
+-- this functions assumes that there are no Syntax objects in the doc
+partial def simpleFormattingContext (doc:FormatM Doc) : (Doc × FormatState) :=
+  let (doc, cache) := (finallyExpand doc).run {stxCache := {} ,formattingFunction := fun _ _ _ _ =>
+    (toDoc "_", 0, {})}
+  (doc, cache)
+where
+  finallyExpand (doc:FormatM Doc) : FormatM Doc := do
+    let d ← doc
+    expandSyntax RuleRec.placeHolder d
 
 partial def findFirstMatch (fmts : List (Name → Option Rule)) (kind : SyntaxNodeKind) (r : RuleRec) (stx : Syntax) :FormatM (List FormatError ⊕ Doc):= do
   -- -- dbg_trace s!"findFirstMatch {stx.getKind}"
@@ -426,7 +527,7 @@ partial def pf (formatters : Formatters) (stx: Syntax): FormatM Doc := updateSyn
 
   let curr ← get
   let updated := {curr with formattingFunction := fun stx nextId diagnostics path =>
-    let (doc,state) := (pf formatters stx).run {curr with options := curr.options, nextId := nextId, diagnostic := diagnostics, stx := path} |>.run
+    let (doc, state) := (pf formatters stx).run {curr with nextId := nextId, diagnostic := diagnostics, stx := path} |>.run
     (doc, state.nextId, state.diagnostic)
   }
   set updated
@@ -648,41 +749,6 @@ def FormatResult.preservesCst (res : FormatResult) : Bool :=
   match res.cstDifferenceError with
     | .none => true
     | .some _ => false
-
-  -- def findSpacingFailure (path:List String) (spacing: Option (Std.HashSet String)) (flattened : Bool): PPL -> Option (List (List String))
-  -- | .nl =>
-  --   if flattened then
-  --     match spacing with
-  --     | none => none
-  --     | some s => if s.contains spaceNl || s.contains spaceHardNl then none else return [path]
-  --   else
-  --     match spacing with
-  --     | none => none
-  --     | some s => if s.contains spaceNl || s.contains spaceHardNl then none else return [path]
-  -- | .text t =>
-  --   match spacing with
-  --   | none => return none
-  --   | some e =>
-  --     if t.startsWith " " && ! e.contains space then [path]
-  --     else
-  --       if e.contains space || e.contains spaceHardNl || e.contains spaceNl || e.contains nospace then none else [path]
-  -- | .error => [path]
-  -- | .choice l r =>
-  --   match (findSpacingFailure path spacing flattened l, findSpacingFailure path spacing flattened r) with
-  --   | (some ls, some rs) => return [ls @ rs]
-  --   | _ => none
-  -- | .unallignedConcat l r:
-
-  -- | .flatten : PPL → PPL
-  -- | .align : PPL → PPL
-  -- | .nest : Nat → PPL → PPL
-  -- | .rule : String → PPL → PPL
-  -- | .reset : (PPL → PPL)
-  -- | .bubbleComment (comment : String)
-  -- | .endOfLineComment (comment : String)
-  -- | .provide (options : List String)
-  -- | .expect (options : List String)
-
   def nanosecondsToSeconds (ns : Nat) : Float :=
     ns.toFloat / 1_000_000_000.0
   def FormatResult.reportAsComment (res : FormatResult): String := Id.run do
@@ -731,10 +797,13 @@ def FormatResult.preservesCst (res : FormatResult) : Bool :=
     else
       return ""
 
-  def pfTopLevel (stx : Syntax) (formatters : List (Name → Option Rule)) (options : Options) : (Doc × FormatState) :=
+  def pfTopLevel (stx : Syntax) (formatters : List (Name → Option Rule)) : (Doc × FormatState) :=
+    -- stx
+    let (_, stx) := uniqueSyntaxIds 1 stx
     let introduceContext := pf formatters stx
-    let introduceState := introduceContext.run {nextId := 0, diagnostic:= {failures := [], missingFormatters := Std.HashMap.empty}, formattingFunction := (fun _ _ _ _ => (Doc.text "Missing syntax transformer", 0, {}))}
+    let introduceState := introduceContext.run {nextId := 0, diagnostic:= {failures := [], missingFormatters := Std.HashMap.empty}, formattingFunction := (fun _ _ _ _ => (Doc.text "Missing syntax transformer", 0, {})), stxCache := {}}
     introduceState.run
+
 
 
 
@@ -748,8 +817,8 @@ partial def someComputation (sum:Nat) (n : Nat) : IO Nat :=
 -- Also fallback to standard syntax if formatting fails
 partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters : List (Name → Option Rule)) (opts : Options) (fileName:String): IO FormatResult := do
   let ((ppl, state), timePF) ← measureTime (fun _ => do
-    return pfTopLevel stx formatters opts)
-
+    return pfTopLevel stx formatters)
+  -- printAllIds
   let (formattedPPL, timeDoc) ← measureTime (fun _ => do
     if getDebugLog opts then
       ppl.prettyPrintLog DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
@@ -824,23 +893,6 @@ def assumeMissing (stx : Syntax): RuleM Unit := do
   else
     failure
 
-
-initialize formattedCode : IO.Ref String ← IO.mkRef "initialString"
-
-
--- def format (stx : Syntax) : (RuleCtx) := do
---   (← read) stx
-
--- def formatThen (sep : PPL) (stx : Syntax) : (RuleCtx) := do
---     let formatted := (← read) stx
---     let ppl ← formatted
---     if isEmpty ppl then
---       return text ""
---     else
---       return ppl <> sep
-
-
-
 instance : Alternative RuleM where
   failure := fun {_} => do
 
@@ -860,88 +912,12 @@ def getCoreFormatter (name : Name) : IO (Option Rule) := do
   let fmts ← coreFormatters.get
   return fmts[name]?
 
--- -- only used for internally, use
--- syntax (name:=coreFmtCmd) "#coreFmt " ident term : command
--- syntax (name:=fmtCmd) "#fmt " ident term : command
-
--- -- def typeToExpr : Type → MetaM Expr
--- -- | Type 0 => return mkSort Level.zero  -- `Type 0` as `Sort 0`
--- -- | Type 1 => return mkSort Level.succ (Level.zero)  -- `Type 1` as `Sort (0+1)`
--- -- | _ => throwError "Unsupported Type"
-
--- @[command_elab coreFmtCmd]
--- def elabCoreFmtFunction : CommandElab
--- | `(command|#coreFmt $keyIdent $fnExpr) => do
---   -- -- trying to register the core formatter during elaboration is a crash
---   -- registerCoreFormatter `Lean.Parser.Term.app fun
---   -- | #[a] => do
---   --   return text "app?"
---   -- | _ => failure
-
---   -- This does not work :)
---   let cmd ← `(initialize
---     let _ : IO Unit := registerCoreFormatter $(quote keyIdent.getId) $fnExpr)
---   elabCommand cmd
---   logInfo s!"Registered core formatter {keyIdent.getId}"
--- | stx => logError m!"Syntax tree?: {stx.getKind}"
-
-
-
--- @[command_elab fmtCmd]
--- def elabFmtCmdFunction : CommandElab
--- | `(command|#fmt $keyIdent $fnExpr) => do
-
---   let cmd ← `(@[pFormat Lean.Parser.Termination.suffix]
---     def format$(quote keyIdent.getId) (args: Array Syntax) : Rule := $fnExpr)
---     )
---     -- let _ : IO Unit := registerCoreFormatter $(quote keyIdent.getId) $fnExpr
---   elabCommand cmd
--- | stx => logError m!"Syntax tree?: {stx.getKind}"
--- syntax (name:=coreFmtCmd) "register " ident " => " term : command
-
--- @[command_elab coreFmtCmd]
--- unsafe def elabFormatCmd : CommandElab
---   | `(command|#coreFmt $cmd => t) => liftTermElabM do
---     let env ← getEnv
---     let opts ← getOptions
---     let stx := cmd.raw
---     let leadingUpdated := stx|>.getArgs
---     let introduceContext := ((pfCombineWithSeparator PPL.nl leadingUpdated).run { envs:= [env], options := ← getOptions})
---     let introduceState := introduceContext.run' {nextId := 0}
---     let ppl := introduceState.run
-
---     let doc := toDoc ppl
---     let result := doc.prettyPrint Pfmt.DefaultCost (col := 0) (widthLimit := 100)
-
---     logInfo s!"{result}"
---   | stx => logError m!"Syntax tree?: {stx.getKind}"
-
--- #coreFmt Lean.Parser.Term.app __ (fun stx => return text "app")
-
--- you cannot use it for initialize :)
--- initialize registerCoreFormatter `Lean.Parser.Term.app fun
---   | #[a] => do
---     return text "app?"
---   | _ => failure
-
--- initialize registerCoreFormatter `Lean.Parser.Term.letIdDecl fun
---   | #[a] => do
---     return text "app?"
---   | _ => failure
-
--- #coreFmt Lean.Parser.Term.app fun
---   | #[a] => do return text "app?"
---   | _ => failure
-
-
 syntax (name:=coreFmtCmd) "#coreFmt " ident term : command
 macro_rules
   | `(#coreFmt $typeExpr $fnExpr) =>
       -- Generate the `initialize` code by using the syntax trees
       -- let a := typeExpr.getId
       `(initialize registerCoreFormatter $(quote typeExpr.getId) $fnExpr)
-
-
 
 syntax (name:=fmtCmd) "#fmt " ident term : command
 macro_rules
@@ -952,21 +928,6 @@ macro_rules
     let idSyntax := mkIdent (Name.mkSimple funName)
     `(@[pFormat $(typeExpr)]
     def $(idSyntax) : Rule := $fnExpr)
-
--- #coreFmt2 Lean.Parser.Term.app fun
---   | #[a] => do return text "app?"
---   | _ => failure
-
--- initialize registerCoreFormatter `Lean.Parser.Term.app fun
---   | #[a] => do return text "app?"
---   | _ => failure
--- #coreFmt Lean.Parser.Term.app => 2
-
--- #coreFmt `app : do
---   let name ← evalExpr Name `($2)
---   let f ← evalExpr Rule `($3)
---   registerCoreFormatter name f
---   return ()
 
 partial def getCommands (cmds : Syntax) : StateT (Array Syntax) Id Unit := do
   if cmds.getKind == nullKind || cmds.getKind == ``Parser.Module.header then
@@ -998,23 +959,6 @@ def printCommands (cmds : Syntax) : CoreM Unit := do
 def failWith (msg : String) (exitCode : UInt8 := 1) : IO α := do
   (← IO.getStderr).putStrLn msg
   IO.Process.exit exitCode
-
-
-
-def prettyPrintSourceInfo : SourceInfo → String
-  | .original (leading : Substring) (pos : String.Pos) (trailing : Substring) (endPos : String.Pos) => s!"leading:{leading} pos: {pos} trailing: {trailing} endPos: {endPos}"
-  | .synthetic (pos : String.Pos) (endPos : String.Pos) (canonical) => s!"synthetic: pos:{pos} endPos: {endPos}: cannonical: {canonical}"
-  | .none => "nosource"
-
-
-partial def prettyPrintSyntax : Syntax → String
-  | .missing => "missing"
-  | .node (info : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
-    (args.map prettyPrintSyntax |>.toList |> " ".intercalate)
-  | .atom (info : SourceInfo) (val : String) => s!"{val}"
-  | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) => s!"{val}"
-
-
 
 -- source reformat.lean
 unsafe def parseModule (input : String) (fileName : String) (opts : Options := {}) (trustLevel : UInt32 := 1024) :
