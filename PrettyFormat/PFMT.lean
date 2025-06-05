@@ -570,7 +570,7 @@ def Doc.findErr (d : Doc) (path : String) (errs : Std.HashMap String Nat) : (Std
 /--
 Find an optimal layout for a document and render it.
 -/
-partial def Doc.print (χ : Type) [Inhabited χ] [Repr χ] [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat) (log : Option (List String)): IO (PrintResult χ) := do
+partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat) (log : Option (List String)): IO (PrintResult χ) := do
   -- let (preferredGroups, cache) := ((doc.resolve (χ := χ) [] col 0 widthLimit bridgeFlex bridgeFlex false false).run (initCache cacheSize log)).run
   if (doc.meta.findPath Flatten.notFlattened).size == 0 then
     dbg_trace s!"WARNING: document does not contain a solution"
@@ -582,14 +582,6 @@ partial def Doc.print (χ : Type) [Inhabited χ] [Repr χ] [Cost χ] (doc : Doc)
   let (preferredGroups, cache) ← ((doc.resolve (χ := χ) col 0 widthLimit computationWidth bridgeFlex bridgeEnding Flatten.notFlattened).run (initCache cacheSize log))
 
   match preferredGroups with
-  | .set (m::ms) =>
-    -- dbg_trace "taken first response, ignored{ms.length}"
-    return {
-      log := cache.log,
-      layout := String.join (m.layout []).reverse, -- omg don't do String.join
-      isTainted := false,
-      cost := m.cost
-    }
   | .set ([]) =>
     -- dbg_trace "it was empty set"
     return {
@@ -597,6 +589,15 @@ partial def Doc.print (χ : Type) [Inhabited χ] [Repr χ] [Cost χ] (doc : Doc)
       layout := "No solution found",
       isTainted := false,
       cost := Cost.text 0 0 0
+    }
+  | .set (ms) =>
+    let m := (removeEndingBridges ms).head!
+    -- dbg_trace "taken first response, ignored{ms.length}"
+    return {
+      log := cache.log,
+      layout := String.join (m.layout []).reverse, -- omg don't do String.join
+      isTainted := false,
+      cost := m.cost
     }
   | .tainted t _ =>
     -- dbg_trace "tainted it was tainted..."
@@ -609,6 +610,8 @@ partial def Doc.print (χ : Type) [Inhabited χ] [Repr χ] [Cost χ] (doc : Doc)
     }
 
 where
+  removeEndingBridges [Cost χ] (ms : List (Measure χ)) : List (Measure χ) :=
+    ms.foldl (fun acc m => mergeSet acc [{m with bridgeR := bridgeFlex}]) []
   initCache (n:Nat) (log : Option (List String)): CacheStore χ :=
     -- allocate twice the space needed, so flatten is separated into its own category
     {size := n, content := Array.mkArray (n*2) [], log := log, giveUp := 1000, lastMeasurement := 0}
