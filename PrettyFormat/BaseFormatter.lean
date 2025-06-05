@@ -324,7 +324,7 @@ where
       none
 
 -- this functions assumes that there are no Syntax objects in the doc
-partial def simpleFormattingContext (doc:FormatM Doc) : (Doc × FormatState) :=
+def simpleFormattingContext (doc:FormatM Doc) : (Doc × FormatState) :=
   let (doc, cache) := (finallyExpand doc).run {stxCache := {} ,formattingFunction := fun _ _ _ _ =>
     (toDoc "_", 0, {})}
   (doc, cache)
@@ -332,6 +332,10 @@ where
   finallyExpand (doc:FormatM Doc) : FormatM Doc := do
     let d ← doc
     expandSyntax RuleRec.placeHolder d
+
+def fmt (doc : Doc) : FormatM Doc :=
+  expandSyntax RuleRec.placeHolder doc
+
 
 partial def findFirstMatch (fmts : List (Name → Option Rule)) (kind : SyntaxNodeKind) (r : RuleRec) (stx : Syntax) :FormatM (List FormatError ⊕ Doc):= do
   -- -- dbg_trace s!"findFirstMatch {stx.getKind}"
