@@ -12,7 +12,7 @@ open PrettyFormat
   let d := "a" <_> ("" <_> "b" <^> "" <$$> "a")
   -- let d := "a" <_> "b"
   let (d, cache) := simpleFormattingContext (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) (computationWidth := 20) d
   -- IO.println d.toJSON
   IO.println s!"{out}"
 
@@ -25,7 +25,7 @@ a
 #eval do
   let d := "" <$$> ("" <_> "b" <^> "" <$$> "a")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) (computationWidth := 20) d
   IO.println s!"{out}"
 
 -- prefer newline over too long string
@@ -37,7 +37,7 @@ a
 #eval do
   let d := "" <**> ("" <_> "bbbbbbbbbbbbbbbbbbbb" <^> "" <$$> "a")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) (computationWidth := 20) d
   IO.println s!"{out}"
 
 -- Choose tainted over an impossible option
@@ -46,7 +46,7 @@ a
 #eval do
   let d := provideDoc bridgeImmediate <> (bridgeImmediate <! "bbbbbbbbbbbbbbbbbbbb" <^> "" <$$> "a")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) (computationWidth := 20) d
   IO.println s!"{out}"
 
 -- Choose tainted over an impossible option (reversed order)
@@ -55,7 +55,7 @@ a
 #eval do
   let d := provideDoc bridgeImmediate <> ( "" <$$> "a" <^> bridgeImmediate <! "bbbbbbbbbbbbbbbbbbbb")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 20) (computationWidth := 20) d
   IO.println s!"{out}"
 
 
@@ -65,7 +65,7 @@ a
 #eval do
   let d := "aaa" <> provideDoc bridgeImmediate <> ( "none" <^> bridgeImmediate<!"correct" <^> (provideDoc bridgeSpace)) <>"b"
   let (d, cache) := simpleFormattingContext (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) (computationWidth := 1) d
   IO.println s!"{out}"
 
 -- bridgeAny with tainted
@@ -77,7 +77,7 @@ b
 #eval do
   let d := "aaa" <> provideDoc bridgeAny <> "b"
   let (d, cache) := simpleFormattingContext (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) (computationWidth := 1) d
   IO.println s!"{out}"
 
 /-- info: aaa none -/
@@ -85,7 +85,7 @@ b
 #eval do
   let d := "aaa" <> provideDoc bridgeSpace <> ( "none" <^> bridgeImmediate<!"correct")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) (computationWidth := 1) d
   IO.println s!"{out}"
 
 /--
@@ -97,7 +97,7 @@ after
   let d := "aaa" <> ((provideDoc bridgeHardNl <^> " space " <_> "")) <> flattenDoc ("after")
   -- IO.println s!"{d.toString}"
   let (d, cache) := simpleFormattingContext (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) (computationWidth := 1) d
   IO.println s!"{out}"
 
 /-- info: longer -/
@@ -105,7 +105,7 @@ after
 #eval do
   let d := (costDoc 2 <> (toDoc "short")) <^> "longer"
   let (d, cache) := simpleFormattingContext (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) (computationWidth := 10) d
   IO.println s!"{out}"
 
 /- We can add cost to -/
@@ -119,7 +119,7 @@ c
   let d := (costDoc 2 <> (toDoc "short")) <^> ("longer" <$$> "b" <$$> "c")
   -- IO.println s!"{d.toString}"
   let (d, cache) := simpleFormattingContext (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) (computationWidth := 10) d
   IO.println s!"{out}"
 
 /- cost does not really matter for tainted since in a tainted state we take the first available solution-/
@@ -129,7 +129,7 @@ c
   let d := (costDoc 2 <> "short") <^> "longer"
   -- let d := runFlatten 100 d
   let (d, cache) := simpleFormattingContext (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 1) (computationWidth := 1) d
   IO.println s!"{out}"
 
 -- if run without caching this has exponential running time
@@ -161,7 +161,7 @@ partial def nchoicenl : Nat → FormatM Doc
   -- IO.println s!"{cache.nextId}"
 
   let (out, timeDoc) ← measureTime (fun _ => do
-    let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) doc
+    let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) (computationWidth := 100) doc
     return out
   )
 

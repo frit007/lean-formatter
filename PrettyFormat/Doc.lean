@@ -465,6 +465,7 @@ structure TaintedState where
   col : Nat
   indent : Nat
   widthLimit : Nat
+  computationWidth : Nat
   leftBridge : Bridge
   rightBridge : Bridge
   flatten : Flatten

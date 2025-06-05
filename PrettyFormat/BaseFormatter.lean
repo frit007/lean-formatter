@@ -730,7 +730,7 @@ def stringToPPL (s:String) : Doc:=
 
 structure FormatResult where
   stx : Syntax
-  ppl : Doc
+  doc : Doc
   opts : Options
   formattedPPL : String
   generatedSyntax : Except String Syntax
@@ -759,7 +759,7 @@ def FormatResult.preservesCst (res : FormatResult) : Bool :=
     let stx := res.stx
     let opts := res.opts
     let generatedSyntax := res.generatedSyntax
-    let ppl := res.ppl
+    let doc := res.doc
     let state := res.state
 
     let mut errString := ""
@@ -787,11 +787,11 @@ def FormatResult.preservesCst (res : FormatResult) : Bool :=
         errString := errString ++ s!"{kind}:({stx.length}) \n"
 
     if (PrettyFormat.getDebugDoc opts) then
-      errString := errString ++ "\n---- Generated PPL ----\n" ++ (ppl.toString)
+      errString := errString ++ "\n---- Generated PPL ----\n" ++ (doc.toString)
 
     if (PrettyFormat.getDebugNoSolution opts) then
       -- errString := errString ++ "\n---- Path  ----\n" ++ (ppl.printDependencies)
-      errString := errString ++ "\n---- Path  ----\n" ++ (ppl.toJSON)
+      errString := errString ++ "\n---- Path  ----\n" ++ (doc.toJSON)
 
     if (PrettyFormat.getDebugTime opts) then
       errString := errString ++ s!"\n---- timingPPL ----\ntimePF{nanosecondsToSeconds res.timePF}s\ntimeDoc{nanosecondsToSeconds res.timeDoc}s\ntimeReparse{nanosecondsToSeconds res.timeReparse}s"
@@ -820,15 +820,15 @@ partial def someComputation (sum:Nat) (n : Nat) : IO Nat :=
 
 -- Also fallback to standard syntax if formatting fails
 partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters : List (Name → Option Rule)) (opts : Options) (fileName:String): IO FormatResult := do
-  let ((ppl, state), timePF) ← measureTime (fun _ => do
+  let ((doc, state), timePF) ← measureTime (fun _ => do
     return pfTopLevel stx formatters)
   -- printAllIds
   let (formattedPPL, timeDoc) ← measureTime (fun _ => do
     if getDebugLog opts then
-      ppl.prettyPrintLog DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
+      doc.prettyPrintLog DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts) (computationWidth := PrettyFormat.getPFLineLength opts)
     else
       -- return ppl.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
-      ppl.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
+      doc.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts) (computationWidth := PrettyFormat.getPFLineLength opts)
   )
 
   let (generatedSyntax, timeReparse) ← measureTime ( fun _ => do
@@ -845,7 +845,7 @@ partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters :
   if stx.getKind == `Lean.Parser.Module.header then
     cstDifferenceError := none
 
-  return {stx, ppl, opts, formattedPPL, generatedSyntax, state, cstDifferenceError, timePF, timeReparse, timeDoc}
+  return {stx, doc, opts, formattedPPL, generatedSyntax, state, cstDifferenceError, timePF, timeReparse, timeDoc}
   -- return {stx, ppl, opts, doc := Pfmt.Doc.text "skip", formattedPPL := "formatted", generatedSyntax := .error "nope", state, cstDifferenceError := none, timePF, timeReparse, timeDoc := 0}
 where
   reparseSyntax (formattedPPL fileName: String) (env : Environment) (opts : Options): IO (Except String Syntax) := do

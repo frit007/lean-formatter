@@ -149,9 +149,7 @@ namespace PrettyFormat
   abbrev FormatM a := (StateM FormatState) a
   abbrev RuleM a := ExceptT FormatError FormatM a
   abbrev RuleRec := (Syntax → FormatM Doc)
-  -- abbrev Rule := RuleRec → Array Syntax → (RuleM PPL)
-
-  -- abbrev RuleCtx := ReaderT RuleRec RuleM PPL
+  
   abbrev Rule := Array Syntax → RuleM Doc
 
   abbrev Formatter := (Name → Option Rule)

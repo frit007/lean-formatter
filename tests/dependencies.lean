@@ -16,7 +16,7 @@ after
 #eval do
   let d := ("nl" <$$$> ""<^> "sp" <_> "") <> "after"
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 
@@ -30,7 +30,7 @@ after
   let d := ("nl" <$$$> "") <> "after"
   IO.println s!"{d.toString}"
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 
@@ -47,7 +47,7 @@ after
   let d := ("sp" <_> "" <^> "nl" <$$$> "") <> (""<$$>"after")
   IO.println s!"{d.toString}"
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 /--
@@ -61,7 +61,7 @@ after
   let d := ( "nl" <$$$> "" <^> "sp" <_> "")  <> (""<$$>"after")
   IO.println s!"{d.toString}"
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 /-- info: sp after -/
@@ -70,7 +70,7 @@ after
   let d := flattenDoc (("sp" <> provideDoc bridgeSpace <^> "nl" <> provideDoc bridgeHardNl) <> (bridgeNl !> "after"))
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   -- IO.println s!"{repr d}"
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 /-- info: (sp spafter) -/
@@ -80,7 +80,7 @@ after
     <> ((bridgeNone <! "a")<$$$>"nlafter" <^> ""<_>"spafter") <>")")
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   -- IO.println s!"{d.printDependencies}"
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 /--
@@ -95,7 +95,7 @@ info: flattenDoc (((("(") <> ((("sp") <> (provideDoc bridgeSpace))<^>(("e") <> (
   IO.println s!"{d.toString}"
   -- let d2 := ((bridgeNone <! "a")<$$$>"nlafter" <^> ""<_>"spafter")
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 /--
@@ -108,7 +108,7 @@ center
   let d := "before"<>flattenDoc ("" <$$> "center")
   IO.println s!"{d.toString}"
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 /--
@@ -121,7 +121,7 @@ after the comment
   let d := flattenDoc ("-- comment" <$$$> "") <> "after the comment"
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 /--
@@ -135,7 +135,7 @@ after the comment
   let d := "before"<>flattenDoc (""<$$$>"("<>"center"<$$>"cookie"<>")" <> "-- comment" <$$$> "") <> "after the comment"
   IO.println s!"{d.toString}"
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 
@@ -150,7 +150,7 @@ e!e
   let d := ("e" <>provideDoc bridgeNone <^> "i" <> provideDoc bridgeImmediate) <> (bridgeNone<!"!e" <^> bridgeImmediate<!"!i")
   IO.println s!"{d.toString}"
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 /--
@@ -164,7 +164,7 @@ info: ((("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (provideDo
   let d := "("<>("i" <> provideDoc bridgeImmediate <^> "e" <>provideDoc bridgeNone) <> ((bridgeNone<!"!e" <$$$> "later")<^> bridgeImmediate<!"!i") <> ")"
   IO.println s!"{d.toString}"
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 
@@ -180,7 +180,7 @@ info: flattenDoc ((/-3-/ (/-1-/ ("(") <> ((("i") <> (provideDoc bridgeImmediate)
   let d := flattenDoc ("("<>("i" <> provideDoc bridgeImmediate <^> "e" <>provideDoc bridgeNone) <> ((bridgeNone<!"!e" <$$$> "later") <^> bridgeImmediate<!"!i") <> ")")
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 /--
@@ -194,7 +194,7 @@ info: /-3-/ flattenDoc ((("(") <> (/-2-/ ((("i") <> (provideDoc bridgeImmediate)
   let d := flattenDoc ("("<>(("i" <> provideDoc bridgeImmediate <^> "e" <>provideDoc bridgeNone) <> ((bridgeNone<!"!e" <$$$> "later") <^> bridgeImmediate<!"!i")) <> ")")
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 /--
@@ -208,7 +208,7 @@ info: flattenDoc ((/-3-/ (/-1-/ ("(") <> ((("i") <> (provideDoc bridgeImmediate)
   let d := flattenDoc (("("<>("i" <> provideDoc bridgeImmediate <^> "e" <>provideDoc bridgeNone)) <> ((bridgeNone<!"!e" <$$$> "later") <^> bridgeImmediate<!"!i") <> ")")
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 /--
@@ -221,7 +221,7 @@ info: (/-1-/ ("(") <> ((("i") <> (provideDoc bridgeImmediate))<^>(("e") <> (prov
   let d := ("("<>("i" <> provideDoc bridgeImmediate <^> "e" <>provideDoc bridgeNone)) <> bridgeImmediate<!"!i"
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 
@@ -234,7 +234,7 @@ info: flattenDoc ((/-1-/ ("(") <> (flattenDoc (("--comment") <> (provideDoc brid
   let d := flattenDoc ("("<>(flattenDoc ("--comment" <$$> ""))<>")")
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 
@@ -248,7 +248,7 @@ basic space
   let d := "basic" <_> "space"
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 
@@ -262,7 +262,7 @@ any
   let d := "basic" <**> "any"
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   IO.println s!"{d.toString}"
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 
@@ -278,7 +278,7 @@ NameSet
     ))
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
   -- IO.println s!"{d.toJSON}"
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 
@@ -291,7 +291,7 @@ world
 #eval do
   let d := "hello" <**> "world"
   let (d, cache) := simpleFormattingContext (do expandSyntax RuleRec.placeHolder d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"
 
 
@@ -301,5 +301,5 @@ world
   -- let d := "" <_> ("" <_> "b" <^> "" <$$> "c")
   let d := "a" <_> ("" <_> "b" <^> "" <$$> "a")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) d
+  let out ← Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 0) (computationWidth := 0) d
   IO.println s!"{out}"

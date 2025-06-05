@@ -11,7 +11,7 @@ open PrettyFormat
 #eval
   let d := nestDoc 2 ("def he" <> (" : " <^> Doc.nl <> ": " ) <> "too tll")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) (computationWidth := 10) d
   out
 
 /-- info: "def he : too tl\n  more" -/
@@ -19,7 +19,7 @@ open PrettyFormat
 #eval
   let d := nestDoc 2 ("def he" <> (" : " <^> Doc.nl <> ": " ) <> "too tl" <> (" " <^> Doc.nl) <> "more")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) (computationWidth := 10) d
   out
 
 
@@ -28,7 +28,7 @@ open PrettyFormat
 #eval
   let d := "a" <> "b"
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) (computationWidth := 100) d
   out
 
 -- Basic minimal choice
@@ -38,7 +38,7 @@ open PrettyFormat
 #eval
   let d := ("short"<^>"longer") <> "b"
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) (computationWidth := 100) d
   out
 
 /-- info: "shortb" -/
@@ -46,7 +46,7 @@ open PrettyFormat
 #eval
   let d := ("longer"<^>"short") <> "b"
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) (computationWidth := 100) d
   out
 
 /-- info: "ashort" -/
@@ -54,7 +54,7 @@ open PrettyFormat
 #eval
   let d := "a" <> ("short" <^> "longer")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) (computationWidth := 100) d
   out
 
 /-- info: "ashort" -/
@@ -62,7 +62,7 @@ open PrettyFormat
 #eval
   let d := "a" <> ("longer" <^> "short")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) (computationWidth := 100) d
   out
 
 /-- info: ":= short" -/
@@ -70,7 +70,7 @@ open PrettyFormat
 #eval
   let d := ((":=" <$$> "") <^> (":=" <_> "")) <> ("longer" <^> "short")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) (computationWidth := 100) d
   out
 
 
@@ -79,7 +79,7 @@ open PrettyFormat
 #eval
   let d := ((":=s" <_> "") <^> (":=n" <$$> "")) <> ("longer" <^> "short")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) (computationWidth := 100) d
   out
 
 /-- info: ":=s after" -/
@@ -87,7 +87,7 @@ open PrettyFormat
 #eval
   let d := (":=s" <_> "after")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) (computationWidth := 100) d
   out
 
 /-- info: ":=s after" -/
@@ -95,7 +95,7 @@ open PrettyFormat
 #eval
   let d := ":=s" <**> "after"
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) (computationWidth := 100) d
   out
 
 /-- info: ":=s\n  after" -/
@@ -103,7 +103,7 @@ open PrettyFormat
 #eval
   let d := nestDoc 2 (":=s" <$$> "after")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) (computationWidth := 100) d
   out
 
 /-- info: ":=s\n  after" -/
@@ -111,7 +111,7 @@ open PrettyFormat
 #eval
   let d := nestDoc 2 ((":=s" <> (provideDoc bridgeImmediate <^> provideDoc bridgeNl)) <> "after")
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) (computationWidth := 100) d
   out
 
 /-- info: ":=safter" -/
@@ -119,7 +119,7 @@ open PrettyFormat
 #eval
   let d := nestDoc 2 ((":=s" <> (provideDoc bridgeImmediate <^> provideDoc bridgeNl)) <> ((Doc.require bridgeImmediate <^> Doc.require bridgeNl) <>"after"))
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 100) (computationWidth := 100) d
   out
 
 
@@ -128,7 +128,7 @@ open PrettyFormat
 #eval
   let d := nestDoc 2 (("five5" <> (provideDoc bridgeImmediate <^> provideDoc bridgeNl)) <> ((Doc.require bridgeImmediate <^> Doc.require bridgeNl) <> "longer" <> (" h"<^> Doc.nl<>"h")))
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) (computationWidth := 10) d
   out
 
 /-- info: "Hello world" -/
@@ -137,7 +137,7 @@ open PrettyFormat
   let d := flattenDoc ("Hello" <**> "world")
   -- dbg_trace s!"({repr d})"
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) (computationWidth := 10) d
   out
 
 /-- info: "Hello:=\n     world" -/
@@ -146,7 +146,7 @@ open PrettyFormat
   let d := ("Hello" <+> (":="<$$>"world"))
   -- dbg_trace s!"({repr d})"
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) (computationWidth := 10) d
   out
 
 /--
@@ -183,13 +183,13 @@ info: ":=2"
     )
 
   let (d, cache) := simpleFormattingContext (do return d)
-  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) d
+  let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) (computationWidth := 10) d
   out
 
 
-#eval Doc.prettyPrintLog DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) ("a"<>(provideDoc bridgeImmediate <^> provideDoc bridgeNl) <>"b")
+#eval Doc.prettyPrintLog DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) (computationWidth := 100) ("a"<>(provideDoc bridgeImmediate <^> provideDoc bridgeNl) <>"b")
 
-#eval Doc.prettyPrintLog DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) (flattenDoc ("a" <> Doc.nl <> "b"))
+#eval Doc.prettyPrintLog DefaultCost (cacheSize := 0) (col := 0) (widthLimit := 100) (computationWidth := 100) (flattenDoc ("a" <> Doc.nl <> "b"))
 
 
 /-- info: "bridgeHardNl" -/
