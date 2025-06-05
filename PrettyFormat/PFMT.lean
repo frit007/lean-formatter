@@ -132,11 +132,9 @@ def MeasureSet.merge [Cost χ] (left right : MeasureSet χ) : MeasureSet χ :=
         .set (mergeSet lhs' rhs')
   | set lhs, _ => .set lhs
   | _, set rhs => .set rhs
-  | tainted lhs true, tainted _ true  => .tainted lhs true
-  | tainted _ true, tainted rhs false  => .tainted rhs false
-  | tainted lhs false, _  => .tainted lhs false
+  | tainted _, tainted _  => left
 
-def possibilitiesToMeasureSet [Cost χ] (possibilities : Bridge) (col indent widthLimit computationWidth: Nat) (text : String) (expect:Bool) : MeasureSet χ := Id.run do
+def possibilitiesToMeasureSet [Cost χ] (possibilities : Bridge) (col indent widthLimit: Nat) (text : String) (expect:Bool) : MeasureSet χ := Id.run do
   let mut options : List (MeasureSet χ) := []
   -- dbg_trace s!"to measureset {possibilities}"
 
@@ -298,23 +296,19 @@ where
               bridgeR := bridgeFlex
             }]
         else
-          possibilitiesToMeasureSet leftBridge col indent widthLimit computationWidth s false
+          possibilitiesToMeasureSet leftBridge col indent widthLimit s false
 
-        if col + computationWidth > 0 then
-          match ms with
-          | .set s =>
-            let s' := s.filter (fun m => m.last < widthLimit)
-            if s'.length > 0 then
-              return .set s'
-            else
-              match s with
-              | head::_ =>
-                return .tainted (TaintedTrunk.value head) (false)
-              | _ => panic ""
-            -- return .set s
-          | _ => panic! ""
-        else
-          return ms
+        match ms with
+        | .set s =>
+          let s' := s.filter (fun m => m.last <= computationWidth)
+          if s'.length > 0 then
+            return .set s'
+          else
+            match s with
+            | head::_ =>
+              return .tainted (TaintedTrunk.value head)
+            | _ => panic! "There should at least be one piece of text in thhe original set"
+        | _ => panic! "There is no way for us to generate a tainted value yet"
     | .newline flattened _ =>
       if flatten.shouldFlattenNl then
         -- TODO: should we learn
@@ -417,7 +411,7 @@ where
         return impossibleMeasureSet "require::leftBridge is missing"
       else
         let possibilities := leftBridge.requireIntersection b
-        return possibilitiesToMeasureSet possibilities col indent widthLimit computationWidth "" true
+        return possibilitiesToMeasureSet possibilities col indent widthLimit "" true
     | .rule _ doc _ =>
       doc.resolve col indent widthLimit computationWidth leftBridge rightBridge flatten
     | .flatten inner _ =>
@@ -446,11 +440,11 @@ where
   -/
   processConcat (left : MeasureSet χ) (right : Doc) (state: TaintedState) (concatId : Nat) (flattenRhs : Flatten) : MeasureResult χ (MeasureSet χ) := do
     match left with
-    | .tainted leftThunk e =>
+    | .tainted leftThunk =>
       -- If the lhs is already tainted we can wrap the computation of the rhs
       -- in a tainted thunk, thus prunning it away.
       -- dbg_trace s!"tainted lb{state.leftBridge} rb{state.rightBridge}"
-      return .tainted (TaintedTrunk.leftTainted leftThunk right state concatId) e
+      return .tainted (TaintedTrunk.leftTainted leftThunk right state concatId)
     | .set lefts =>
        let concatOneWithRight (l : Measure χ) : MeasureResult χ (MeasureSet χ) := do
         -- This is an optimized version of dedup from the paper. We use it to maintain
@@ -468,7 +462,7 @@ where
             dedup rights (currentBest :: result) current
 
         match ← (right.resolve l.last state.indent widthLimit computationWidth l.bridgeR rightBridge flattenRhs) with
-        | .tainted rightThunk e => return .tainted (TaintedTrunk.rightTainted l rightThunk {state with rightBridge := rightBridge} concatId) e
+        | .tainted rightThunk => return .tainted (TaintedTrunk.rightTainted l rightThunk {state with rightBridge := rightBridge} concatId)
         | .set (r :: rights) => return .set (dedup rights [] (l.concat r)) --TODO: dedup probably does not work if there are different bridges.
         | .set [] =>
           dbg_trace "concat::no right solution"
@@ -491,7 +485,7 @@ partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrun
       match result with
       | some r =>
         match r with
-        | .tainted t _ =>
+        | .tainted t =>
           let m ← expandTainted' t
           removeFromCache id state.indent state.col state.leftBridge state.rightBridge state.flatten
           addToCache id state.indent state.col state.leftBridge state.rightBridge state.flatten (.set [m])
@@ -512,7 +506,7 @@ partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrun
     let leftMeasure ← expandTainted left
     let r ← right.resolve leftMeasure.last state.indent state.widthLimit state.computationWidth leftMeasure.bridgeR state.rightBridge state.flatten
     match r with
-    | .tainted t _ => return leftMeasure.concat (← expandTainted t)
+    | .tainted t => return leftMeasure.concat (← expandTainted t)
     | .set (m::_) => return leftMeasure.concat m
     | _ => return impossibleMeasure "tainted::no right solution"
   | .rightTainted left right _ _ => do
@@ -599,7 +593,7 @@ partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimi
       isTainted := false,
       cost := m.cost
     }
-  | .tainted t _ =>
+  | .tainted t =>
     -- dbg_trace "tainted it was tainted..."
     let (m, cache) ← ((expandTainted t)|>.run cache)
     return {

@@ -486,7 +486,7 @@ inductive MeasureSet (χ : Type)
   This list is ordered by the last line length in strict ascending order.
   -/
   | set (s : List (Measure χ))
-  | tainted (tainted: TaintedTrunk χ) (fail:Bool)
+  | tainted (tainted: TaintedTrunk χ)
 
 def impossibleMeasure [Cost χ] (err:String) : Measure χ := {
       last := 0,
@@ -500,14 +500,14 @@ def impossibleMeasureSet [Cost χ] (err:String): MeasureSet χ :=
 
 instance [Cost χ]: Inhabited (MeasureSet χ) where
   -- default := MeasureSet.set []
-  default := MeasureSet.tainted (TaintedTrunk.value (impossibleMeasure "default")) true
+  default := MeasureSet.tainted (TaintedTrunk.value (impossibleMeasure "default"))
 
 instance : Repr (MeasureSet χ) where
   reprPrec
     | MeasureSet.set s, _ =>
       let children := s.foldl (fun (a : List String) x => s!"(rightBridge {x.bridgeR}, last:{x.last})" :: a) []
       s!"MeasureSet.set {s.length} {children}"
-    | MeasureSet.tainted t f, _ =>
+    | MeasureSet.tainted t, _ =>
       "MeasureSet.tainted "
 
 def TaintedTrunk.cacheInfo (trunk : TaintedTrunk χ) : Option (TaintedState × Nat) :=
