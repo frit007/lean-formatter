@@ -314,8 +314,10 @@
           node.rightBridge = node.children[0].rightBridge
           return docNest
         case "align":
-          // return output(node, flatten, {...doc, indent : doc.indent}, leftBridge)
-          throw "align not supported yet"
+          const docAlign = output(node.children[0], flatten, {...doc, indent : doc.indent}, leftBridge)
+          node.rightBridge = node.children[0].rightBridge
+          return docAlign
+          // throw "align not supported yet"
         case "reset":
           const resetDoc = output(node.children[0], flatten, { ...doc, indent: 0 }, leftBridge)
           node.rightBridge = node.children[0].rightBridge
@@ -330,7 +332,6 @@
           return flattenDoc
         case "provide":
           node.rightBridge = provideIntersection(leftBridge, node.raw.value)
-          console.log("update rightbridge!!", node, )
           return { ...doc, rightBridge : node.rightBridge}        
         case "require":
           const remainingBridges = requireIntersection(leftBridge, node.raw.value)

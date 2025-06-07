@@ -17,9 +17,12 @@ At the moment when formatting a folder we expect the toolchain bin to be part of
 
 # Installation
 Add the project as a dependency to your project
+Add dependency on PrettyFormat in toml
 ```
-require LSP from git
-  "https://github.com/username/repo" @ "main"
+[[require]]
+name = "PrettyFormat"
+git = "https://github.com/frit007/lean-formatter"
+rev = "main"
 ```
 
 # LSP formatting

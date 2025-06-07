@@ -76,13 +76,13 @@ partial def printAllIds (stx:Syntax): Nat :=
   | .missing =>
     dbg_trace "missing"
     1
-  | .node (si : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
+  | .node (si : SourceInfo) (_ : SyntaxNodeKind) (args : Array Syntax) =>
     dbg_trace s!"node id {getId si}"
-    args.foldl (fun acc stx => printAllIds stx +1) 0
-  | .atom (si : SourceInfo) (val : String) =>
+    args.foldl (fun _ stx => printAllIds stx +1) 0
+  | .atom (si : SourceInfo) (_ : String) =>
     dbg_trace s!"atom id {getId si}"
     1
-  | .ident  (si : SourceInfo) (rawVal : Substring) name preresolved =>
+  | .ident  (si : SourceInfo) (_ : Substring) _ _ =>
     dbg_trace s!"ident id {getId si}"
     1
 where
@@ -109,9 +109,9 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
   | .newline s m =>
     if s.isSome then
       -- dbg_trace s!"newline
-      cachePPL (.newline s {m with flattenLPath := acceptFlex, flattenRPath := acceptFlex, flattenPath := acceptFlex, eventuallyFlattenPath := acceptFlex, path := acceptFlex}) 0
+      cachePPL (.newline s {m with flattenLPath := acceptFlex, flattenRPath := acceptFlex, flattenPath := acceptFlex, eventuallyFlattenPath := acceptFlex, path := acceptFlex, nlCount := 1}) 0
     else
-      cachePPL (.newline s {m with flattenLPath := acceptFlex, flattenRPath := acceptFlex, flattenPath := #[], eventuallyFlattenPath := acceptFlex, path := acceptFlex}) 0
+      cachePPL (.newline s {m with flattenLPath := acceptFlex, flattenRPath := acceptFlex, flattenPath := #[], eventuallyFlattenPath := acceptFlex, path := acceptFlex, nlCount := 1}) 0
   | .choice originalLeft originalRight m => do
     let left ← expandSyntax r originalLeft
     let right ← expandSyntax r originalRight
@@ -121,7 +121,8 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
       flattenRPath := mergePaths left.meta.flattenRPath right.meta.flattenRPath,
       flattenPath := mergePaths left.meta.flattenPath right.meta.flattenPath,
       eventuallyFlattenPath := mergePaths left.meta.eventuallyFlattenPath right.meta.eventuallyFlattenPath,
-      collapsesBridges := left.meta.collapsesBridges.and right.meta.collapsesBridges
+      collapsesBridges := left.meta.collapsesBridges.and right.meta.collapsesBridges,
+      nlCount := max left.meta.nlCount right.meta.nlCount
     }) (max left.meta.cacheWeight right.meta.cacheWeight)
   | .flatten inner m =>
     let inner ← expandSyntax r inner
@@ -135,6 +136,7 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
       flattenRPath := inner.meta.flattenRPath,
       flattenLPath := inner.meta.flattenLPath,
       flattenPath := inner.meta.flattenPath,
+      nlCount := 0
     }) (inner.meta.cacheWeight)
   | .align inner m =>
     let inner ← expandSyntax r inner
@@ -147,6 +149,7 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
       flattenRPath := inner.meta.flattenRPath,
       flattenLPath := inner.meta.flattenLPath,
       flattenPath := inner.meta.flattenPath,
+      nlCount := inner.meta.nlCount
       }) (inner.meta.cacheWeight)
   | .nest n inner m =>
     let inner ← expandSyntax r inner
@@ -159,6 +162,7 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
       flattenRPath := inner.meta.flattenRPath,
       flattenLPath := inner.meta.flattenLPath,
       flattenPath := inner.meta.flattenPath,
+      nlCount := inner.meta.nlCount,
     }) (inner.meta.cacheWeight)
   | .concat left right m =>
     let left ← expandSyntax r left
@@ -174,6 +178,7 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
     cachePPL (.concat left right { m with
       path := concatPaths left.meta.path right.meta.path,
       flattenPath := flattenedPath,
+      nlCount := left.meta.nlCount + right.meta.nlCount,
       eventuallyFlattenPath :=
         match (left.meta.collapses, right.meta.collapses) with
         | (true, true) => concatPaths left.meta.flattenRPath right.meta.flattenLPath
@@ -214,6 +219,7 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
       flattenRPath := inner.meta.flattenRPath,
       flattenLPath := inner.meta.flattenLPath,
       flattenPath := inner.meta.flattenPath,
+      nlCount := inner.meta.nlCount,
     }) (inner.meta.cacheWeight)
   | .bubbleComment s m =>
     cachePPL (.bubbleComment s {m with
@@ -221,7 +227,8 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
       eventuallyFlattenPath := passthrough,
       flattenRPath := passthrough,
       flattenLPath := passthrough,
-      flattenPath := passthrough
+      flattenPath := passthrough,
+      nlCount := 1
       }) 0
   | .stx stx _ =>
     match getSyntaxId stx with
@@ -242,6 +249,7 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
       -- dbg_trace s!"should not be dead {inner.toString} repr inner: {repr inner}"
     cachePPL (.reset inner { m with
       collapsesBridges := inner.meta.collapsesBridges,
+      nlCount := inner.meta.nlCount,
       path := inner.meta.path,
       eventuallyFlattenPath := inner.meta.eventuallyFlattenPath,
       flattenRPath := inner.meta.flattenRPath,
@@ -256,6 +264,7 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
     cachePPL (.provide b {m with
       path := paths,
       eventuallyFlattenPath := paths,
+      nlCount := if b.overlapsWith bridgeNl then 1 else 0,
       flattenRPath := paths,
       flattenLPath := paths,
       flattenPath := paths.map (fun (lb,rb) => (lb.flatten, rb.flatten))
@@ -268,6 +277,7 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
     ) initial
     cachePPL (.require b {m with
       path := paths,
+      nlCount := if b.overlapsWith bridgeNl then 1 else 0,
       eventuallyFlattenPath := paths,
       flattenRPath := paths,
       flattenLPath := paths,
@@ -276,6 +286,7 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
   | .cost c m =>
     cachePPL (.cost c {m with
       path := passthrough,
+      nlCount := c,
       eventuallyFlattenPath := passthrough,
       flattenRPath := passthrough,
       flattenLPath := passthrough,
@@ -324,8 +335,8 @@ where
       none
 
 -- this functions assumes that there are no Syntax objects in the doc
-def simpleFormattingContext (doc:FormatM Doc) : (Doc × FormatState) :=
-  let (doc, cache) := (finallyExpand doc).run {stxCache := {} ,formattingFunction := fun _ _ _ _ =>
+def simpleFormattingContext (doc:FormatM Doc) (cacheDistance : Nat := 2) : (Doc × FormatState) :=
+  let (doc, cache) := (finallyExpand doc).run {stxCache := {}, cacheDistance ,formattingFunction := fun _ _ _ _ =>
     (toDoc "_", 0, {})}
   (doc, cache)
 where
@@ -450,7 +461,7 @@ def hasNewlineBeforeNonWhitespace (s : String) : Bool :=
   let chars := s.toList
   let rec check : List Char → Bool
     | [] => false
-    | '\n' :: cs => true -- Mark that we've seen a newline
+    | '\n' :: _ => true -- Mark that we've seen a newline
     | c :: cs => if c.isWhitespace then check cs else false
   check chars
 
@@ -653,13 +664,13 @@ private def whitespaceToPPL (str:String):Doc:=
 
 private def getLeading (info:SourceInfo) : String :=
   match info with
-  | .original (leading : Substring) (pos : String.Pos) (trailing : Substring) (endPos : String.Pos) =>
+  | .original (leading : Substring) _ _ _ =>
     leading.toString
   | _ => ""
 
 private def getTrailing (info:SourceInfo) : String :=
   match info with
-  | .original (leading : Substring) (pos : String.Pos) (trailing : Substring) (endPos : String.Pos) =>
+  | .original _ _ (trailing : Substring) _ =>
     trailing.toString
   | _ => ""
 
@@ -668,12 +679,12 @@ private def getTrailing (info:SourceInfo) : String :=
 partial def topLevelUnformatedSyntaxToPPL (stx:Syntax): Doc := Id.run do
   match stx with
   | .missing => return toDoc ""
-  | .node   (info : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
+  | .node   _ _ (args : Array Syntax) =>
     let combined ← args.foldlM (fun acc c => do return acc <> (← topLevelUnformatedSyntaxToPPL c) ) (toDoc "")
     return combined
     -- info.
   | .atom   (info : SourceInfo) (val : String) => return (getLeading info |> whitespaceToPPL) <> toDoc val <> (getTrailing info |> whitespaceToPPL)
-  | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) =>
+  | .ident  (info : SourceInfo) (rawVal : Substring) _ _ =>
     return (getLeading info |> whitespaceToPPL) <> toDoc rawVal.toString <> (getTrailing info |> whitespaceToPPL)
 
 
@@ -707,7 +718,7 @@ where
         none
       else
         some {before := lval, after := rval, trace}
-    | (Syntax.ident  _ (lrawVal : Substring) (lval : Name) _, Syntax.ident  _ (rrawVal : Substring) (rval : Name) _) =>
+    | (Syntax.ident  _ (lrawVal : Substring) _ _, Syntax.ident  _ (rrawVal : Substring) _ _) =>
       if lrawVal == rrawVal then
         none
       else

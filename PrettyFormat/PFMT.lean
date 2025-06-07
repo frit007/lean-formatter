@@ -12,25 +12,47 @@ namespace PrettyFormat
 If `MeasureSet.merge` receives two `MeasureSet.set` we use this operation to combine them
 into a new Pareto front with correct ordering.
 -/
-private def mergeSet [Cost χ] (lhs rhs : List ((Measure χ))) (acc : List (Measure χ) := []) : List (Measure χ) :=
+-- private def mergeSet [Cost χ] (lhs rhs : List ((Measure χ))) (acc : List (Measure χ) := []) : List (Measure χ) :=
+--   match h1:lhs, h2:rhs with
+--   | [], _ => acc.reverse ++ rhs
+--   | _, [] => acc.reverse ++ lhs
+--   | l :: ls, r :: rs =>
+--     if l.bridgeR < r.bridgeR then
+--       mergeSet ls rhs (l :: acc)
+--     else if r.bridgeR < l.bridgeR then
+--       mergeSet lhs rs (r :: acc)
+--     else
+--       if LEB.leq l r then
+--         mergeSet lhs rs acc
+--       else if LEB.leq r l then
+--         mergeSet ls rhs acc
+--       else if l.last > r.last then
+--         mergeSet ls rhs (l :: acc)
+--       else
+--         mergeSet lhs rs (r :: acc)
+-- termination_by lhs.length + rhs.length
+private def mergeSet [Cost χ] (lhs rhs : List ((Measure χ))) : List (Measure χ) :=
   match h1:lhs, h2:rhs with
-  | [], _ => acc.reverse ++ rhs
-  | _, [] => acc.reverse ++ lhs
+  | [], _ => rhs
+  | _, [] => lhs
   | l :: ls, r :: rs =>
     if l.bridgeR < r.bridgeR then
-      mergeSet ls rhs (l :: acc)
+      dbg_trace "there are no bridges"
+      l :: mergeSet ls rhs
     else if r.bridgeR < l.bridgeR then
-      mergeSet lhs rs (r :: acc)
+      dbg_trace "there are no bridges"
+      r :: mergeSet lhs rs
     else
       if LEB.leq l r then
-        mergeSet lhs rs acc
+        mergeSet lhs rs
       else if LEB.leq r l then
-        mergeSet ls rhs acc
+        mergeSet ls rhs
       else if l.last > r.last then
-        mergeSet ls rhs (l :: acc)
+        l :: mergeSet ls rhs
       else
-        mergeSet lhs rs (r :: acc)
+        r :: mergeSet lhs rs
 termination_by lhs.length + rhs.length
+
 
 def enableDebugging := false
 
@@ -130,9 +152,8 @@ def MeasureSet.merge [Cost χ] (left right : MeasureSet χ) : MeasureSet χ :=
         .set (mergeSet lhs' rhs')
       else
         .set (mergeSet lhs' rhs')
-  | set lhs, _ => .set lhs
-  | _, set rhs => .set rhs
-  | tainted _, tainted _  => left
+  | _, .tainted _ => left
+  | .tainted _, _ => right
 
 def possibilitiesToMeasureSet [Cost χ] (possibilities : Bridge) (col indent widthLimit: Nat) (text : String) (expect:Bool) : MeasureSet χ := Id.run do
   let mut options : List (MeasureSet χ) := []
@@ -143,7 +164,7 @@ def possibilitiesToMeasureSet [Cost χ] (possibilities : Bridge) (col indent wid
     options := (MeasureSet.set [{
       last := indent,
       bridgeR := bridgeFlex,
-      cost := Cost.nl + Cost.text widthLimit 0 (text.length + indent)
+      cost := Cost.nl,
       layout := fun ss => text :: "".pushn ' ' indent :: "\n" :: ss
     }])::options
     -- options := Doc.newline " " {collapsesBridges := Ternary.yes, paths := acceptFlex}::options
@@ -196,46 +217,42 @@ def placeComment (indent : Nat) (comment : String) : List String → List String
       whiteSpaceCharacters + indent
   s :: (placeComment newIndentationLevel comment xs)
 
-def foundSolutions [Cost χ] (indent col: Nat) (leftBridge rightBridge : Bridge) (flatten : Flatten) : List (Cache χ) → Option (Cache χ)
-  | c::rest =>
-    if (c.leftBridge.subsetOf leftBridge && c.rightBridge.subsetOf rightBridge && c.flatten = flatten && c.column == col && c.indent == indent ) then
-      some c
-    else
-      foundSolutions indent col leftBridge rightBridge flatten rest
-   | [] => none
+-- def foundSolutions [Cost χ] (indent col: Nat) (leftBridge rightBridge : Bridge) (flatten : Flatten) : List (Cache χ) → Option (Cache χ)
+--   | c::rest =>
+--     if (c.leftBridge.subsetOf leftBridge && c.rightBridge.subsetOf rightBridge && c.flatten = flatten && c.column == col && c.indent == indent ) then
+--       some c
+--     else
+--       foundSolutions indent col leftBridge rightBridge flatten rest
+--    | [] => none
+
+
+def cacheKey (id indent col: Nat) (leftBridge rightBridge : Bridge) (flatten : Flatten) : (UInt64 × UInt64) :=
+  -- assume that indent and col are max 16 bits
+  let indentAndCol := (indent.toUInt64) ||| (col.toUInt64 <<< 16)
+  -- assume that there are max 2^32 ids
+  let idAndIndentAndCol := id.toUInt64 ||| (indentAndCol <<< 32)
+  -- for now there are fewer than 16 bridges flatten only needs 5 values
+  let bridgesAndFlatten := leftBridge.toUInt64 ||| (rightBridge.toUInt64 <<< 16) ||| (flatten.toInt.toUInt64 <<< 32)
+  -- Funny story: the runtime changes from ~21 seconds to ~110 seconds if return idAndIndentAndCol instead of the tuple
+  -- In the benchmark SExpRandom.lean --size 4 --page-width 80 --computation-width (https://github.com/frit007/pretty-expressive-tests)
+  --   Note: that this benchmark does not depend on bridges, or flatten and they reach the same conclusion
+  -- There might be an optimation that assumes scalar numbers are small
+  (idAndIndentAndCol, bridgesAndFlatten)
 
 def getCached [Cost χ] (id indent col: Nat) (leftBridge rightBridge : Bridge) (flatten : Flatten): MeasureResult χ (Option (MeasureSet χ)) := do
   let cacheStore ← get
-  match cacheStore.content.get? id with
-  | some bucket =>
-    match foundSolutions indent col leftBridge rightBridge flatten bucket with
-    | some c => return some c.results
-    | none   => return none
-  | none => return none
-where
-  combineResults [Cost χ] : List (Cache χ) → (MeasureSet χ)
-  | x :: [] => x.results
-  | x :: xs => ((combineResults xs).merge x.results)
-  | [] =>
-    .set []
-  -- TODO: if the leftside of the cached bridge is contains the entire searched for leftBridge then we can limit the search of the rightBridge.
-
+  return cacheStore.content.get? (cacheKey id indent col leftBridge rightBridge flatten)
 
 def addToCache [Cost χ] (id indent column: Nat) (leftBridges rightBridges : Bridge) (flatten : Flatten) (results:MeasureSet χ): MeasureResult χ Unit := do
   modify (fun cacheStore =>
-    let updatedCache := cacheStore.content.modify id (fun caches =>
-      {leftBridge:=leftBridges, rightBridge := rightBridges, indent := indent, column := column, results := results, flatten := flatten}::caches
-    )
-    {cacheStore with content := updatedCache}
+    {cacheStore with content := cacheStore.content.insert (cacheKey id indent column leftBridges rightBridges flatten) results}
   )
 
 def removeFromCache [Cost χ] (id indent column: Nat) (leftBridges rightBridges : Bridge) (flatten : Flatten): MeasureResult χ Unit := do
   modify (fun cacheStore =>
-    let updatedCache := cacheStore.content.modify id (fun caches =>
-      caches.filter (fun c => !(c.leftBridge != leftBridges && c.rightBridge == rightBridges && c.flatten == flatten && c.indent = indent && c.column == column))
-    )
-    {cacheStore with content := updatedCache}
+    {cacheStore with content := cacheStore.content.erase (cacheKey id indent column leftBridges rightBridges flatten)}
   )
+
 
 def MeasureSet.size [Cost χ] : (MeasureSet χ) → Nat
 | set x => x.length
@@ -250,34 +267,25 @@ leftBridge: the bridges before this document, these limit the types of documents
 rightBridge: the bridges after this document, these are the bridges that will be followed by leafNodes, they are created by provideR
 -/
 partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (col indent widthLimit computationWidth : Nat) (leftBridge rightBridge: Bridge) (flatten : Flatten) : MeasureResult χ (MeasureSet χ) := do
-  -- dbg_trace s!"doc : lb {leftBridge} rb {rightBridge} kind {doc.kind} flatten: {repr flatten}"
-  -- if (← get).giveUp == 0 then
-  --   -- let
-  --   return impossibleMeasureSet trace
-  -- modify (fun cacheStore =>
-  --   {cacheStore with giveUp := cacheStore.giveUp - 1}
-  -- )
-    if enableDebugging then
-      dbg_trace s!"doc : lb {leftBridge} rb {rightBridge} kind {doc.kind} flatten: {repr flatten} :::: {doc.toString} path:({doc.meta.findPath flatten})"
-    if doc.meta.shouldBeCached then
-      match ← getCached doc.meta.id indent col leftBridge rightBridge flatten with
-      | some x =>
-        return x
-      | _ =>
-        let value ← core doc col indent widthLimit
-        addToCache doc.meta.id indent col leftBridge rightBridge flatten value
-        return value
-    else
-      core doc col indent widthLimit
-
-
+  if enableDebugging then
+    dbg_trace s!"doc : lb {leftBridge} rb {rightBridge} kind {doc.kind} flatten: {repr flatten} :::: {doc.toString} path:({doc.meta.findPath flatten})"
+  if doc.meta.shouldBeCached then
+    match ← getCached doc.meta.id indent col leftBridge rightBridge flatten with
+    | some x =>
+      return x
+    | _ =>
+      let value ← core doc
+      addToCache doc.meta.id indent col leftBridge rightBridge flatten value
+      return value
+  else
+    core doc
 where
   /-
   The core resolver that actually computes the `MeasureSet`s that result from rendering `doc`
   in the given context.
   -/
-  core (ppl : Doc) (col indent widthLimit : Nat) : MeasureResult χ (MeasureSet χ) := do
-    match ppl with
+  core (doc : Doc)  : MeasureResult χ (MeasureSet χ) := do
+    match doc with
     | .text s _ =>
       if s.length == 0 then
 
@@ -327,7 +335,7 @@ where
         if leftBridge == bridgeFlex || leftBridge.overlapsWith bridgeAny then
           leafSet {
             last := indent,
-            cost := Cost.nl + Cost.text widthLimit 0 indent,
+            cost := Cost.nl,
             layout := fun ss =>  "".pushn ' ' indent :: "\n" :: ss,
             bridgeR := bridgeFlex
           }
@@ -384,7 +392,10 @@ where
       | (true, true) =>
         let left ← (lhs.resolve col indent widthLimit computationWidth leftBridge rightBridge flatten)
         let right ← (rhs.resolve col indent widthLimit computationWidth leftBridge rightBridge flatten)
-        return left.merge right
+        if rhs.meta.nlCount < lhs.meta.nlCount then
+          return left.merge right
+        else
+          return right.merge left
       | (true, false) =>
         lhs.resolve col indent widthLimit computationWidth leftBridge rightBridge flatten
       | _ =>
@@ -446,7 +457,7 @@ where
       -- dbg_trace s!"tainted lb{state.leftBridge} rb{state.rightBridge}"
       return .tainted (TaintedTrunk.leftTainted leftThunk right state concatId)
     | .set lefts =>
-       let concatOneWithRight (l : Measure χ) : MeasureResult χ (MeasureSet χ) := do
+      let concatOneWithRight (l : Measure χ) : MeasureResult χ (MeasureSet χ) := do
         -- This is an optimized version of dedup from the paper. We use it to maintain
         -- the Pareto front invariant.
         -- TODO: is it faster to not declare the function every time?
@@ -455,27 +466,26 @@ where
           | [] => List.reverse (currentBest :: result)
           | r :: rights =>
             let current := l.concat r
-
             if LEB.leq current.cost currentBest.cost then
-            dedup rights result current
+              dedup rights result current
             else
-            dedup rights (currentBest :: result) current
+              dedup rights (currentBest :: result) current
 
         match ← (right.resolve l.last state.indent widthLimit computationWidth l.bridgeR rightBridge flattenRhs) with
         | .tainted rightThunk => return .tainted (TaintedTrunk.rightTainted l rightThunk {state with rightBridge := rightBridge} concatId)
-        | .set (r :: rights) => return .set (dedup rights [] (l.concat r)) --TODO: dedup probably does not work if there are different bridges.
+        | .set (r :: rights) => return .set (dedup rights [] (l.concat r))
         | .set [] =>
           dbg_trace "concat::no right solution"
           return impossibleMeasureSet "concat::no right solution"
 
-       let rec concatAllWithRight  : List (Measure χ) →  MeasureResult χ (MeasureSet χ)
+      let rec concatAllWithRight  : List (Measure χ) →  MeasureResult χ (MeasureSet χ)
          | [] =>
             dbg_trace "concat::no left solution"
            return impossibleMeasureSet "concat::no left solution"
          | [l] => concatOneWithRight l
 
-         | l :: ls => do return MeasureSet.merge (← concatOneWithRight l) (← concatAllWithRight ls)
-       concatAllWithRight lefts
+         | l :: ls => do return (← concatOneWithRight l).merge (← concatAllWithRight ls)
+      concatAllWithRight lefts
 
 partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrunk χ): MeasureResult χ (Measure χ) := do
   match trunk.cacheInfo with
@@ -565,7 +575,6 @@ def Doc.findErr (d : Doc) (path : String) (errs : Std.HashMap String Nat) : (Std
 Find an optimal layout for a document and render it.
 -/
 partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat) (log : Option (List String)): IO (PrintResult χ) := do
-  -- let (preferredGroups, cache) := ((doc.resolve (χ := χ) [] col 0 widthLimit bridgeFlex bridgeFlex false false).run (initCache cacheSize log)).run
   if (doc.meta.findPath Flatten.notFlattened).size == 0 then
     dbg_trace s!"WARNING: document does not contain a solution"
     IO.FS.writeFile ("doc_print.json") (s!"{doc.toJSON}")
@@ -574,10 +583,13 @@ partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimi
     -- dbg_trace s!"WARNING: {repr errs}"
     -- dbg_trace s!"WARNING: {printOrder doc}"
   let (preferredGroups, cache) ← ((doc.resolve (χ := χ) col 0 widthLimit computationWidth bridgeFlex bridgeEnding Flatten.notFlattened).run (initCache cacheSize log))
+  -- dbg_trace s!"how many ids? {cache.content.size}"
 
+  -- for c in cache.content do
+  --   if c.length > 0 then
+  --     dbg_trace s!"length {c.length}"
   match preferredGroups with
   | .set ([]) =>
-    -- dbg_trace "it was empty set"
     return {
       log := cache.log,
       layout := "No solution found",
@@ -585,11 +597,11 @@ partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimi
       cost := Cost.text 0 0 0
     }
   | .set (ms) =>
+
     let m := (removeEndingBridges ms).head!
-    -- dbg_trace "taken first response, ignored{ms.length}"
     return {
       log := cache.log,
-      layout := String.join (m.layout []).reverse, -- omg don't do String.join
+      layout := String.join (m.layout []).reverse,
       isTainted := false,
       cost := m.cost
     }
@@ -608,7 +620,8 @@ where
     ms.foldl (fun acc m => mergeSet acc [{m with bridgeR := bridgeFlex}]) []
   initCache (n:Nat) (log : Option (List String)): CacheStore χ :=
     -- allocate twice the space needed, so flatten is separated into its own category
-    {size := n, content := Array.mkArray (n*2) [], log := log, giveUp := 1000, lastMeasurement := 0}
+    -- {size := n, content := Array.mkArray (n*2) [], log := log, giveUp := 1000, lastMeasurement := 0}
+    {size := n, content := {}, log := log, giveUp := 1000, lastMeasurement := 0}
 
 /--
 Find an optimal layout for a document and render it.

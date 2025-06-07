@@ -35,7 +35,7 @@ namespace PrettyFormat
       | .Unknown => "unknown"
 
   instance : Repr FormatError where
-    reprPrec b n :=
+    reprPrec b _ :=
       match b with
       | .NotHandled name stx => s!"Not handled {name} {repr stx}"
       | .NoFormatter stx => s!"NoFormatter {repr stx}"
@@ -149,7 +149,7 @@ namespace PrettyFormat
   abbrev FormatM a := (StateM FormatState) a
   abbrev RuleM a := ExceptT FormatError FormatM a
   abbrev RuleRec := (Syntax → FormatM Doc)
-  
+
   abbrev Rule := Array Syntax → RuleM Doc
 
   abbrev Formatter := (Name → Option Rule)

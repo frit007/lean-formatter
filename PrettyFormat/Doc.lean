@@ -23,12 +23,19 @@ def Flatten.shouldFlattenNl (f : Flatten) : Bool :=
 def Flatten.isFlat (f : Flatten) : Bool :=
   f == flattened
 
+def Flatten.toInt : Flatten → UInt8
+| notFlattened => 0
+| flattenLeft => 1
+| flattenRight => 2
+| flattenEventually => 3
+| flattened => 4
+
 def Flatten.startFlatten : Flatten → Flatten
 | notFlattened => flattenEventually
 | f => f
 
 
-abbrev Bridge := UInt32
+abbrev Bridge := UInt8
 
 
 def bridgeNull :Bridge := 0
@@ -171,13 +178,15 @@ like LE but for `Bool`, due to my lack of knowledge regarding proofs
 class LEB (α : Type) where
   leq : α → α → Bool
 
+class NlCnt (α : Type) where
+  nlCnt : α → Nat
 
 /--
 This typeclass allows us to calculate the cost of a `Doc`. We use it to find
 the prettier document in `Doc.choice`. A valid `Cost` instance must satisfy
 the laws defined in `LawfulCost`.
 -/
-class Cost (χ : Type) extends LEB χ, Add χ, Repr χ, Inhabited χ where
+class Cost (χ : Type) extends LEB χ, Add χ, Repr χ, Inhabited χ, NlCnt χ where
   /--
   Compute the cost of a `String` of length `length`, rendered at `col` with a certain
   `widhLimit`.
@@ -204,13 +213,18 @@ instance : Add DefaultCost where
 def DefaultCost.le (lhs rhs : DefaultCost) : Bool :=
   if lhs.widthCost == rhs.widthCost then lhs.lineCost ≤ rhs.lineCost else lhs.widthCost < rhs.widthCost
 
+instance : NlCnt DefaultCost where
+  nlCnt x := x.lineCost
+
 instance : LEB DefaultCost where
   leq lhs rhs := DefaultCost.le lhs rhs
 
-def DefaultCost.text (widthLimit : Nat) (col : Nat) (length : Nat) : DefaultCost :=
-  if col + length > widthLimit then
-    let a := max widthLimit col - widthLimit
-    let b := col + length - max widthLimit col
+def DefaultCost.text (pageWidth : Nat) (col : Nat) (length : Nat) : DefaultCost :=
+  let stop := col + length
+  if stop > pageWidth then
+    let maxwc := max pageWidth col
+    let a := maxwc - pageWidth
+    let b := stop - maxwc
     { widthCost := b * (2 * a + b), lineCost := 0 }
   else
     { widthCost := 0, lineCost := 0 }
@@ -266,6 +280,7 @@ structure DocMeta where
   wants to allow to allow the newline before the flatten operation (remember that the bridge is evaluated when we reach the "return 1" text)
   -/
   collapsesBridges : Ternary := Ternary.yes
+  nlCount : Nat := 0
 
   path : Path := #[]
   flattenPath : Path := #[]
@@ -342,7 +357,7 @@ Reset the indentation level to 0.
 -/
 | reset (doc : Doc) (meta : DocMeta := {})
 /--
-The special spacing options are
+The special baidge options are
 - `space` which is a single space
 - `nl` which is a newline, which is converted to a `space` in `flatten`
 - `hardNl` which is a newline, which is removed when flattened `flatten`
@@ -429,13 +444,6 @@ structure Measure (χ : Type) where
   fail: Bool := false
 deriving Inhabited
 
--- def groupBySpacingR [BEq χ] [Hashable χ] (measures : List (Measure χ)) : Std.HashMap (Bridge) (List (Measure χ)) :=
---   measures.foldl
---     (fun acc m =>
---       acc.insert key (m :: (acc.getD key []))
---     )
---     HashMap.empty
-
 instance [Cost χ] : LEB (Measure χ) where
   leq lhs rhs :=
     (lhs.fail && !rhs.fail) || (lhs.last ≤ rhs.last && LEB.leq lhs.cost rhs.cost)
@@ -507,7 +515,7 @@ instance : Repr (MeasureSet χ) where
     | MeasureSet.set s, _ =>
       let children := s.foldl (fun (a : List String) x => s!"(rightBridge {x.bridgeR}, last:{x.last})" :: a) []
       s!"MeasureSet.set {s.length} {children}"
-    | MeasureSet.tainted t, _ =>
+    | MeasureSet.tainted _, _ =>
       "MeasureSet.tainted "
 
 def TaintedTrunk.cacheInfo (trunk : TaintedTrunk χ) : Option (TaintedState × Nat) :=
@@ -543,7 +551,9 @@ structure CacheStore (χ : Type) where
   giveUp : Nat -- give up if we reach zero
   lastMeasurement : Nat -- the last time we took a measurement
   size:Nat
-  content : Array (List (Cache χ))
+  -- content : Array (List (Cache χ))
+  content : Std.HashMap (UInt64 × UInt64) (MeasureSet χ)
+  -- content : Std.HashMap (Nat × Nat × Nat) (MeasureSet χ)
 
 abbrev MeasureResult χ := StateT (CacheStore χ) IO
 
@@ -898,7 +908,7 @@ def Doc.printDependencies (d : Doc) : String := Id.run do
 
 
 def verifyChoiceInvariant (path:String): Doc → List String
-  | .text s _=> []
+  | .text _ _=> []
   | .newline _ _=> []
   | .choice left right m =>
     let l := verifyChoiceInvariant (s!"{path}/choice") left
@@ -915,7 +925,7 @@ def verifyChoiceInvariant (path:String): Doc → List String
     let l := verifyChoiceInvariant (s!"{path}/concat") left
     let r := verifyChoiceInvariant (s!"{path}/concat") right
     l.append r
-  | .stx s _=> []
+  | .stx _ _=> []
   | .reset inner _=> verifyChoiceInvariant (s!"{path}/reset") inner
   | .rule _ inner _=> verifyChoiceInvariant (s!"{path}/rule") inner
   | .provide _ _=> []
