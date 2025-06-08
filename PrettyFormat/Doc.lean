@@ -284,10 +284,6 @@ instance [Cost χ] : LEB (Measure χ) where
   leq lhs rhs :=
     (lhs.fail && !rhs.fail) || (lhs.last ≤ rhs.last && LEB.leq lhs.cost rhs.cost)
 
-
-def bridgeIntersection (set1 set2 : Bridge): Bridge :=
-  set1 &&& set2
-
 /--
 Lifting `Doc.concat` to `Measure`.
 -/

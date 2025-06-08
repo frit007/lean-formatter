@@ -2,7 +2,7 @@ import Bridge
 
 namespace PrettyFormat
 
-def passthrough : Array (Bridge × Bridge) :=
+@[inline] def passthrough : Array (Bridge × Bridge) :=
   -- meta constructs like cost, bubblecomment and text "", do not affect bridges
   #[
     (bridgeFlex, bridgeFlex),
@@ -13,7 +13,7 @@ def passthrough : Array (Bridge × Bridge) :=
     (bridgeImmediate, bridgeImmediate)
   ]
 
-partial def mergeConstraints (lhs rhs: Array (Bridge × Bridge)): (Array (Bridge × Bridge)) :=
+@[inline] partial def mergeConstraints (lhs rhs: Array (Bridge × Bridge)): (Array (Bridge × Bridge)) :=
   mergeConstraints' lhs rhs #[] 0 0
 where mergeConstraints' (lhs rhs merged: Array (Bridge × Bridge)) (li ri : Nat): (Array (Bridge × Bridge)) :=
   if li < lhs.size && ri < rhs.size then
@@ -32,7 +32,7 @@ where mergeConstraints' (lhs rhs merged: Array (Bridge × Bridge)) (li ri : Nat)
   else
     merged
 
-def concatPaths (lhs rhs : Array (Bridge × Bridge)) : Array (Bridge × Bridge) :=
+@[inline] def concatPaths (lhs rhs : Array (Bridge × Bridge)) : Array (Bridge × Bridge) :=
   lhs.foldl (fun acc (ll, lr) =>
     let leadsTo :Bridge := rhs.foldl (fun acc (rl, rr) =>
       if rl.overlapsWith lr then
@@ -72,11 +72,11 @@ Delay a provide statement until it is needed.
 | complex (c : Array (Bridge × Bridge))
 deriving Inhabited, Repr
 
-def acceptFlex : Constraint :=
+@[inline] def acceptFlex : Constraint :=
   Constraint.uniform (bridgeFlex|||bridgeAny|||bridgeNone) (bridgeFlex ||| bridgeSpace ||| bridgeNl)
 
 
-def Constraint.toComplex : Constraint → Array (Bridge × Bridge)
+@[inline] def Constraint.toComplex : Constraint → Array (Bridge × Bridge)
 | .uniform left right =>
   left.parts.foldl (fun acc b' =>
     acc.push (b',right)
@@ -92,7 +92,7 @@ def Constraint.toComplex : Constraint → Array (Bridge × Bridge)
 | complex c => c
 
 
-def Constraint.simplify (a:Array (Bridge × Bridge)) : Constraint :=
+@[inline] def Constraint.simplify (a:Array (Bridge × Bridge)) : Constraint :=
   match a with
   | #[] => Constraint.impossible
   | #[(l,r)] => Constraint.uniform l r
@@ -111,7 +111,7 @@ where
 
 -- We need to satisfy the following property
 -- (union a b).toComplex <=> (union a.toComplex b.toComplex).toComplex
-def Constraint.union (lhs rhs : Constraint): Constraint :=
+@[inline] def Constraint.union (lhs rhs : Constraint): Constraint :=
   match (lhs, rhs) with
   | (.impossible, _) => rhs
   | (_, .impossible) => lhs
@@ -145,7 +145,7 @@ def Constraint.concat (lhs rhs : Constraint) : Constraint :=
     let paths :=concatPaths lhs.toComplex rhs.toComplex
     Constraint.simplify paths
 
-def Constraint.restrictBridge (constraint : Constraint) (target : Bridge) : Bridge :=
+@[inline] def Constraint.restrictBridge (constraint : Constraint) (target : Bridge) : Bridge :=
   match constraint with
   | .impossible => bridgeNull
   | .passthrough => target
@@ -158,7 +158,7 @@ def Constraint.restrictBridge (constraint : Constraint) (target : Bridge) : Brid
     let newRight := constraint.toComplex.foldl (fun acc (rl, rr) => if rr.overlapsWith target then rl ||| acc else acc) bridgeNull
     newRight
 
-def Constraint.overlapsWidth (constraint:Constraint) (leftBridge rightBridge:Bridge) : Bool :=
+@[inline] def Constraint.overlapsWidth (constraint:Constraint) (leftBridge rightBridge:Bridge) : Bool :=
   match constraint with
   | .impossible => false
   | .passthrough => leftBridge.overlapsWith leftBridge
@@ -167,7 +167,7 @@ def Constraint.overlapsWidth (constraint:Constraint) (leftBridge rightBridge:Bri
   | _ =>
     constraint.toComplex.any (fun (l, r) => l.overlapsWith leftBridge && r.overlapsWith rightBridge)
 
-def concatFlatten (flatten : Flatten) (leftIsNotEmpty rightIsNotEmpty : Bool) : (Flatten × Flatten) :=
+@[inline] def concatFlatten (flatten : Flatten) (leftIsNotEmpty rightIsNotEmpty : Bool) : (Flatten × Flatten) :=
     match (flatten, leftIsNotEmpty, rightIsNotEmpty) with
     | (Flatten.flattened, _, _) =>
       (flatten, flatten)
