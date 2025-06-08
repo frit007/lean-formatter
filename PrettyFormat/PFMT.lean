@@ -12,47 +12,25 @@ namespace PrettyFormat
 If `MeasureSet.merge` receives two `MeasureSet.set` we use this operation to combine them
 into a new Pareto front with correct ordering.
 -/
--- private def mergeSet [Cost χ] (lhs rhs : List ((Measure χ))) (acc : List (Measure χ) := []) : List (Measure χ) :=
---   match h1:lhs, h2:rhs with
---   | [], _ => acc.reverse ++ rhs
---   | _, [] => acc.reverse ++ lhs
---   | l :: ls, r :: rs =>
---     if l.bridgeR < r.bridgeR then
---       mergeSet ls rhs (l :: acc)
---     else if r.bridgeR < l.bridgeR then
---       mergeSet lhs rs (r :: acc)
---     else
---       if LEB.leq l r then
---         mergeSet lhs rs acc
---       else if LEB.leq r l then
---         mergeSet ls rhs acc
---       else if l.last > r.last then
---         mergeSet ls rhs (l :: acc)
---       else
---         mergeSet lhs rs (r :: acc)
--- termination_by lhs.length + rhs.length
-private def mergeSet [Cost χ] (lhs rhs : List ((Measure χ))) : List (Measure χ) :=
+private def mergeSet [Cost χ] (lhs rhs : List ((Measure χ))) (acc : List (Measure χ) := []) : List (Measure χ) :=
   match h1:lhs, h2:rhs with
-  | [], _ => rhs
-  | _, [] => lhs
+  | [], _ => acc.reverse ++ rhs
+  | _, [] => acc.reverse ++ lhs
   | l :: ls, r :: rs =>
     if l.bridgeR < r.bridgeR then
-      dbg_trace "there are no bridges"
-      l :: mergeSet ls rhs
+      mergeSet ls rhs (l :: acc)
     else if r.bridgeR < l.bridgeR then
-      dbg_trace "there are no bridges"
-      r :: mergeSet lhs rs
+      mergeSet lhs rs (r :: acc)
     else
       if LEB.leq l r then
-        mergeSet lhs rs
+        mergeSet lhs rs acc
       else if LEB.leq r l then
-        mergeSet ls rhs
+        mergeSet ls rhs acc
       else if l.last > r.last then
-        l :: mergeSet ls rhs
+        mergeSet ls rhs (l :: acc)
       else
-        r :: mergeSet lhs rs
+        mergeSet lhs rs (r :: acc)
 termination_by lhs.length + rhs.length
-
 
 def enableDebugging := false
 
@@ -67,65 +45,6 @@ def FlattenStateM.genId : FlattenStateM Nat := do
   let state ← get
   let _ ← set {state with nextId := state.nextId + 1}
   return state.nextId
-
-def passthrough : Array (Bridge × Bridge) :=
-  -- meta constructs like cost, bubblecomment and text "", do not affect bridges
-  #[
-    (bridgeFlex, bridgeFlex),
-    (bridgeSpaceNl, bridgeSpaceNl),
-    (bridgeHardNl, bridgeHardNl),
-    (bridgeSpace, bridgeSpace),
-    (bridgeNone, bridgeNone),
-    (bridgeImmediate, bridgeImmediate)
-  ]
-
-def acceptFlex : Array (Bridge × Bridge) :=
-  #[
-    (bridgeFlex, bridgeFlex ||| bridgeSpace ||| bridgeNl),
-    (bridgeSpaceNl, bridgeFlex ||| bridgeSpace ||| bridgeNl),
-    (bridgeHardNl, bridgeFlex ||| bridgeSpace ||| bridgeNl),
-    (bridgeSpace, bridgeFlex ||| bridgeSpace ||| bridgeNl),
-    (bridgeNone, bridgeFlex ||| bridgeSpace ||| bridgeNl)
-  ]
-
---   return merged
-partial def mergePaths (lhs rhs: Array (Bridge × Bridge)): (Array (Bridge × Bridge)) :=
-  mergePaths' lhs rhs #[] 0 0
-where mergePaths' (lhs rhs merged: Array (Bridge × Bridge)) (li ri : Nat): (Array (Bridge × Bridge)) :=
-  if li < lhs.size && ri < rhs.size then
-    let lb := lhs[li]!
-    let rb := rhs[ri]!
-    if lb.fst < rb.fst then
-      mergePaths' lhs rhs (merged.push (lb)) (li + 1) ri
-    else if rb.fst < lb.fst then
-      mergePaths' lhs rhs (merged.push (rb)) li (ri + 1)
-    else
-      mergePaths' lhs rhs (merged.push (rb.fst, rb.snd ||| lb.snd)) (li + 1) (ri + 1)
-  else if li < lhs.size then
-    mergePaths' lhs rhs (merged.push (lhs[li]!)) (li + 1) ri
-  else if ri < rhs.size then
-    mergePaths' lhs rhs (merged.push (rhs[ri]!)) li (ri + 1)
-  else
-    merged
-
-
-def concatPaths (lhs rhs : Array (Bridge × Bridge)) : Array (Bridge × Bridge) :=
-  lhs.foldl (fun acc (ll, lr) =>
-    let leadsTo :Bridge := rhs.foldl (fun acc (rl, rr) =>
-      if rl.overlapsWith lr then
-        -- since we are iterating through the array based on the left side, the array remains sorted
-        acc ||| rr
-      else
-        acc
-    ) bridgeNull
-
-    if leadsTo != bridgeNull then
-      acc.push (ll, leadsTo)
-    else
-      acc
-  ) #[]
-
-
 
 def leafSet [Inhabited χ] [Cost χ] (m : Measure χ): MeasureResult χ (MeasureSet χ) :=
   return .set [m]
@@ -157,17 +76,15 @@ def MeasureSet.merge [Cost χ] (left right : MeasureSet χ) : MeasureSet χ :=
 
 def possibilitiesToMeasureSet [Cost χ] (possibilities : Bridge) (col indent widthLimit: Nat) (text : String) (expect:Bool) : MeasureSet χ := Id.run do
   let mut options : List (MeasureSet χ) := []
-  -- dbg_trace s!"to measureset {possibilities}"
 
   if possibilities.overlapsWith bridgeNl then
-    -- dbg_trace s!"huh newline?"
     options := (MeasureSet.set [{
       last := indent,
       bridgeR := bridgeFlex,
       cost := Cost.nl,
       layout := fun ss => text :: "".pushn ' ' indent :: "\n" :: ss
     }])::options
-    -- options := Doc.newline " " {collapsesBridges := Ternary.yes, paths := acceptFlex}::options
+
   -- In any other case we we let the child handle the separation
   if possibilities.overlapsWith bridgeSpace then
     options := (MeasureSet.set [{
@@ -178,7 +95,7 @@ def possibilitiesToMeasureSet [Cost χ] (possibilities : Bridge) (col indent wid
     }])::options
 
   -- anything other than space or newline get shortened to nothing
-  if expect then -- TODO:
+  if expect then
     -- To accept an immediate bridge you must expect it, to avoid accidental immediate bridges
     if (possibilities.erase (bridgeSpace ||| bridgeNl)) != 0 then
       options := (MeasureSet.set [{
@@ -203,11 +120,10 @@ def possibilitiesToMeasureSet [Cost χ] (possibilities : Bridge) (col indent wid
 
 
 def placeComment (indent : Nat) (comment : String) : List String → List String
--- | a => (placeCommentReverse indent comment a.reverse).reverse
 | []        => ["\n", comment, "".pushn ' ' indent]
 | "\n" :: xs => "\n" :: comment :: "".pushn ' ' indent :: "\n" :: xs
 | s :: xs    =>
-  -- reconstruct the indentation level
+  -- reconstruct the indentation level so we can match it
   let remainingCharacters := s.trimLeft.length
   let whiteSpaceCharacters := s.length - remainingCharacters
   let newIndentationLevel :=
@@ -217,15 +133,8 @@ def placeComment (indent : Nat) (comment : String) : List String → List String
       whiteSpaceCharacters + indent
   s :: (placeComment newIndentationLevel comment xs)
 
--- def foundSolutions [Cost χ] (indent col: Nat) (leftBridge rightBridge : Bridge) (flatten : Flatten) : List (Cache χ) → Option (Cache χ)
---   | c::rest =>
---     if (c.leftBridge.subsetOf leftBridge && c.rightBridge.subsetOf rightBridge && c.flatten = flatten && c.column == col && c.indent == indent ) then
---       some c
---     else
---       foundSolutions indent col leftBridge rightBridge flatten rest
---    | [] => none
 
-
+@[inline]
 def cacheKey (id indent col: Nat) (leftBridge rightBridge : Bridge) (flatten : Flatten) : (UInt64 × UInt64) :=
   -- assume that indent and col are max 16 bits
   let indentAndCol := (indent.toUInt64) ||| (col.toUInt64 <<< 16)
@@ -234,8 +143,8 @@ def cacheKey (id indent col: Nat) (leftBridge rightBridge : Bridge) (flatten : F
   -- for now there are fewer than 16 bridges flatten only needs 5 values
   let bridgesAndFlatten := leftBridge.toUInt64 ||| (rightBridge.toUInt64 <<< 16) ||| (flatten.toInt.toUInt64 <<< 32)
   -- Funny story: the runtime changes from ~21 seconds to ~110 seconds if return idAndIndentAndCol instead of the tuple
-  -- In the benchmark SExpRandom.lean --size 4 --page-width 80 --computation-width (https://github.com/frit007/pretty-expressive-tests)
-  --   Note: that this benchmark does not depend on bridges, or flatten and they reach the same conclusion
+  -- In the benchmark SExpRandom.lean --size 4 --page-width 80 --computation-width 1000 (https://github.com/frit007/pretty-expressive-tests)
+  --   Note: that this benchmark does not depend on bridges, or flatten and they reach the same result
   -- There might be an optimation that assumes scalar numbers are small
   (idAndIndentAndCol, bridgesAndFlatten)
 
@@ -268,7 +177,7 @@ rightBridge: the bridges after this document, these are the bridges that will be
 -/
 partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (col indent widthLimit computationWidth : Nat) (leftBridge rightBridge: Bridge) (flatten : Flatten) : MeasureResult χ (MeasureSet χ) := do
   if enableDebugging then
-    dbg_trace s!"doc : lb {leftBridge} rb {rightBridge} kind {doc.kind} flatten: {repr flatten} :::: {doc.toString} path:({doc.meta.findPath flatten})"
+    dbg_trace s!"doc : lb {leftBridge} rb {rightBridge} kind {doc.kind} flatten: {repr flatten} :::: {doc.toString} path:({doc.meta.findPath flatten |> repr})"
   if doc.meta.shouldBeCached then
     match ← getCached doc.meta.id indent col leftBridge rightBridge flatten with
     | some x =>
@@ -344,45 +253,21 @@ where
           return impossibleMeasureSet s!"nl:: no overlap with {leftBridge}"
     | .concat lhs rhs m =>
       -- measureDiff "before calc concat"
-
-      let (flattenLhs, flattenRhs) :=
-        match (flatten, lhs.meta.collapses, rhs.meta.collapses) with
-        | (Flatten.flattened, _, _) =>
-          (flatten, flatten)
-        | (Flatten.flattenEventually, true, true) =>
-          (Flatten.flattenRight, Flatten.flattenLeft)
-        | (Flatten.flattenEventually, false, true) =>
-          (Flatten.notFlattened, Flatten.flattenEventually)
-        | (Flatten.flattenEventually, true, false) =>
-          (Flatten.flattenEventually, Flatten.notFlattened)
-        | (Flatten.flattenEventually, false, false) =>
-          (Flatten.notFlattened, Flatten.notFlattened)
-        | (Flatten.flattenLeft, _, f) =>
-          if f then
-            (Flatten.flattened, Flatten.flattenLeft)
-          else
-            (Flatten.flattenLeft, Flatten.notFlattened)
-        | (Flatten.flattenRight, f, _) =>
-          if f then
-            (Flatten.flattenRight, Flatten.flattened)
-          else
-            (Flatten.notFlattened, Flatten.flattenRight)
-        | _ =>
-          (flatten, flatten)
-
+      let (flattenLhs, flattenRhs) := concatFlatten flatten lhs.meta.collapses rhs.meta.collapses
       if enableDebugging then
         dbg_trace s!"concat bridges: {repr flattenLhs} {repr flattenRhs} leftCollapses: {lhs.meta.collapses} rightCollapses: {rhs.meta.collapses}"
-      let newRight := (rhs.meta.findPath flattenRhs).foldl (fun acc (rl, rr) => if rr.overlapsWith rightBridge then rl ||| acc else acc) bridgeNull
+      let newRight := (rhs.meta.findPath flattenRhs).restrictBridge rightBridge
       if enableDebugging then
-        dbg_trace s!"concat: new right: {newRight} currentRight: {rightBridge}  rhs path: {rhs.meta.findPath flattenRhs} lhs : {lhs.toString} rhs : {rhs.toString}"
+        dbg_trace s!"concat: new right: {newRight} currentRight: {rightBridge}  rhs path: {rhs.meta.findPath flattenRhs|> repr} lhs : {lhs.toString} rhs : {rhs.toString}"
 
 
       let left ← (lhs.resolve col indent widthLimit computationWidth leftBridge newRight flattenLhs)
       let taintedState : TaintedState := {col:=col, indent:=indent, widthLimit:=widthLimit, computationWidth := computationWidth, leftBridge := leftBridge, rightBridge := rightBridge, flatten := flattenRhs}
       processConcat left rhs taintedState m.id flattenRhs
     | .choice lhs rhs _ => do
-      let leftHasSolution := (lhs.meta.findPath flatten).any (fun (l, r) => l.overlapsWith leftBridge && r.overlapsWith rightBridge)
-      let rightHasSolution := (rhs.meta.findPath flatten).any (fun (l, r) => l.overlapsWith leftBridge && r.overlapsWith rightBridge)
+      -- let leftHasSolution := (lhs.meta.findPath flatten).any (fun (l, r) => l.overlapsWith leftBridge && r.overlapsWith rightBridge)
+      let leftHasSolution := (lhs.meta.findPath flatten).overlapsWidth leftBridge rightBridge
+      let rightHasSolution := (rhs.meta.findPath flatten).overlapsWidth leftBridge rightBridge
 
       if enableDebugging then
         dbg_trace s!"choice::l {leftHasSolution} val {lhs.toString} lbridge : {leftBridge} rbridge : {rightBridge}"
@@ -525,8 +410,6 @@ partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrun
   | .value m => do
     return m
 
-
-
 structure PrintResult (χ : Type) where
   log : Option (List String)
   layout : String
@@ -534,60 +417,48 @@ structure PrintResult (χ : Type) where
   cost : χ
 deriving Inhabited
 
-inductive IntermediateResult (χ : Type) where
-| noIdealSolution (failure : MeasureSet χ) (tainted : List (TaintedTrunk χ))
-| noSolution (tainted : List (TaintedTrunk χ))
-| idealSolution (best : MeasureSet χ)
+-- def Doc.hasNoSolution (d : Doc) : Bool :=
+--   d.meta.flattenLPath.size == 0 &&
+--   d.meta.flattenRPath.size == 0 &&
+--   d.meta.flattenPath.size == 0 &&
+--   d.meta.path.size == 0 &&
+--   d.meta.eventuallyFlattenPath.size == 0
 
-
-def Doc.isDead (d : Doc) : Bool :=
-  d.meta.flattenLPath.size == 0 &&
-  d.meta.flattenRPath.size == 0 &&
-  d.meta.flattenPath.size == 0 &&
-  d.meta.path.size == 0 &&
-  d.meta.eventuallyFlattenPath.size == 0
-
-def Doc.findErr (d : Doc) (path : String) (errs : Std.HashMap String Nat) : (Std.HashMap String Nat) :=
-  if !d.isDead then
-    errs.alter ((s!"{path}::{d.toString}::{repr d.meta}")) (fun curr =>
-      match curr with
-      | some x => return x + 1
-      | none => return 1
-    )
-  else
-    match d with
-      | .text _ _=> errs
-      | .newline _ _=> errs
-      | .choice left right _=> right.findErr path (left.findErr path errs)
-      | .flatten inner _=> inner.findErr path errs
-      | .align inner _=> inner.findErr path errs
-      | .nest _ inner _=> inner.findErr path errs
-      | .concat left right _=> right.findErr path (left.findErr path errs)
-      | .stx _ _=> errs
-      | .reset inner _=> inner.findErr path errs
-      | .rule r inner _=> inner.findErr (path++"/"++r) errs
-      | .provide _ _=> errs
-      | .require _ _=> errs
-      | .bubbleComment _ _=> errs
-      | .cost _ _=> errs
+-- def Doc.findErr (d : Doc) (path : String) (errs : Std.HashMap String Nat) : (Std.HashMap String Nat) :=
+--   if !d.hasNoSolution then
+--     errs.alter ((s!"{path}::{d.toString}::{repr d.meta}")) (fun curr =>
+--       match curr with
+--       | some x => return x + 1
+--       | none => return 1
+--     )
+--   else
+--     match d with
+--       | .text _ _=> errs
+--       | .newline _ _=> errs
+--       | .choice left right _=> right.findErr path (left.findErr path errs)
+--       | .flatten inner _=> inner.findErr path errs
+--       | .align inner _=> inner.findErr path errs
+--       | .nest _ inner _=> inner.findErr path errs
+--       | .concat left right _=> right.findErr path (left.findErr path errs)
+--       | .stx _ _=> errs
+--       | .reset inner _=> inner.findErr path errs
+--       | .rule r inner _=> inner.findErr (path++"/"++r) errs
+--       | .provide _ _=> errs
+--       | .require _ _=> errs
+--       | .bubbleComment _ _=> errs
+--       | .cost _ _=> errs
 
 /--
 Find an optimal layout for a document and render it.
 -/
 partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat) (log : Option (List String)): IO (PrintResult χ) := do
-  if (doc.meta.findPath Flatten.notFlattened).size == 0 then
+  if !((doc.meta.findPath Flatten.notFlattened).overlapsWidth (bridgeFlex) (bridgeEnding)) then
     dbg_trace s!"WARNING: document does not contain a solution"
-    IO.FS.writeFile ("doc_print.json") (s!"{doc.toJSON}")
-    dbg_trace s!"WARNING: after writting "
-    -- let errs := doc.findErr "" {}
-    -- dbg_trace s!"WARNING: {repr errs}"
-    -- dbg_trace s!"WARNING: {printOrder doc}"
-  let (preferredGroups, cache) ← ((doc.resolve (χ := χ) col 0 widthLimit computationWidth bridgeFlex bridgeEnding Flatten.notFlattened).run (initCache cacheSize log))
-  -- dbg_trace s!"how many ids? {cache.content.size}"
+    -- IO.FS.writeFile ("doc_print.json") (s!"{doc.toJSON}")
+    -- dbg_trace s!"WARNING: after writting "
 
-  -- for c in cache.content do
-  --   if c.length > 0 then
-  --     dbg_trace s!"length {c.length}"
+  let (preferredGroups, cache) ← ((doc.resolve (χ := χ) col 0 widthLimit computationWidth bridgeFlex bridgeEnding Flatten.notFlattened).run (initCache cacheSize log))
+
   match preferredGroups with
   | .set ([]) =>
     return {
@@ -636,8 +507,5 @@ partial def Doc.prettyPrintLog (χ : Type) [Cost χ] (doc : Doc) (cacheSize col 
   | some log =>
     return (s!"Log: {String.join (log.intersperse "\n\n")} {l.layout}")
 
-#eval (ruleDoc "hey" ("a" <_> "b") ).prettyPrint DefaultCost 1 0 100 100
-
-#eval ((provideDoc bridgeSpace <^> provideDoc bridgeNl) <_> "c").prettyPrint DefaultCost 1 0 3 3
 
 end PrettyFormat

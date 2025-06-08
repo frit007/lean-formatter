@@ -14,7 +14,7 @@ open PrettyFormat
   let out := Doc.prettyPrint DefaultCost (cacheSize := cache.nextId) (col := 0) (widthLimit := 10) (computationWidth := 10) d
   out
 
-/-- info: "def he : too tl\n  more" -/
+/-- info: "def he\n  : too tl\n  more" -/
 #guard_msgs in
 #eval
   let d := nestDoc 2 ("def he" <> (" : " <^> Doc.nl <> ": " ) <> "too tl" <> (" " <^> Doc.nl) <> "more")
@@ -214,48 +214,6 @@ info: ":=2"
 /-- info: "bridgeNull" -/
 #guard_msgs in
 #eval bridgeNl.provideIntersection (bridgeSpace)|>.str
-
-
-/-- info: true -/
-#guard_msgs in
-#eval bridgeFlex.canHandle (bridgeHardNl)
-/-- info: true -/
-#guard_msgs in
-#eval bridgeSpace.canHandle (bridgeSpace)
-/-- info: true -/
-#guard_msgs in
-#eval bridgeSpace.canHandle (bridgeFlex)
-/-- info: true -/
-#guard_msgs in
-#eval bridgeFlex.canHandle (bridgeFlex)
-/-- info: false -/
-#guard_msgs in
-#eval bridgeImmediate.canHandle (bridgeFlex)
-/-- info: true -/
-#guard_msgs in
-#eval (bridgeImmediate|||bridgeSpace).canHandle (bridgeFlex)
-/-- info: false -/
-#guard_msgs in
-#eval bridgeFlex.canHandle (bridgeImmediate)
-/-- info: false -/
-#guard_msgs in
-#eval bridgeFlex.canHandle (bridgeImmediate|||bridgeSpace)
-/-- info: false -/
-#guard_msgs in
-#eval bridgeSpace.canHandle (bridgeAny)
-/-- info: false -/
-#guard_msgs in
-#eval bridgeNull.canHandle (bridgeAny)
-/-- info: false -/
-#guard_msgs in
-#eval bridgeNull.canHandle (bridgeSpace)
-/-- info: false -/
-#guard_msgs in
-#eval bridgeNull.canHandle (bridgeNl)
-
-/-- info: false -/
-#guard_msgs in
-#eval bridgeNull.subsetOf bridgeSpace
 
 
 /-- info: "bridgeSpace" -/

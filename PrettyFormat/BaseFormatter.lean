@@ -104,23 +104,35 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
 
   match doc with
   | .text s m =>
-    let path := if s.length == 0 then passthrough else acceptFlex
-    cachePPL (.text s {m with flattenLPath := path, flattenRPath := path, flattenPath := path, eventuallyFlattenPath := path, path := path}) 0
+    let constraint := if s.length == 0 then Constraint.passthrough else acceptFlex
+    cachePPL (.text s {m with flattenLPath := constraint, flattenRPath := constraint, flattenPath := constraint, eventuallyFlattenPath := constraint, path := constraint}) 0
   | .newline s m =>
     if s.isSome then
       -- dbg_trace s!"newline
-      cachePPL (.newline s {m with flattenLPath := acceptFlex, flattenRPath := acceptFlex, flattenPath := acceptFlex, eventuallyFlattenPath := acceptFlex, path := acceptFlex, nlCount := 1}) 0
+      cachePPL (.newline s {m with
+        flattenLPath := acceptFlex,
+        flattenRPath := acceptFlex,
+        flattenPath := acceptFlex,
+        eventuallyFlattenPath := acceptFlex,
+        path := acceptFlex, nlCount := 1
+      }) 0
     else
-      cachePPL (.newline s {m with flattenLPath := acceptFlex, flattenRPath := acceptFlex, flattenPath := #[], eventuallyFlattenPath := acceptFlex, path := acceptFlex, nlCount := 1}) 0
+      cachePPL (.newline s {m with
+        flattenLPath := Constraint.impossible,
+        flattenRPath := Constraint.impossible,
+        flattenPath := Constraint.impossible,
+        eventuallyFlattenPath := Constraint.impossible,
+        path := acceptFlex, nlCount := 1
+      }) 0
   | .choice originalLeft originalRight m => do
     let left ← expandSyntax r originalLeft
     let right ← expandSyntax r originalRight
     cachePPL (.choice left right {m with
-      path := mergePaths left.meta.path right.meta.path,
-      flattenLPath := mergePaths left.meta.flattenLPath right.meta.flattenLPath,
-      flattenRPath := mergePaths left.meta.flattenRPath right.meta.flattenRPath,
-      flattenPath := mergePaths left.meta.flattenPath right.meta.flattenPath,
-      eventuallyFlattenPath := mergePaths left.meta.eventuallyFlattenPath right.meta.eventuallyFlattenPath,
+      path := left.meta.path.union right.meta.path,
+      flattenLPath := left.meta.flattenLPath.union right.meta.flattenLPath,
+      flattenRPath := left.meta.flattenRPath.union right.meta.flattenRPath,
+      flattenPath := left.meta.flattenPath.union right.meta.flattenPath,
+      eventuallyFlattenPath := left.meta.eventuallyFlattenPath.union right.meta.eventuallyFlattenPath,
       collapsesBridges := left.meta.collapsesBridges.and right.meta.collapsesBridges,
       nlCount := max left.meta.nlCount right.meta.nlCount
     }) (max left.meta.cacheWeight right.meta.cacheWeight)
@@ -172,23 +184,23 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
     -- if (left.meta.containsWhiteSpace || right.meta.containsWhiteSpace) then
     --   cachePPL (concatDoc left right) (max left.meta.cacheWeight right.meta.cacheWeight)
     -- else
-    let combinedPath := concatPaths left.meta.path right.meta.path
-    let flattenedPath := concatPaths left.meta.flattenPath right.meta.flattenPath
+    let combinedPath := left.meta.path.concat right.meta.path
+    let flattenedPath := left.meta.flattenPath.concat right.meta.flattenPath
     -- dbg_trace s!"bridges: {(left.meta.collapses, right.meta.collapses)} , left: {left.toString} right: {right.toString}"
     cachePPL (.concat left right { m with
-      path := concatPaths left.meta.path right.meta.path,
+      path := left.meta.path.concat right.meta.path,
       flattenPath := flattenedPath,
       nlCount := left.meta.nlCount + right.meta.nlCount,
       eventuallyFlattenPath :=
         match (left.meta.collapses, right.meta.collapses) with
-        | (true, true) => concatPaths left.meta.flattenRPath right.meta.flattenLPath
-        | (false, true) => concatPaths left.meta.path right.meta.eventuallyFlattenPath
-        | (true, false) => concatPaths left.meta.eventuallyFlattenPath right.meta.path
+        | (true, true) => left.meta.flattenRPath.concat right.meta.flattenLPath
+        | (false, true) => left.meta.path.concat right.meta.eventuallyFlattenPath
+        | (true, false) => left.meta.eventuallyFlattenPath.concat right.meta.path
         |_ => combinedPath
       flattenLPath :=
         match (right.meta.collapses) with
-        | true => concatPaths left.meta.flattenPath right.meta.flattenLPath
-        | false => concatPaths left.meta.flattenLPath right.meta.path
+        | true => left.meta.flattenPath.concat right.meta.flattenLPath
+        | false => left.meta.flattenLPath.concat right.meta.path
       /-
       imagine the following cases where we start with flattenR:
       ("collapse") <> "" -- this is the left collapses case
@@ -196,8 +208,8 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
       -/
       flattenRPath :=
         match (left.meta.collapses) with
-        | true => concatPaths left.meta.flattenRPath right.meta.flattenPath
-        | false => concatPaths left.meta.path right.meta.flattenRPath
+        | true => left.meta.flattenRPath.concat right.meta.flattenPath
+        | false => left.meta.path.concat right.meta.flattenRPath
       }) (max left.meta.cacheWeight right.meta.cacheWeight)
 
       -- cachePPL (.concat left right { m with
@@ -223,11 +235,11 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
     }) (inner.meta.cacheWeight)
   | .bubbleComment s m =>
     cachePPL (.bubbleComment s {m with
-      path := passthrough,
-      eventuallyFlattenPath := passthrough,
-      flattenRPath := passthrough,
-      flattenLPath := passthrough,
-      flattenPath := passthrough,
+      path := Constraint.passthrough,
+      eventuallyFlattenPath := Constraint.passthrough,
+      flattenRPath := Constraint.passthrough,
+      flattenLPath := Constraint.passthrough,
+      flattenPath := Constraint.passthrough,
       nlCount := 1
       }) 0
   | .stx stx _ =>
@@ -257,40 +269,37 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
       flattenPath := inner.meta.flattenPath
     }) (inner.meta.cacheWeight)
   | .provide b m  =>
-    let parts := b.parts
-    let paths := parts.foldl (fun acc b' =>
-      acc.push (b',b')
-    ) #[(bridgeFlex, b)]
     cachePPL (.provide b {m with
-      path := paths,
-      eventuallyFlattenPath := paths,
       nlCount := if b.overlapsWith bridgeNl then 1 else 0,
-      flattenRPath := paths,
-      flattenLPath := paths,
-      flattenPath := paths.map (fun (lb,rb) => (lb.flatten, rb.flatten))
+      path := Constraint.provide b,
+      eventuallyFlattenPath := Constraint.provide b,
+      flattenRPath := Constraint.provide b,
+      flattenLPath := Constraint.provide b,
+      flattenPath := if b.flatten == bridgeNull then Constraint.impossible else Constraint.provide b.flatten
     }) 0
   | .require b m =>
-    let parts := b.parts
-    let initial := if (bridgeAny ||| bridgeNone).subsetOf b then #[(bridgeFlex, bridgeFlex)] else #[]
-    let paths := parts.foldl (fun acc b' =>
-      acc.push (b',bridgeFlex)
-    ) initial
+    -- let parts := b.parts
+    let initial := if (bridgeAny ||| bridgeNone).contains b then bridgeFlex else bridgeNull
+    let constraint := Constraint.uniform (initial ||| b) bridgeFlex
+    let flattenConstraint := if b.flatten == bridgeNull then Constraint.impossible else  Constraint.uniform (initial ||| b.flatten) bridgeFlex
+
+
     cachePPL (.require b {m with
-      path := paths,
+      path := constraint,
       nlCount := if b.overlapsWith bridgeNl then 1 else 0,
-      eventuallyFlattenPath := paths,
-      flattenRPath := paths,
-      flattenLPath := paths,
-      flattenPath := paths.map (fun (lb,rb) => (lb.flatten, rb.flatten))
+      eventuallyFlattenPath := flattenConstraint,
+      flattenRPath := flattenConstraint,
+      flattenLPath := flattenConstraint,
+      flattenPath := flattenConstraint
     }) 0
   | .cost c m =>
     cachePPL (.cost c {m with
-      path := passthrough,
       nlCount := c,
-      eventuallyFlattenPath := passthrough,
-      flattenRPath := passthrough,
-      flattenLPath := passthrough,
-      flattenPath := passthrough
+      path := Constraint.passthrough,
+      eventuallyFlattenPath := Constraint.passthrough,
+      flattenRPath := Constraint.passthrough,
+      flattenLPath := Constraint.passthrough,
+      flattenPath := Constraint.passthrough
     }) 0
 where
   cachePPL (doc:Doc) (childCacheWeight:Nat) : FormatM Doc := do
@@ -598,8 +607,6 @@ def combine [ToDoc a] (sep: Doc → Doc → Doc) (stxArr : Array a) : Doc := Id.
     else
       combined := sep combined p'
   return combined
-
-#eval (combine (.<**> .) #["a", "", "c"]).toString
 
 def sep [ToDoc a] (stxs : Array a) : Doc :=
   (combine (.<_>.) stxs) <^> (combine (.<$$>.) stxs)

@@ -1,176 +1,14 @@
 import Std.Data.HashSet
+import Bridge
+import Constraint
 open Std
 
 namespace PrettyFormat
 
 
-/--
-Why do we need so many flattens?
-The issue is that flatten should be delayed until the outer bridges have found a value
--/
-inductive Flatten where
-| notFlattened
-| flattenLeft
-| flattenRight
-| flattenEventually
-| flattened
-deriving DecidableEq, Repr
-
--- flattening has started, but not yet completed
-def Flatten.shouldFlattenNl (f : Flatten) : Bool :=
-  f != Flatten.notFlattened
-
-def Flatten.isFlat (f : Flatten) : Bool :=
-  f == flattened
-
-def Flatten.toInt : Flatten → UInt8
-| notFlattened => 0
-| flattenLeft => 1
-| flattenRight => 2
-| flattenEventually => 3
-| flattened => 4
-
-def Flatten.startFlatten : Flatten → Flatten
-| notFlattened => flattenEventually
-| f => f
-
-
-abbrev Bridge := UInt8
-
-
-def bridgeNull :Bridge := 0
-def bridgeFlex :Bridge := 1
-def bridgeSpaceNl :Bridge := 2 -- flattens to a space
-def bridgeHardNl :Bridge := 4 -- flattens to fail
--- If you allow a newline, you should also be compatible with HardNl
-def bridgeNl :Bridge := bridgeSpaceNl ||| bridgeHardNl
-def bridgeSpace :Bridge := 8
-def bridgeNone :Bridge := 16
-def bridgeImmediate :Bridge := 32
-def bridgeAny := bridgeSpace ||| bridgeNl ||| bridgeHardNl
-def bridgeEnding := bridgeAny ||| bridgeFlex
-
-def Bridge.subsetOf (l r: Bridge) : Bool :=
-  (l &&& r) == r
-
-def Bridge.contains (l r: Bridge) : Bool :=
-  if l == r then
-    true
-  else if l == bridgeNull then
-    false
-  else
-    (l &&& r) == r
-
-def Bridge.overlapsWith (l r: Bridge) : Bool :=
-  l &&& r != 0
-
-def Bridge.lessThan (lhs rhs: Bridge) :=
-  lhs.subsetOf rhs
-
-def Bridge.erase (lhs rhs: Bridge) :=
-  lhs &&& (~~~ rhs)
-
-def Bridge.intersection (lhs rhs: Bridge) : Bridge :=
-  lhs &&& rhs
-
-def Bridge.union (lhs rhs: Bridge) : Bridge :=
-  lhs ||| rhs
-
-def Bridge.add (lhs rhs: Bridge) : Bridge :=
-  lhs ||| rhs
-
-def Bridge.isEmpty (b : Bridge) : Bool :=
-  b == 0
-
-def Bridge.smallerThan (lhs rhs: Bridge) : Bool :=
-  lhs < rhs
-
-partial def Bridge.parts : Bridge → List Bridge
-| 0 => []
-| x =>
-  let one := (x &&& (~~~ (x - 1)))
-  one :: Bridge.parts (x &&& (~~~ one))
-
-#eval bridgeFlex.parts
-
--- The idea is that bridge flex will accept any bridge
-def Bridge.canHandle (lhs rhs: Bridge) : Bool :=
-  -- if we give the right side bridge flex it
-  let provided := if lhs.contains bridgeFlex then
-    lhs.add bridgeAny
-  else lhs
-
-  let canHandleFlex := !rhs.contains bridgeFlex || (provided.overlapsWith bridgeAny)
-
-  let required := rhs.erase bridgeFlex
-
-  provided.subsetOf required && canHandleFlex
-
-def Bridge.replaceIfExists (bridge old new : Bridge) :Bridge :=
-  if bridge.contains old then
-    (bridge.erase old) ||| new
-  else
-    bridge
-
-def Bridge.flatten (bridge : Bridge) : Bridge :=
-  bridge.replaceIfExists bridgeSpaceNl (bridgeSpace)
-    |>.erase bridgeHardNl
-
-def Bridge.str (b : Bridge) : String := Id.run do
-  let mut str := []
-  let mut bridge : Bridge := b
-  if bridgeNull == bridge then
-    return "bridgeNull"
-  if bridge.subsetOf bridgeAny then
-    str := str ++ ["bridgeAny"]
-    bridge := bridge.erase bridgeAny
-  if bridge.subsetOf bridgeNl then
-    str := str ++ ["bridgeNl"]
-    bridge := bridge.erase bridgeNl
-  if bridge.subsetOf bridgeHardNl then
-    str := str ++ ["bridgeHardNl"]
-    bridge := bridge.erase bridgeHardNl
-  if bridge.subsetOf bridgeSpaceNl then
-    str := str ++ ["bridgeSpaceNl"]
-    bridge := bridge.erase bridgeSpaceNl
-  if bridge.subsetOf bridgeSpace then
-    str := str ++ ["bridgeSpace"]
-    bridge := bridge.erase bridgeSpace
-  if bridge.subsetOf bridgeImmediate then
-    str := str ++ ["bridgeImmediate"]
-    bridge := bridge.erase bridgeImmediate
-  if bridge.subsetOf bridgeNone then
-    str := str ++ ["bridgeNone"]
-    bridge := bridge.erase bridgeNone
-  if bridge.subsetOf bridgeFlex then
-    str := str ++ ["bridgeFlex"]
-    bridge := bridge.erase bridgeFlex
-  if bridge != 0 then
-    str := str ++ [toString bridge]
-    bridge := bridge.erase bridgeNone
-  if str.length == 1 then
-    return String.join (str.intersperse "|||")
-  else
-    return s!"({String.join (str.intersperse "|||")})"
-
-
-def Bridge.provideIntersection (l r : Bridge) :=
-  if l == bridgeFlex then
-    r
-  else if r == bridgeFlex then
-    l
-  else
-    l.intersection r
 
 
 
-def Bridge.requireIntersection (l r : Bridge) :=
-  if l == bridgeFlex && r.subsetOf (bridgeAny ||| bridgeNone) then
-    r
-  else if r == bridgeFlex && l.subsetOf (bridgeAny ||| bridgeNone) then
-    l
-  else
-    l.intersection r
 
 /--
 like LE but for `Bool`, due to my lack of knowledge regarding proofs
@@ -267,7 +105,6 @@ def Ternary.toString : Ternary → String
 def Ternary.neq (lhs rhs :Ternary) : Bool :=
   !lhs.eq rhs
 
-abbrev Path := Array (Bridge × Bridge)
 
 structure DocMeta where
   id : Nat := 0
@@ -282,18 +119,18 @@ structure DocMeta where
   collapsesBridges : Ternary := Ternary.yes
   nlCount : Nat := 0
 
-  path : Path := #[]
-  flattenPath : Path := #[]
-  eventuallyFlattenPath : Path := #[]
-  flattenLPath : Path := #[]
-  flattenRPath : Path := #[]
+  path : Constraint := Constraint.passthrough
+  flattenPath : Constraint := Constraint.passthrough
+  eventuallyFlattenPath : Constraint := Constraint.passthrough
+  flattenLPath : Constraint := Constraint.passthrough
+  flattenRPath : Constraint := Constraint.passthrough
 deriving Inhabited, Repr
 
 
 def DocMeta.collapses (meta : DocMeta) : Bool :=
   meta.collapsesBridges.neq Ternary.no
 
-def DocMeta.findPath (meta : DocMeta) (flatten : Flatten) : Path :=
+def DocMeta.findPath (meta : DocMeta) (flatten : Flatten) : Constraint :=
   match flatten with
   | Flatten.flattenLeft =>
     meta.flattenLPath
@@ -436,7 +273,6 @@ structure Measure (χ : Type) where
   /--
   The choice less document that we are contemplating to use.
   -/
-  -- TODO: Maybe Array?
   layout : List String → List String
 
   bridgeR : Bridge
@@ -543,17 +379,12 @@ structure Cache (χ : Type) where
   -/
   results : MeasureSet χ
 
--- def Cache.toString (cache : Cache χ) : String :=
---   s!"{cache.leftBridge} {cache.indent} {cache.flatten} {cache.column} {cache.results.toString}"
-
 structure CacheStore (χ : Type) where
   log : Option (List (String))
   giveUp : Nat -- give up if we reach zero
   lastMeasurement : Nat -- the last time we took a measurement
   size:Nat
-  -- content : Array (List (Cache χ))
   content : Std.HashMap (UInt64 × UInt64) (MeasureSet χ)
-  -- content : Std.HashMap (Nat × Nat × Nat) (MeasureSet χ)
 
 abbrev MeasureResult χ := StateT (CacheStore χ) IO
 
@@ -564,10 +395,6 @@ def cacheLog (message : Unit → String): (MeasureResult χ) Unit := do
     match s.log with
     | none => s
     | some log => { s with log := some (log ++ [message ()]) })
-
--- initialize cacheCount : IO.Ref (Nat × Array (List (Cache χ))) ← IO.mkRef (0, #[])
--- We can't reference a generic class from IO ref
-
 
 def Doc.toString (ppl:Doc) : String :=
   output' 0 ppl
@@ -720,9 +547,6 @@ infixl:30 " <+> " => fun l r => concatDoc (toDoc l) (Doc.align (toDoc r))
 infixl:45 " !> " => fun l r => concatDoc (provideDoc l) r
 infixl:45 " <! " => fun l r => concatDoc (requireDoc l) (toDoc r)
 
-#eval "a" <+> "b"
-
--- #eval expandDoc ("hello" <> "world")
 
 infixl:34 " <^> " => fun l r => choiceDoc l r
 
@@ -759,9 +583,6 @@ Aligned concatenation, joins two sub-layouts horizontally, aligning the whole ri
 column where it is to be placed in. Aka the `<+>` operator.
 -/
 def Doc.alignedConcat [ToDoc α] [ToDoc β] (lhs : α) (rhs : β) : Doc := concatDoc lhs (alignDoc rhs)
--- /--
--- TODO: Better name
--- -/
 def Doc.flattenedAlignedConcat [ToDoc α] [ToDoc β] (lhs : α) (rhs : β) : Doc := Doc.alignedConcat (flattenDoc (toDoc lhs)) rhs
 
 
@@ -802,8 +623,6 @@ def formatBefore [ToDoc a] [ToDoc b] (sep : a) (doc : b) : Doc :=
 
 infixr:45 " ?> " => fun l r => formatThen r l
 infixr:45 " <? " => fun l r => formatBefore l r
-
-#eval ("def:= " <_> nestDoc 4 ("funcName" <**> "helps") <**> "val").toString
 
 /--
 To visualize the call graph we want to avoid drawing the shared nodes multiple times.
@@ -860,7 +679,7 @@ where
   printNl : Nat → String
   | indent => "\n".pushn ' ' indent
   printMeta (indentation:Nat): DocMeta → String
-  | m => s!"meta: \{ id := {m.id},{printNl indentation}cacheWeight := {m.cacheWeight},{printNl indentation}collapsesBridges := {repr m.collapsesBridges},{printNl indentation}flattenPath := {m.flattenPath},{printNl indentation}flattenRPath := {m.flattenRPath},{printNl indentation}flattenLPath := {m.flattenLPath},{printNl indentation}eventuallyFlattenPath := {m.eventuallyFlattenPath},{printNl indentation}path := {m.path} }"
+  | m => s!"meta: \{ id := {m.id},{printNl indentation}cacheWeight := {m.cacheWeight},{printNl indentation}collapsesBridges := {repr m.collapsesBridges},{printNl indentation}flattenPath := {m.flattenPath.toComplex},{printNl indentation}flattenRPath := {m.flattenRPath.toComplex},{printNl indentation}flattenLPath := {m.flattenLPath.toComplex},{printNl indentation}eventuallyFlattenPath := {m.eventuallyFlattenPath.toComplex},{printNl indentation}path := {m.path.toComplex} }"
   printNode (indentation:Nat): Doc → (String × Std.HashMap Nat String)
   | .text s m => (s!"(Doc.text \"{s}\" {printNl indentation}{printMeta indentation m})", results)
   | .newline s m => (s!"(Doc.newline {s} {printNl indentation}{printMeta indentation m})", results)
@@ -957,8 +776,8 @@ where
   printNl : Nat → String
   | indent => "\n".pushn ' ' indent
 
-  approximation (path:Path): String :=
-    let x := path.foldl (fun acc v =>
+  approximation (path:Constraint): String :=
+    let x := path.toComplex.foldl (fun acc v =>
       if acc.length > 0 then
         acc  ++ s!", [{v.fst}, {v.snd}]"
       else

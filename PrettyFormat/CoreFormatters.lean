@@ -700,6 +700,7 @@ def combineParenExpression [ToDoc a] [Inhabited a] (sep: Doc → Doc → Doc) (a
 
 #coreFmt Lean.Parser.Tactic.obtain fun
 | #[obtainAtom, cases, unknown1, assign] => do
+  assumeMissing unknown1
   return obtainAtom <> bridgeSpace !> cases <> bridgeSpace !> (combine (. <> provideDoc (bridgeAny ||| bridgeImmediate) <> .) assign.getArgs)
 | _ => failure
 
