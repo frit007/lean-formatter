@@ -41,7 +41,7 @@ structure FlattenState where
 abbrev FlattenStateM a := (StateM FlattenState) a
 
 
-@[inline] def FlattenStateM.genId : FlattenStateM Nat := do
+def FlattenStateM.genId : FlattenStateM Nat := do
   let state ← get
   let _ ← set {state with nextId := state.nextId + 1}
   return state.nextId
@@ -148,24 +148,21 @@ def cacheKey (id indent col: Nat) (leftBridge rightBridge : Bridge) (flatten : F
   -- There might be an optimation that assumes scalar numbers are small
   (idAndIndentAndCol, bridgesAndFlatten)
 
-@[inline] def getCached [Cost χ] (id indent col: Nat) (leftBridge rightBridge : Bridge) (flatten : Flatten): MeasureResult χ (Option (MeasureSet χ)) := do
+def getCached [Cost χ] (id indent col: Nat) (leftBridge rightBridge : Bridge) (flatten : Flatten): MeasureResult χ (Option (MeasureSet χ)) := do
   let cacheStore ← get
   return cacheStore.content.get? (cacheKey id indent col leftBridge rightBridge flatten)
 
-@[inline] def addToCache [Cost χ] (id indent column: Nat) (leftBridges rightBridges : Bridge) (flatten : Flatten) (results:MeasureSet χ): MeasureResult χ Unit := do
+def addToCache [Cost χ] (id indent column: Nat) (leftBridges rightBridges : Bridge) (flatten : Flatten) (results:MeasureSet χ): MeasureResult χ Unit := do
   modify (fun cacheStore =>
     {cacheStore with content := cacheStore.content.insert (cacheKey id indent column leftBridges rightBridges flatten) results}
   )
 
-@[inline] def removeFromCache [Cost χ] (id indent column: Nat) (leftBridges rightBridges : Bridge) (flatten : Flatten): MeasureResult χ Unit := do
+def removeFromCache [Cost χ] (id indent column: Nat) (leftBridges rightBridges : Bridge) (flatten : Flatten): MeasureResult χ Unit := do
   modify (fun cacheStore =>
     {cacheStore with content := cacheStore.content.erase (cacheKey id indent column leftBridges rightBridges flatten)}
   )
 
 
-@[inline] def MeasureSet.size [Cost χ] : (MeasureSet χ) → Nat
-| set x => x.length
-| _ => 1
 
 
 /--
