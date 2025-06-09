@@ -1,4 +1,7 @@
 ## Standalone
+[!CAUTION]
+This branch currently has some sort of bug that means it takes 3 times longer than the bridge version version. And it does not support flatten yet.
+
 ### Build
 lake build
 ### Run
