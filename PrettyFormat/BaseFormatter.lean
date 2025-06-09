@@ -98,7 +98,6 @@ where
 -- At this point we want to add bridgeInformation
 -- At this point we could also remove failures
 partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
-  -- -- dbg_trace s!"expanding: {repr ppl}"
   if doc.meta.hasBeenExpanded then
     return doc
 
@@ -108,7 +107,6 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
     cachePPL (.text s {m with flattenLPath := constraint, flattenRPath := constraint, flattenPath := constraint, eventuallyFlattenPath := constraint, path := constraint}) 0
   | .newline s m =>
     if s.isSome then
-      -- dbg_trace s!"newline
       cachePPL (.newline s {m with
         flattenLPath := acceptFlex,
         flattenRPath := acceptFlex,
@@ -138,9 +136,7 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
     }) (max left.meta.cacheWeight right.meta.cacheWeight)
   | .flatten inner m =>
     let inner ← expandSyntax r inner
-    -- if inner.isDead then
-      -- dbg_trace s!"should not be dead {inner.toString} repr inner: {repr inner}"
-    -- TOD: fix paths
+    -- TODO: fix paths
     cachePPL (.flatten inner {m with
       collapsesBridges := inner.meta.collapsesBridges,
       path := inner.meta.eventuallyFlattenPath,
@@ -152,8 +148,6 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
     }) (inner.meta.cacheWeight)
   | .align inner m =>
     let inner ← expandSyntax r inner
-    -- if inner.isDead then
-      -- dbg_trace s!"should not be dead {inner.toString} repr inner: {repr inner}"
     cachePPL (.align inner {m with
       collapsesBridges := inner.meta.collapsesBridges,
       path := inner.meta.path,
@@ -165,8 +159,6 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
       }) (inner.meta.cacheWeight)
   | .nest n inner m =>
     let inner ← expandSyntax r inner
-    -- if inner.isDead then
-      -- dbg_trace s!"should not be dead {inner.toString} repr inner: {repr inner}"
     cachePPL (.nest n inner {m with
       collapsesBridges := inner.meta.collapsesBridges,
       path := inner.meta.path,
@@ -180,13 +172,8 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
     let left ← expandSyntax r left
     let right ← expandSyntax r right
     -- Note that in case of unknown we over estimate the bridges required
-    -- dbg_trace s!"cachePPL {repr left.meta.cacheWeight} {repr right.meta.cacheWeight}"
-    -- if (left.meta.containsWhiteSpace || right.meta.containsWhiteSpace) then
-    --   cachePPL (concatDoc left right) (max left.meta.cacheWeight right.meta.cacheWeight)
-    -- else
     let combinedPath := left.meta.path.concat right.meta.path
     let flattenedPath := left.meta.flattenPath.concat right.meta.flattenPath
-    -- dbg_trace s!"bridges: {(left.meta.collapses, right.meta.collapses)} , left: {left.toString} right: {right.toString}"
     cachePPL (.concat left right { m with
       path := left.meta.path.concat right.meta.path,
       flattenPath := flattenedPath,
@@ -211,15 +198,6 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
         | true => left.meta.flattenRPath.concat right.meta.flattenPath
         | false => left.meta.path.concat right.meta.flattenRPath
       }) (max left.meta.cacheWeight right.meta.cacheWeight)
-
-      -- cachePPL (.concat left right { m with
-      --   path := concatPaths left.meta.path right.meta.path,
-      --   flattenPath := #[],
-      --   eventuallyFlattenPath := #[]
-      --   flattenLPath :=#[]
-      --   flattenRPath :=#[]
-      -- }) (max left.meta.cacheWeight right.meta.cacheWeight)
-
   | .rule name inner m =>
     let inner ← expandSyntax r inner
     -- if inner.isDead then

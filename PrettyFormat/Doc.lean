@@ -183,13 +183,12 @@ Make a choice between rendering either `lhs` or `rhs` by picking the prettier va
 If one of the sides `fail`, then other side is chosen. If both sides `fail`, then the result is also `fail`
 -/
 | choice (lhs rhs : Doc) (meta : DocMeta := {})
-
 /--
 Reset the indentation level to 0.
 -/
 | reset (doc : Doc) (meta : DocMeta := {})
 /--
-The special baidge options are
+The special bridge options are
 - `space` which is a single space
 - `nl` which is a newline, which is converted to a `space` in `flatten`
 - `hardNl` which is a newline, which is removed when flattened `flatten`
@@ -310,10 +309,7 @@ structure TaintedState where
 inductive TaintedTrunk (χ : Type) where
 | leftTainted (left: TaintedTrunk χ) (doc: Doc) (state : TaintedState) (id: Nat)
 | rightTainted (left : Measure χ) (right: TaintedTrunk χ) (state : TaintedState) (id: Nat)
--- | center (doc : Doc) (state : TaintedState) (id: Nat)
 | value (m : Measure χ)
--- | cost (cost : Nat) (trunk : (TaintedTrunk χ)) (id: Nat)
--- | bubbleComment (bubleComment : String) (trunk : (TaintedTrunk χ)) (id: Nat)
 
 inductive MeasureSet (χ : Type)
   /-
@@ -350,28 +346,6 @@ def TaintedTrunk.cacheInfo (trunk : TaintedTrunk χ) : Option (TaintedState × N
   | .leftTainted _ _ s id => some (s, id)
   | .rightTainted _ _ s id => some (s, id)
   | _ => none
-  -- | .cost _ _ id => some ({trace := [], col := 0, indent := 0, widthLimit := 0, leftBridge := bridgeFlex}, id)
-  -- | _ => none
-
-
-
--- structure Cache (χ : Type) where
---   /--
---   It was tried to format this piece with the following left bridge
---   -/
---   leftBridge : Bridge
---   rightBridge : Bridge
---   indent : Nat
---   column: Nat --
---   flatten: Flatten --
-
---   /-
---   In the future we could add maxWidth to allow caching across different indents as long as indent-newIndent+maxWidth < maxWidth
---   -/
---   results : MeasureSet χ
-
-
-
 
 
 -- note that node id is implicit at this point because the entire array belongs to a single node.
