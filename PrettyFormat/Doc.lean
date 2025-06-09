@@ -1,6 +1,4 @@
 import Std.Data.HashSet
-import Bridge
-import Constraint
 open Std
 
 namespace PrettyFormat
@@ -111,32 +109,11 @@ structure DocMeta where
   "def main := " <$$> flatten ("return 1" <> "-- end of line comment" <$$$>)
   wants to allow to allow the newline before the flatten operation (remember that the bridge is evaluated when we reach the "return 1" text)
   -/
-  collapsesBridges : Ternary := Ternary.yes
   nlCount : Nat := 0
-
-  path : Constraint := Constraint.passthrough
-  flattenPath : Constraint := Constraint.passthrough
-  eventuallyFlattenPath : Constraint := Constraint.passthrough
-  flattenLPath : Constraint := Constraint.passthrough
-  flattenRPath : Constraint := Constraint.passthrough
 deriving Inhabited, Repr
 
 
-def DocMeta.collapses (meta : DocMeta) : Bool :=
-  meta.collapsesBridges.neq Ternary.no
 
-def DocMeta.findPath (meta : DocMeta) (flatten : Flatten) : Constraint :=
-  match flatten with
-  | Flatten.flattenLeft =>
-    meta.flattenLPath
-  | Flatten.flattenRight =>
-   meta.flattenRPath
-  | Flatten.flattened =>
-    meta.flattenPath
-  | Flatten.flattenEventually =>
-    meta.eventuallyFlattenPath
-  | Flatten.notFlattened =>
-    meta.path
 
 def DocMeta.hasBeenExpanded (meta : DocMeta) : Bool :=
   meta.id != 0 || meta.cacheWeight != 0
@@ -154,12 +131,12 @@ inductive Doc where
 /--
 Render a `String` that does not contain newlines.
 -/
-| text (s : String) (meta : DocMeta := {collapsesBridges := if s.length > 0 then Ternary.yes else Ternary.no})
+| text (s : String) (meta : DocMeta := {})
 /--
 Render a newline. Also contains an alternative rendering for the newline for `Doc.flatten`.
 If s is `none` then it will fail
 -/
-| newline (s : Option String) (meta : DocMeta := {collapsesBridges := Ternary.yes})
+| newline (s : Option String) (meta : DocMeta := {})
 /--
 Concatenate two documents unaligned. If `l` is the chars that we get from `lhs`
 and `r` from `rhs` they will render as:
@@ -188,24 +165,6 @@ If one of the sides `fail`, then other side is chosen. If both sides `fail`, the
 Reset the indentation level to 0.
 -/
 | reset (doc : Doc) (meta : DocMeta := {})
-/--
-The special baidge options are
-- `space` which is a single space
-- `nl` which is a newline, which is converted to a `space` in `flatten`
-- `hardNl` which is a newline, which is removed when flattened `flatten`
-- `nospace` which is nothing and leaves the formatting choice up to the child, and is used when we want parenthesis.
-`nospace` will be automatically applied even if the parent does not provide any spacing information
-We can create variations of `nospace`,
-for example this can be used to detect if we are directly after a new function declaration
-do/by notation use `immediateValue` to handle this scenario so they can place their keyword on the same line and then indent
-
-provide can be chained to narrow the options to overlap between the two sets
--/
-| provide (bridge : Bridge) (meta : DocMeta := {})
-/--
-`require` must be preceded by a `provide` and will fail if the provided bridge does not contain the expected spacing
--/
-| require (bridge : Bridge) (meta : DocMeta := {collapsesBridges := Ternary.yes})
 | rule (r : String) (doc : Doc) (meta : DocMeta := {})
 | stx (s : Lean.Syntax) (meta : DocMeta := {})
 | flatten (inner : Doc) (meta : DocMeta := {})
@@ -227,8 +186,6 @@ def Doc.meta : Doc → DocMeta
   | .align _ meta => meta
   | .choice _ _ meta => meta
   | .reset _ meta => meta
-  | .provide _ meta => meta
-  | .require _ meta => meta
   | .rule _ _ meta => meta
   | .stx _ meta => meta
   | .flatten _ docMeta => docMeta
@@ -244,8 +201,6 @@ def Doc.setMeta (doc : Doc) (meta : DocMeta) : Doc :=
   | .align d _ => .align d meta
   | .choice l r _ => .choice l r meta
   | .reset d _ => .reset d meta
-  | .provide s _ => .provide s meta
-  | .require s _ => require s meta
   | .rule r d _ => .rule r d meta
   | .stx s _ => .stx s meta
   | .flatten inner _ => .flatten inner meta
@@ -270,8 +225,6 @@ structure Measure (χ : Type) where
   -/
   layout : List String → List String
 
-  bridgeR : Bridge
-
   fail: Bool := false
 deriving Inhabited
 
@@ -288,7 +241,7 @@ def Measure.concat [Cost χ] (lhs rhs : Measure χ) :Measure χ :=
   | (false, true) => rhs
   | _ =>
     -- dbg_trace s!"concat {lhs.bridgeR} :: {rhs.bridgeR}"
-    { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss), bridgeR := rhs.bridgeR }
+    { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => rhs.layout (lhs.layout ss) }
 
 def Measure.addCost [Cost χ] (m : Measure χ) (c : χ) : Measure χ :=
   { m with cost := m.cost + c}
@@ -301,9 +254,6 @@ structure TaintedState where
   indent : Nat
   widthLimit : Nat
   computationWidth : Nat
-  leftBridge : Bridge
-  rightBridge : Bridge
-  flatten : Flatten
 
 
 
@@ -328,7 +278,6 @@ def impossibleMeasure [Cost χ] (err:String) : Measure χ := {
       cost := Cost.text 0 0 0,
       layout := fun ss => s!"(no possible formatter::{err})" :: ss
       fail := true
-      bridgeR := bridgeFlex
     }
 def impossibleMeasureSet [Cost χ] (err:String): MeasureSet χ :=
   .set [impossibleMeasure err]
@@ -340,7 +289,7 @@ instance [Cost χ]: Inhabited (MeasureSet χ) where
 instance : Repr (MeasureSet χ) where
   reprPrec
     | MeasureSet.set s, _ =>
-      let children := s.foldl (fun (a : List String) x => s!"(rightBridge {x.bridgeR}, last:{x.last})" :: a) []
+      let children := s.foldl (fun (a : List String) x => s!"(last:{x.last})" :: a) []
       s!"MeasureSet.set {s.length} {children}"
     | MeasureSet.tainted _, _ =>
       "MeasureSet.tainted "
@@ -350,25 +299,6 @@ def TaintedTrunk.cacheInfo (trunk : TaintedTrunk χ) : Option (TaintedState × N
   | .leftTainted _ _ s id => some (s, id)
   | .rightTainted _ _ s id => some (s, id)
   | _ => none
-  -- | .cost _ _ id => some ({trace := [], col := 0, indent := 0, widthLimit := 0, leftBridge := bridgeFlex}, id)
-  -- | _ => none
-
-
-
--- structure Cache (χ : Type) where
---   /--
---   It was tried to format this piece with the following left bridge
---   -/
---   leftBridge : Bridge
---   rightBridge : Bridge
---   indent : Nat
---   column: Nat --
---   flatten: Flatten --
-
---   /-
---   In the future we could add maxWidth to allow caching across different indents as long as indent-newIndent+maxWidth < maxWidth
---   -/
---   results : MeasureSet χ
 
 
 
@@ -377,14 +307,10 @@ def TaintedTrunk.cacheInfo (trunk : TaintedTrunk χ) : Option (TaintedState × N
 -- note that node id is implicit at this point because the entire array belongs to a single node.
 structure Cache (χ : Type) where
   /--
-  The id consists of indent, col, flatten, leftBridge and right Bridge mashed into a single number to make it fast to compare
-  If we need more bridges, then this value could be split into more values (or reduce the maximum width of the document)
+  The id consists of indent, col mashed into a single number to make it fast to compare
   bit   | value
-  0-7   | leftBridge  (8bits)
-  8-15  | rightBridge (8bits)
-  16-18 | flatten     (3bits)
-  19-42 | column      (23bits)
-  43-63 | indent      (22bits)
+  0-31  | column      (32bits)
+  32-63 | indent      (32bits)
 
   This comes with the advantage that the cache value is 16 bytes and should be cache aligned
   -/
@@ -397,8 +323,8 @@ instance [Cost χ]: Inhabited (Cache χ) where
 instance [Cost χ]: Repr (Cache χ) where
   reprPrec a _ := s!"{a.key} ==> {repr a.result}"
 
-def createKey (indent col :Nat) (flatten : Flatten) (leftBridge rightBridge : Bridge) : UInt64 :=
-  leftBridge.toUInt64 ||| (rightBridge.toUInt64<<<8) ||| (flatten.toInt.toUInt64 <<< 16) ||| (col.toUInt64 <<< 19) ||| (indent.toUInt64 <<< 42)
+def createKey (indent col :Nat) : UInt64 :=
+  (col.toUInt64 <<< 0) ||| (indent.toUInt64 <<< 32)
 
 abbrev CacheArray χ := Array (Cache χ)
 
@@ -432,14 +358,6 @@ partial def CacheArray.find? [Cost χ] (arr : CacheArray χ) (key : UInt64) : Op
       else go (mid + 1) hi
   go 0 arr.size
 
-/-- info: some 3 ==> MeasureSet.set 1 [(rightBridge 1, last:0)] -/
-#guard_msgs in
-#eval
-  let arr :CacheArray DefaultCost:= #[]
-  let arr := arr.insertSorted {key := 1, result := impossibleMeasureSet "a"}
-  let arr := arr.insertSorted {key := 10, result := impossibleMeasureSet "b"}
-  let arr := arr.insertSorted {key := 3, result := impossibleMeasureSet "c"}
-  arr.find? 3
 
 
 
@@ -476,8 +394,6 @@ where
   | .stx _ _ => "stx\n"
   | .rule name s _ => s!"ruleDoc \"{name}\" {newline indent} ({output' (indent + 2) s}) {newline indent}"
   | .reset s _ => s!"Doc.reset ({output' indent s})"
-  | .provide b _ => s!"provideDoc {b.str}"
-  | .require b _ => s!"requireDoc {b.str}"
   | .cost n _ => s!"costDoc {n}"
   | .bubbleComment s _ => s!"bubbleComment \"{s}\""
   if d.meta.id != 0 then
@@ -500,8 +416,6 @@ def Doc.kind : Doc → String
   | .stx _ _ => "stx\n"
   | .rule _ _ _ => s!"rule"
   | .reset _ _ => s!"reset"
-  | .provide _ _ => s!"provide"
-  | .require _ _ => s!"require"
   | .bubbleComment s _ => s!"bubbleComment \"{s}\""
   | .cost _ _ => s!"cost"
 
@@ -525,10 +439,10 @@ partial def isSyntaxEmpty (stx : Lean.Syntax) : Bool :=
 
 instance : ToDoc Lean.Syntax where
   -- note that syntax is placed as a placeholder and will be expanded later
-  toDoc stx:= Doc.stx stx {collapsesBridges := if isSyntaxEmpty stx then Ternary.no else Ternary.yes}
+  toDoc stx:= Doc.stx stx
 
 instance : ToDoc (Lean.TSyntax a) where
-  toDoc tstx:= Doc.stx tstx.raw {collapsesBridges := if isSyntaxEmpty tstx.raw then Ternary.no else Ternary.yes}
+  toDoc tstx:= Doc.stx tstx.raw
 
 instance : ToDoc String where
   toDoc text:= Doc.text text
@@ -549,8 +463,6 @@ where
   | .stx s _=> isSyntaxEmpty s
   | .reset inner _=> isEmpty' inner
   | .rule _ inner _=> isEmpty' inner
-  | .provide _ _=> false
-  | .require _ _=> false
   /-
   Note that this means that cost and bubble comments will be discarded if they are not attached to a relevant object
   -/
@@ -561,11 +473,7 @@ def choiceDoc [ToDoc a] [ToDoc b] (l : a) (r : b) :=
   let l := toDoc l
   let r := toDoc r
 
-  Doc.choice l r {collapsesBridges := l.meta.collapsesBridges.and r.meta.collapsesBridges}
-
-def provideDoc (b : Bridge) : Doc :=
-  -- Should expand did not work, because even if it may contain whitespace, it may still
-  Doc.provide b {collapsesBridges:= Ternary.no}
+  Doc.choice l r
 
 
 /--
@@ -582,7 +490,7 @@ partial def concatDoc [ToDoc α] [ToDoc β] (l : α) (r : β) : Doc :=
   else if empty r then
     l
   else
-    Doc.concat l r {collapsesBridges := l.meta.collapsesBridges.or r.meta.collapsesBridges}
+    Doc.concat l r
 where
   empty :Doc → Bool
   | .stx s _ => isSyntaxEmpty s
@@ -593,40 +501,36 @@ where
 infixl:40 " <> " => fun l r => concatDoc l r
 
 
-def requireDoc (b : Bridge) : Doc :=
-  Doc.require b
+def bridgeConcatNl [ToDoc α] [ToDoc β] (l : α) (r : β) : Doc :=
+  concatDoc l (concatDoc (Doc.newline " ") r)
+def bridgeConcatHardNl [ToDoc α] [ToDoc β] (l : α) (r : β) : Doc :=
+  concatDoc l (concatDoc (Doc.newline none) r)
 
-def bridgeConcat [ToDoc α] [ToDoc β] (bridge:Bridge) (l : α) (r : β) : Doc :=
-  concatDoc (concatDoc l (provideDoc bridge)) r
-
-infixl:39 " <$$> " => fun l r => bridgeConcat bridgeNl l r
-infixl:38 " <$$$> " => fun l r => bridgeConcat bridgeHardNl l r
-infixl:37 " <**> " => fun l r => bridgeConcat bridgeAny l r
-infixl:36 " <_> " => fun l r => bridgeConcat bridgeSpace l r
+infixl:34 " <^> " => fun l r => choiceDoc l r
+infixl:39 " <$$> " => fun l r => bridgeConcatNl l r
+infixl:38 " <$$$> " => fun l r => bridgeConcatHardNl l r
+infixl:37 " <**> " => fun l r => l <> (Doc.newline " "<^> " ") <> r
+infixl:36 " <_> " => fun l r => l <> " " <> r
 
 
 infixl:30 " <+> " => fun l r => concatDoc (toDoc l) (Doc.align (toDoc r))
 
-infixl:45 " !> " => fun l r => concatDoc (provideDoc l) r
-infixl:45 " <! " => fun l r => concatDoc (requireDoc l) (toDoc r)
 
-
-infixl:34 " <^> " => fun l r => choiceDoc l r
 
 
 def flattenDoc [ToDoc α] (s: α): Doc:=
   let s := (toDoc s)
-  (Doc.flatten s {collapsesBridges := s.meta.collapsesBridges})
+  (Doc.flatten s)
 
 def nestDoc [ToDoc α] (n : Nat) (s: α) : Doc:=
   let s := (toDoc s)
-  (Doc.nest n s {collapsesBridges := s.meta.collapsesBridges})
+  (Doc.nest n s )
 
 def Doc.group (doc : Doc) : Doc :=
   (doc <^> (flattenDoc doc))
 
 def costDoc (cost:Nat) : Doc :=
-  Doc.cost cost {collapsesBridges := Ternary.no}
+  Doc.cost cost
 
 def Doc.preferFlatten (doc : Doc) : Doc :=
   -- TODO: at the moment the penalty is equivalent to a full newline.
@@ -636,10 +540,10 @@ def Doc.preferFlatten (doc : Doc) : Doc :=
 
 def alignDoc [ToDoc α] (s: α): Doc:=
   let s := (toDoc s)
-  (Doc.align s {collapsesBridges := s.meta.collapsesBridges})
+  (Doc.align s)
 
-def Doc.nl : Doc := (Doc.newline (some " ") {collapsesBridges := Ternary.yes})
-def Doc.hardNl : Doc := (Doc.newline none {collapsesBridges := Ternary.yes})
+def Doc.nl : Doc := (Doc.newline (some " "))
+def Doc.hardNl : Doc := (Doc.newline none)
 
 /--
 Aligned concatenation, joins two sub-layouts horizontally, aligning the whole right sub-layout at the
@@ -650,11 +554,11 @@ def Doc.flattenedAlignedConcat [ToDoc α] [ToDoc β] (lhs : α) (rhs : β) : Doc
 
 
 def bubbleCommentDoc (s:String) : Doc :=
-  Doc.bubbleComment s {collapsesBridges := Ternary.no}
+  Doc.bubbleComment s
 
 def ruleDoc [ToDoc α] (s:String) (d:α) : Doc :=
   let d := toDoc d
-  Doc.rule s d {collapsesBridges := d.meta.collapsesBridges}
+  Doc.rule s d
 
 def measureTime (f : Unit → IO α) : IO (α × Nat):= do
   let before ← IO.monoNanosNow
@@ -716,8 +620,6 @@ def findSharedNodes (map:Std.HashMap Nat Nat) (d : Doc): (Std.HashMap Nat Nat) :
   | .stx _ _=> return map
   | .reset inner _=> return findSharedNodes map inner
   | .rule _ inner _=> return findSharedNodes map inner
-  | .provide _ _=> return map
-  | .require _ _=> return map
   | .bubbleComment _ _=> return map
   | .cost _ _=> return map
 
@@ -742,7 +644,7 @@ where
   printNl : Nat → String
   | indent => "\n".pushn ' ' indent
   printMeta (indentation:Nat): DocMeta → String
-  | m => s!"meta: \{ id := {m.id},{printNl indentation}cacheWeight := {m.cacheWeight},{printNl indentation}collapsesBridges := {repr m.collapsesBridges},{printNl indentation}flattenPath := {m.flattenPath.toComplex},{printNl indentation}flattenRPath := {m.flattenRPath.toComplex},{printNl indentation}flattenLPath := {m.flattenLPath.toComplex},{printNl indentation}eventuallyFlattenPath := {m.eventuallyFlattenPath.toComplex},{printNl indentation}path := {m.path.toComplex} }"
+  | m => s!"meta: \{ id := {m.id},{printNl indentation}cacheWeight := {m.cacheWeight}}"
   printNode (indentation:Nat): Doc → (String × Std.HashMap Nat String)
   | .text s m => (s!"(Doc.text \"{s}\" {printNl indentation}{printMeta indentation m})", results)
   | .newline s m => (s!"(Doc.newline {s} {printNl indentation}{printMeta indentation m})", results)
@@ -770,10 +672,6 @@ where
   | .rule name inner m =>
     let (i, results) := printNodes inner (indentation + 2) sharedNodes results
     (s!"(Doc.rule {name} {printNl indentation}{printMeta indentation m}{printNl indentation}inner: {i})", results)
-  | .provide b m =>
-    (s!"(Doc.provide {b} {printNl indentation}{printMeta indentation m}{printNl indentation})", results)
-  | .require b m =>
-    (s!"(Doc.require {b} {printNl indentation}{printMeta indentation m}{printNl indentation})", results)
   | .bubbleComment s m =>
     (s!"(Doc.bubbleComment \"{s}\" {printNl indentation}{printMeta indentation m}{printNl indentation})", results)
   | .cost n m =>
@@ -789,34 +687,6 @@ def Doc.printDependencies (d : Doc) : String := Id.run do
   res
 
 
-def verifyChoiceInvariant (path:String): Doc → List String
-  | .text _ _=> []
-  | .newline _ _=> []
-  | .choice left right m =>
-    let l := verifyChoiceInvariant (s!"{path}/choice") left
-    let r := verifyChoiceInvariant (s!"{path}/choice") right
-    let a := l.append r
-    if m.collapsesBridges.eq Ternary.maybe then
-      (s! "{path} left {left.toString} {right.toString}")::a
-    else
-      a
-  | .flatten inner _=> verifyChoiceInvariant (s!"{path}/flatten") inner
-  | .align inner _=> verifyChoiceInvariant (s!"{path}/align") inner
-  | .nest _ inner _=> verifyChoiceInvariant (s!"{path}/nest") inner
-  | .concat left right _=>
-    let l := verifyChoiceInvariant (s!"{path}/concat") left
-    let r := verifyChoiceInvariant (s!"{path}/concat") right
-    l.append r
-  | .stx _ _=> []
-  | .reset inner _=> verifyChoiceInvariant (s!"{path}/reset") inner
-  | .rule _ inner _=> verifyChoiceInvariant (s!"{path}/rule") inner
-  | .provide _ _=> []
-  | .require _ _=> []
-  /-
-  Note that this means that cost and bubble comments will be discarded if they are not attached to a relevant object
-  -/
-  | .bubbleComment _ _=> []
-  | .cost _ _=> []
 
 -- hack because \{ breaks highlight in vscode
 def lparen := "{"
@@ -839,25 +709,11 @@ where
   printNl : Nat → String
   | indent => "\n".pushn ' ' indent
 
-  approximation (path:Constraint): String :=
-    let x := path.toComplex.foldl (fun acc v =>
-      if acc.length > 0 then
-        acc  ++ s!", [{v.fst}, {v.snd}]"
-      else
-        s!"[{v.fst}, {v.snd}]"
-      ) ""
-    s!"[{x}]"
   printMeta (indentation : Nat) (m:DocMeta): String :=
     let nl := printNl (indentation + 2)
     s!"\"meta\": {lparen}" ++
     s!"{nl}\"id\": {m.id}," ++
     s!"{nl}\"cacheWeight\": {m.cacheWeight}," ++
-    s!"{nl}\"collapsesBridges\": \"{m.collapsesBridges.toString}\"," ++
-    s!"{nl}\"flattenPath\": {approximation m.flattenPath}," ++
-    s!"{nl}\"flattenRPath\": {approximation m.flattenRPath}," ++
-    s!"{nl}\"flattenLPath\": {approximation m.flattenLPath}," ++
-    s!"{nl}\"eventuallyFlattenPath\": {approximation m.eventuallyFlattenPath}," ++
-    s!"{nl}\"path\": {approximation m.path}" ++
     s!"{nl}}"
   printNode (indentation:Nat) (results : Std.HashMap Nat String): Doc → (String × Std.HashMap Nat String)
   | .text s m =>
@@ -912,16 +768,6 @@ where
     let (i, results) := jsonInternal inner (indentation + 2) results
     (
       s!"{lparen}\"type\": \"rule\", \"name\": \"{name}\",{printNl indentation}{printMeta indentation m},{printNl indentation}\"inner\": {i}}",
-      results
-    )
-  | .provide b m =>
-    (
-      s!"{lparen}\"type\": \"provide\", \"value\": {b},{printNl indentation}{printMeta indentation m}}",
-      results
-    )
-  | .require b m =>
-    (
-      s!"{lparen}\"type\": \"require\", \"value\": {b},{printNl indentation}{printMeta indentation m}}",
       results
     )
   | .bubbleComment s m =>
