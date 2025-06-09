@@ -134,33 +134,6 @@ def placeComment (indent : Nat) (comment : String) : List String → List String
   s :: (placeComment newIndentationLevel comment xs)
 
 
-@[inline]
-def cacheKey (id indent col: Nat) (leftBridge rightBridge : Bridge) (flatten : Flatten) : (UInt64 × UInt64) :=
-  -- assume that indent and col are max 16 bits
-  let indentAndCol := (indent.toUInt64) ||| (col.toUInt64 <<< 16)
-  -- assume that there are max 2^32 ids
-  let idAndIndentAndCol := id.toUInt64 ||| (indentAndCol <<< 32)
-  -- for now there are fewer than 16 bridges flatten only needs 5 values
-  let bridgesAndFlatten := leftBridge.toUInt64 ||| (rightBridge.toUInt64 <<< 16) ||| (flatten.toInt.toUInt64 <<< 32)
-  -- Funny story: the runtime changes from ~21 seconds to ~110 seconds if return idAndIndentAndCol instead of the tuple
-  -- In the benchmark SExpRandom.lean --size 4 --page-width 80 --computation-width 1000 (https://github.com/frit007/pretty-expressive-tests)
-  --   Note: that this benchmark does not depend on bridges, or flatten and they reach the same result
-  -- There might be an optimation that assumes scalar numbers are small
-  (idAndIndentAndCol, bridgesAndFlatten)
-
-def getCached [Cost χ] (id indent col: Nat) (leftBridge rightBridge : Bridge) (flatten : Flatten): MeasureResult χ (Option (MeasureSet χ)) := do
-  let cacheStore ← get
-  return cacheStore.content.get? (cacheKey id indent col leftBridge rightBridge flatten)
-
-def addToCache [Cost χ] (id indent column: Nat) (leftBridges rightBridges : Bridge) (flatten : Flatten) (results:MeasureSet χ): MeasureResult χ Unit := do
-  modify (fun cacheStore =>
-    {cacheStore with content := cacheStore.content.insert (cacheKey id indent column leftBridges rightBridges flatten) results}
-  )
-
-def removeFromCache [Cost χ] (id indent column: Nat) (leftBridges rightBridges : Bridge) (flatten : Flatten): MeasureResult χ Unit := do
-  modify (fun cacheStore =>
-    {cacheStore with content := cacheStore.content.erase (cacheKey id indent column leftBridges rightBridges flatten)}
-  )
 
 
 
@@ -176,12 +149,17 @@ partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (col inde
   if enableDebugging then
     dbg_trace s!"doc : lb {leftBridge} rb {rightBridge} kind {doc.kind} flatten: {repr flatten} :::: {doc.toString} path:({doc.meta.findPath flatten |> repr})"
   if doc.meta.shouldBeCached then
-    match ← getCached doc.meta.id indent col leftBridge rightBridge flatten with
+    let key := createKey col indent flatten leftBridge rightBridge
+    match (← get).content[doc.meta.id]!.find? key with
     | some x =>
-      return x
+      return x.result
     | _ =>
       let value ← core doc
-      addToCache doc.meta.id indent col leftBridge rightBridge flatten value
+      let _ ← modify (fun cacheStore => {
+        cacheStore with
+        content := cacheStore.content.modify doc.meta.id (fun cacheArr => cacheArr.insertSorted {key:=key, result:=value})
+        })
+      -- addToCache doc.meta.id indent col leftBridge rightBridge flatten value
       return value
   else
     core doc
@@ -370,27 +348,27 @@ where
       concatAllWithRight lefts
 
 partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrunk χ): MeasureResult χ (Measure χ) := do
-  match trunk.cacheInfo with
-  | some (state, id) =>
-    if id != 0 then
-      let result ← getCached id state.col state.indent state.leftBridge state.rightBridge state.flatten
-      match result with
-      | some r =>
-        match r with
-        | .tainted t =>
-          let m ← expandTainted' t
-          removeFromCache id state.indent state.col state.leftBridge state.rightBridge state.flatten
-          addToCache id state.indent state.col state.leftBridge state.rightBridge state.flatten (.set [m])
-          return m
-        | .set (m::_) => return m
-        | .set [] => panic! "The cache should never contain an empty answer"
-      | _ =>
-        let m ← expandTainted' trunk
-        addToCache id state.indent state.col state.leftBridge state.rightBridge state.flatten (.set [m])
-        return m
-    else
-      expandTainted' trunk
-  | none =>
+  -- match trunk.cacheInfo with
+  -- | some (state, id) =>
+  --   if id != 0 then
+  --     let result ← getCached id state.col state.indent state.leftBridge state.rightBridge state.flatten
+  --     match result with
+  --     | some r =>
+  --       match r with
+  --       | .tainted t =>
+  --         let m ← expandTainted' t
+  --         removeFromCache id state.indent state.col state.leftBridge state.rightBridge state.flatten
+  --         addToCache id state.indent state.col state.leftBridge state.rightBridge state.flatten (.set [m])
+  --         return m
+  --       | .set (m::_) => return m
+  --       | .set [] => panic! "The cache should never contain an empty answer"
+  --     | _ =>
+  --       let m ← expandTainted' trunk
+  --       addToCache id state.indent state.col state.leftBridge state.rightBridge state.flatten (.set [m])
+  --       return m
+  --   else
+  --     expandTainted' trunk
+  -- | none =>
     expandTainted' trunk
   where
   expandTainted' : TaintedTrunk χ → MeasureResult χ (Measure χ)
@@ -486,10 +464,10 @@ partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimi
 where
   removeEndingBridges [Cost χ] (ms : List (Measure χ)) : List (Measure χ) :=
     ms.foldl (fun acc m => mergeSet acc [{m with bridgeR := bridgeFlex}]) []
-  initCache (n:Nat) (log : Option (List String)): CacheStore χ :=
+  initCache (cacheSize:Nat) (log : Option (List String)): CacheStore χ :=
     -- allocate twice the space needed, so flatten is separated into its own category
     -- {size := n, content := Array.mkArray (n*2) [], log := log, giveUp := 1000, lastMeasurement := 0}
-    {size := n, content := {}, log := log, giveUp := 1000, lastMeasurement := 0}
+    {size := cacheSize, log := log, giveUp := 1000, lastMeasurement := 0, content := Array.mkArray cacheSize #[]}
 
 /--
 Find an optimal layout for a document and render it.

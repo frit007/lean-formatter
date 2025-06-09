@@ -5,11 +5,6 @@ open Std
 
 namespace PrettyFormat
 
-
-
-
-
-
 /--
 like LE but for `Bool`, due to my lack of knowledge regarding proofs
 -/
@@ -360,27 +355,101 @@ def TaintedTrunk.cacheInfo (trunk : TaintedTrunk χ) : Option (TaintedState × N
 
 
 
+-- structure Cache (χ : Type) where
+--   /--
+--   It was tried to format this piece with the following left bridge
+--   -/
+--   leftBridge : Bridge
+--   rightBridge : Bridge
+--   indent : Nat
+--   column: Nat --
+--   flatten: Flatten --
+
+--   /-
+--   In the future we could add maxWidth to allow caching across different indents as long as indent-newIndent+maxWidth < maxWidth
+--   -/
+--   results : MeasureSet χ
+
+
+
+
+
+-- note that node id is implicit at this point because the entire array belongs to a single node.
 structure Cache (χ : Type) where
   /--
-  It was tried to format this piece with the following left bridge
-  -/
-  leftBridge : Bridge
-  rightBridge : Bridge
-  indent : Nat
-  column: Nat --
-  flatten: Flatten --
+  The id consists of indent, col, flatten, leftBridge and right Bridge mashed into a single number to make it fast to compare
+  If we need more bridges, then this value could be split into more values (or reduce the maximum width of the document)
+  bit   | value
+  0-7   | leftBridge  (8bits)
+  8-15  | rightBridge (8bits)
+  16-18 | flatten     (3bits)
+  19-42 | column      (23bits)
+  43-63 | indent      (22bits)
 
-  /-
-  In the future we could add maxWidth to allow caching across different indents as long as indent-newIndent+maxWidth < maxWidth
+  This comes with the advantage that the cache value is 16 bytes and should be cache aligned
   -/
-  results : MeasureSet χ
+  key : UInt64
+  result : MeasureSet χ
+
+instance [Cost χ]: Inhabited (Cache χ) where
+  default := {key := 0, result := impossibleMeasureSet ""}
+
+instance [Cost χ]: Repr (Cache χ) where
+  reprPrec a _ := s!"{a.key} ==> {repr a.result}"
+
+def createKey (indent col :Nat) (flatten : Flatten) (leftBridge rightBridge : Bridge) : UInt64 :=
+  leftBridge.toUInt64 ||| (rightBridge.toUInt64<<<8) ||| (flatten.toInt.toUInt64 <<< 16) ||| (col.toUInt64 <<< 19) ||| (indent.toUInt64 <<< 42)
+
+abbrev CacheArray χ := Array (Cache χ)
+
+-- Public wrapper
+partial def CacheArray.binSearchIdx [Cost χ] (arr : CacheArray χ) (key : UInt64) : Nat :=
+  binSearchIdx' arr key 0 arr.size
+where
+  binSearchIdx'(arr : CacheArray χ) (key : UInt64) (lo hi : Nat) : Nat :=
+  if lo ≥ hi then lo
+  else
+    let mid := (lo + hi) / 2
+    if (arr[mid]!).key < key then
+      binSearchIdx' arr key (mid + 1) hi
+    else
+      binSearchIdx' arr key lo mid
+
+-- Insert into array at correct position to keep it sorted
+def CacheArray.insertSorted [Cost χ] (arr : CacheArray χ) (val : Cache χ) : CacheArray χ :=
+  let idx := binSearchIdx arr val.key
+  arr.insertIdx! idx val
+
+-- Check if a value exists (using binary search)
+partial def CacheArray.find? [Cost χ] (arr : CacheArray χ) (key : UInt64) : Option (Cache χ) :=
+  let rec go (lo hi : Nat) : Option (Cache χ) :=
+    if lo ≥ hi then none
+    else
+      let mid := (lo + hi) / 2
+      let entry := arr[mid]!
+      if key == entry.key then some entry
+      else if key < entry.key then go lo mid
+      else go (mid + 1) hi
+  go 0 arr.size
+
+/-- info: some 3 ==> MeasureSet.set 1 [(rightBridge 1, last:0)] -/
+#guard_msgs in
+#eval
+  let arr :CacheArray DefaultCost:= #[]
+  let arr := arr.insertSorted {key := 1, result := impossibleMeasureSet "a"}
+  let arr := arr.insertSorted {key := 10, result := impossibleMeasureSet "b"}
+  let arr := arr.insertSorted {key := 3, result := impossibleMeasureSet "c"}
+  arr.find? 3
+
+
 
 structure CacheStore (χ : Type) where
   log : Option (List (String))
   giveUp : Nat -- give up if we reach zero
   lastMeasurement : Nat -- the last time we took a measurement
   size:Nat
-  content : Std.HashMap (UInt64 × UInt64) (MeasureSet χ)
+  -- for every node create a unique cache
+  content : Array (CacheArray χ)
 
 abbrev MeasureResult χ := StateT (CacheStore χ) IO
 
@@ -435,8 +504,6 @@ def Doc.kind : Doc → String
   | .require _ _ => s!"require"
   | .bubbleComment s _ => s!"bubbleComment \"{s}\""
   | .cost _ _ => s!"cost"
-
-initialize cache : IO.Ref (Nat × Array (List (Cache DefaultCost))) ← IO.mkRef (0, #[])
 
 class ToDoc (α : Type u) where
   toDoc : α → Doc
