@@ -127,11 +127,15 @@ where
           layout := fun ss => s :: ss
         }
       else
-        return .set [{
+        let measure: Measure χ := {
             last := col + s.length,
             cost := Cost.text widthLimit col s.length
             layout := fun ss => s :: ss
-          }]
+          }
+        if measure.last <= computationWidth then
+          return .set [measure]
+        else
+          return .tainted (TaintedTrunk.value measure)
 
     | .newline flattened _ =>
       leafSet {

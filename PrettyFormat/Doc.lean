@@ -324,7 +324,9 @@ instance [Cost χ]: Repr (Cache χ) where
   reprPrec a _ := s!"{a.key} ==> {repr a.result}"
 
 def createKey (indent col :Nat) : UInt64 :=
-  (col.toUInt64 <<< 0) ||| (indent.toUInt64 <<< 32)
+  (col.toUInt64) ||| (indent.toUInt64 <<< 32)
+
+
 
 abbrev CacheArray χ := Array (Cache χ)
 
