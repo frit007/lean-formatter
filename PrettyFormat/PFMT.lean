@@ -199,7 +199,7 @@ where
             match s with
             | head::_ =>
               return .tainted (TaintedTrunk.value head)
-            | _ => panic! "There should at least be one piece of text in thhe original set"
+            | _ => panic! "There should at least be one piece of text in the original set"
         | _ => panic! "There is no way for us to generate a tainted value yet"
     | .newline flattened _ =>
       if flatten.shouldFlattenNl then
@@ -250,11 +250,15 @@ where
 
       match (leftHasSolution, rightHasSolution) with
       | (true, true) =>
-        let left ← (lhs.resolve col indent widthLimit computationWidth leftBridge rightBridge flatten)
-        let right ← (rhs.resolve col indent widthLimit computationWidth leftBridge rightBridge flatten)
         if rhs.meta.nlCount < lhs.meta.nlCount then
+          -- note: prefer searching the path with more newlines first, because it makes more likely to insert at the end of the cache
+          let left ← (lhs.resolve col indent widthLimit computationWidth leftBridge rightBridge flatten)
+          let right ← (rhs.resolve col indent widthLimit computationWidth leftBridge rightBridge flatten)
           return left.merge right
         else
+          -- note: prefer searching the path with more newlines first, because it makes more likely to insert at the end of the cache
+          let right ← (rhs.resolve col indent widthLimit computationWidth leftBridge rightBridge flatten)
+          let left ← (lhs.resolve col indent widthLimit computationWidth leftBridge rightBridge flatten)
           return right.merge left
       | (true, false) =>
         lhs.resolve col indent widthLimit computationWidth leftBridge rightBridge flatten
@@ -348,27 +352,6 @@ where
       concatAllWithRight lefts
 
 partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrunk χ): MeasureResult χ (Measure χ) := do
-  -- match trunk.cacheInfo with
-  -- | some (state, id) =>
-  --   if id != 0 then
-  --     let result ← getCached id state.col state.indent state.leftBridge state.rightBridge state.flatten
-  --     match result with
-  --     | some r =>
-  --       match r with
-  --       | .tainted t =>
-  --         let m ← expandTainted' t
-  --         removeFromCache id state.indent state.col state.leftBridge state.rightBridge state.flatten
-  --         addToCache id state.indent state.col state.leftBridge state.rightBridge state.flatten (.set [m])
-  --         return m
-  --       | .set (m::_) => return m
-  --       | .set [] => panic! "The cache should never contain an empty answer"
-  --     | _ =>
-  --       let m ← expandTainted' trunk
-  --       addToCache id state.indent state.col state.leftBridge state.rightBridge state.flatten (.set [m])
-  --       return m
-  --   else
-  --     expandTainted' trunk
-  -- | none =>
     expandTainted' trunk
   where
   expandTainted' : TaintedTrunk χ → MeasureResult χ (Measure χ)
@@ -391,37 +374,6 @@ structure PrintResult (χ : Type) where
   isTainted : Bool
   cost : χ
 deriving Inhabited
-
--- def Doc.hasNoSolution (d : Doc) : Bool :=
---   d.meta.flattenLPath.size == 0 &&
---   d.meta.flattenRPath.size == 0 &&
---   d.meta.flattenPath.size == 0 &&
---   d.meta.path.size == 0 &&
---   d.meta.eventuallyFlattenPath.size == 0
-
--- def Doc.findErr (d : Doc) (path : String) (errs : Std.HashMap String Nat) : (Std.HashMap String Nat) :=
---   if !d.hasNoSolution then
---     errs.alter ((s!"{path}::{d.toString}::{repr d.meta}")) (fun curr =>
---       match curr with
---       | some x => return x + 1
---       | none => return 1
---     )
---   else
---     match d with
---       | .text _ _=> errs
---       | .newline _ _=> errs
---       | .choice left right _=> right.findErr path (left.findErr path errs)
---       | .flatten inner _=> inner.findErr path errs
---       | .align inner _=> inner.findErr path errs
---       | .nest _ inner _=> inner.findErr path errs
---       | .concat left right _=> right.findErr path (left.findErr path errs)
---       | .stx _ _=> errs
---       | .reset inner _=> inner.findErr path errs
---       | .rule r inner _=> inner.findErr (path++"/"++r) errs
---       | .provide _ _=> errs
---       | .require _ _=> errs
---       | .bubbleComment _ _=> errs
---       | .cost _ _=> errs
 
 /--
 Find an optimal layout for a document and render it.
