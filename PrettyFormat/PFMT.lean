@@ -151,13 +151,13 @@ partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (col inde
   if doc.meta.shouldBeCached then
     let key := createKey col indent flatten leftBridge rightBridge
     match (← get).content[doc.meta.id]!.find? key with
-    | some x =>
-      return x.result
-    | _ =>
+    | .found x =>
+      return x
+    | .miss index =>
       let value ← core doc
       let _ ← modify (fun cacheStore => {
         cacheStore with
-        content := cacheStore.content.modify doc.meta.id (fun cacheArr => cacheArr.insertSorted {key:=key, result:=value})
+        content := cacheStore.content.modify doc.meta.id (fun cacheArr => cacheArr.insertSorted index {key:=key, result:=value})
         })
       -- addToCache doc.meta.id indent col leftBridge rightBridge flatten value
       return value

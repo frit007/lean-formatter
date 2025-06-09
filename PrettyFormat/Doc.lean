@@ -402,46 +402,29 @@ def createKey (indent col :Nat) (flatten : Flatten) (leftBridge rightBridge : Br
 
 abbrev CacheArray χ := Array (Cache χ)
 
--- Public wrapper
-partial def CacheArray.binSearchIdx [Cost χ] (arr : CacheArray χ) (key : UInt64) : Nat :=
-  binSearchIdx' arr key 0 arr.size
-where
-  binSearchIdx'(arr : CacheArray χ) (key : UInt64) (lo hi : Nat) : Nat :=
-  if lo ≥ hi then lo
-  else
-    let mid := (lo + hi) / 2
-    if (arr[mid]!).key < key then
-      binSearchIdx' arr key (mid + 1) hi
-    else
-      binSearchIdx' arr key lo mid
 
 -- Insert into array at correct position to keep it sorted
-def CacheArray.insertSorted [Cost χ] (arr : CacheArray χ) (val : Cache χ) : CacheArray χ :=
-  let idx := binSearchIdx arr val.key
+def CacheArray.insertSorted [Cost χ] (arr : CacheArray χ) (idx : Nat) (val : Cache χ) : CacheArray χ :=
   arr.insertIdx! idx val
 
+inductive FoundOrIndex (χ : Type)
+| found (result: MeasureSet χ)
+| miss (index: Nat)
+
+instance [Cost χ]: Inhabited (FoundOrIndex χ) where
+  default := .miss 0
+
 -- Check if a value exists (using binary search)
-partial def CacheArray.find? [Cost χ] (arr : CacheArray χ) (key : UInt64) : Option (Cache χ) :=
-  let rec go (lo hi : Nat) : Option (Cache χ) :=
-    if lo ≥ hi then none
+partial def CacheArray.find? [Cost χ] (arr : CacheArray χ) (key : UInt64) : FoundOrIndex χ :=
+  let rec go (lo hi : Nat) : FoundOrIndex χ :=
+    if lo ≥ hi then .miss lo
     else
       let mid := (lo + hi) / 2
       let entry := arr[mid]!
-      if key == entry.key then some entry
+      if key == entry.key then .found entry.result
       else if key < entry.key then go lo mid
       else go (mid + 1) hi
   go 0 arr.size
-
-/-- info: some 3 ==> MeasureSet.set 1 [(rightBridge 1, last:0)] -/
-#guard_msgs in
-#eval
-  let arr :CacheArray DefaultCost:= #[]
-  let arr := arr.insertSorted {key := 1, result := impossibleMeasureSet "a"}
-  let arr := arr.insertSorted {key := 10, result := impossibleMeasureSet "b"}
-  let arr := arr.insertSorted {key := 3, result := impossibleMeasureSet "c"}
-  arr.find? 3
-
-
 
 structure CacheStore (χ : Type) where
   log : Option (List (String))
