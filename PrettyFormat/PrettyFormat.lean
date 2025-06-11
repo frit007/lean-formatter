@@ -252,11 +252,6 @@ register_option pf.debugTime : Bool := {
     group    := "pf"
     descr    := "(pretty format) Debug how time is used"
 }
-register_option pf.debugLog : Bool := {
-    defValue := false
-    group    := "pf"
-    descr    := "(pretty format) Debug logging"
-}
 
 register_option pf.cacheDistance : Nat := {
     defValue := 2
@@ -274,7 +269,6 @@ def getDebugNoSolution (o : Options) : Bool := (o.get pf.debugNoSolution.name pf
 def getDebugDoc (o : Options) : Bool := (o.get pf.debugDoc.name pf.debugDoc.defValue)
 def getWarnCSTmismatch (o : Options) : Bool := (o.get pf.warnCSTmismatch.name pf.warnCSTmismatch.defValue)
 def getDebugTime (o : Options) : Bool := (o.get pf.debugTime.name pf.debugTime.defValue)
-def getDebugLog (o : Options) : Bool := (o.get pf.debugLog.name pf.debugLog.defValue)
 def getCacheDistance (o : Options) : Nat := (o.get pf.cacheDistance.name pf.cacheDistance.defValue)
 
 initialize coreFormatters : IO.Ref (Std.HashMap Name (Rule)) ← IO.mkRef {}

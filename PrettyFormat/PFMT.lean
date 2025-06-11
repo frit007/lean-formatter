@@ -79,9 +79,9 @@ def possibilitiesToMeasureSet [Cost χ] (possibilities : Bridge) (col indent wid
 
   if possibilities.overlapsWith bridgeNl then
     options := (MeasureSet.set [{
-      last := indent,
+      last := indent + text.length,
       bridgeR := bridgeFlex,
-      cost := Cost.nl,
+      cost := Cost.nl + Cost.text widthLimit indent (text.length),
       layout := fun ss => text :: "".pushn ' ' indent :: "\n" :: ss
     }])::options
 
@@ -163,6 +163,7 @@ partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (col inde
       return value
   else
     core doc
+
 where
   /-
   The core resolver that actually computes the `MeasureSet`s that result from rendering `doc`
@@ -171,8 +172,9 @@ where
   core (doc : Doc)  : MeasureResult χ (MeasureSet χ) := do
     match doc with
     | .text s _ =>
+      if s == "abacination" then
+        dbg_trace s!"{widthLimit} {col} {s.length}"
       if s.length == 0 then
-
         leafSet {
           last := col + s.length,
           cost := Cost.text widthLimit col s.length
@@ -191,12 +193,12 @@ where
           possibilitiesToMeasureSet leftBridge col indent widthLimit s false
 
         match ms with
-        | .set s =>
-          let s' := s.filter (fun m => m.last <= computationWidth)
-          if s'.length > 0 then
-            return .set s'
+        | .set ms =>
+          let ms' := ms.filter (fun m => m.last <= computationWidth)
+          if ms'.length > 0 then
+            return .set ms'
           else
-            match s with
+            match ms with
             | head::_ =>
               return .tainted (TaintedTrunk.value head)
             | _ => panic! "There should at least be one piece of text in the original set"
@@ -369,7 +371,6 @@ partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrun
     return m
 
 structure PrintResult (χ : Type) where
-  log : Option (List String)
   layout : String
   isTainted : Bool
   cost : χ
@@ -378,18 +379,17 @@ deriving Inhabited
 /--
 Find an optimal layout for a document and render it.
 -/
-partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat) (log : Option (List String)): IO (PrintResult χ) := do
+partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat) : (PrintResult χ) := Id.run do
   if !((doc.meta.findPath Flatten.notFlattened).overlapsWidth (bridgeFlex) (bridgeEnding)) then
     dbg_trace s!"WARNING: document does not contain a solution"
     -- IO.FS.writeFile ("doc_print.json") (s!"{doc.toJSON}")
     -- dbg_trace s!"WARNING: after writting "
 
-  let (preferredGroups, cache) ← ((doc.resolve (χ := χ) col 0 widthLimit computationWidth bridgeFlex bridgeEnding Flatten.notFlattened).run (initCache cacheSize log))
+  let (preferredGroups, cache) ← ((doc.resolve (χ := χ) col 0 widthLimit computationWidth bridgeFlex bridgeEnding Flatten.notFlattened).run (initCache cacheSize))
 
   match preferredGroups with
   | .set ([]) =>
     return {
-      log := cache.log,
       layout := "No solution found",
       isTainted := false,
       cost := Cost.text 0 0 0
@@ -398,16 +398,14 @@ partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimi
 
     let m := (removeEndingBridges ms).head!
     return {
-      log := cache.log,
       layout := String.join (m.layout []).reverse,
       isTainted := false,
       cost := m.cost
     }
   | .tainted t =>
     -- dbg_trace "tainted it was tainted..."
-    let (m, cache) ← ((expandTainted t)|>.run cache)
+    let (m, _) ← ((expandTainted t)|>.run cache)
     return {
-      log := cache.log,
       layout := String.join (m.layout []).reverse,
       isTainted := true,
       cost := m.cost
@@ -416,23 +414,14 @@ partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimi
 where
   removeEndingBridges [Cost χ] (ms : List (Measure χ)) : List (Measure χ) :=
     ms.foldl (fun acc m => mergeSet acc [{m with bridgeR := bridgeFlex}]) []
-  initCache (cacheSize:Nat) (log : Option (List String)): CacheStore χ :=
-    -- allocate twice the space needed, so flatten is separated into its own category
-    -- {size := n, content := Array.mkArray (n*2) [], log := log, giveUp := 1000, lastMeasurement := 0}
-    {size := cacheSize, log := log, giveUp := 1000, lastMeasurement := 0, content := Array.mkArray cacheSize #[]}
+  initCache (cacheSize:Nat): CacheStore χ :=
+    {size := cacheSize, lastMeasurement := 0, content := Array.mkArray cacheSize #[]}
 
 /--
 Find an optimal layout for a document and render it.
 -/
-partial def Doc.prettyPrint (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat) : IO String := do
-  return (← Doc.print χ doc cacheSize col widthLimit computationWidth (none)) |>.layout
-
-partial def Doc.prettyPrintLog (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat) : IO String := do
-  let l ← Doc.print χ doc cacheSize col widthLimit computationWidth (some [])
-  match l.log with
-  | none => return l.layout
-  | some log =>
-    return (s!"Log: {String.join (log.intersperse "\n\n")} {l.layout}")
+partial def Doc.prettyPrint (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat) : String :=
+  Doc.print χ doc cacheSize col widthLimit computationWidth |>.layout
 
 
 end PrettyFormat

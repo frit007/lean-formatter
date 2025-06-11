@@ -43,7 +43,6 @@ structure InputArguments where
   folder : Option String := none
   workers : Nat := 4
   filesPrWorker : Nat := 7
-  -- outputFileName : Option String := none
   output : PPLOutput := PPLOutput.copy ".formatted" -- TODO: This must change to replace, when the formatter is reliable
   includeFolders : List String := []
   opts : Options := {}
@@ -159,7 +158,7 @@ unsafe def formatFile (fileName : String) (args : InputArguments): IO (String ×
     let formatters ← getFormatters env
     let result ← pfTopLevelWithDebug a env formatters options fileName
 
-    formatted := formatted ++ (result.reportAsComment ++ result.formattedPPL) ++ "\n\n"
+    formatted := formatted ++ ((← result.reportAsComment) ++ result.formattedPPL) ++ "\n\n"
     report := report.combineReports ({result.toReport with formattedCommands := if result.cstDifferenceError.isNone then 1 else 0, totalCommands := 1})
 
   let fileName := match args.output with

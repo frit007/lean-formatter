@@ -8,14 +8,12 @@ open Lean
 open Data
 open Std
 
-open Lean
-open Lean.Meta
-open Lean.Elab.Command
 open Lean Elab PrettyPrinter PrettyFormat
 
 
 open Lean.Meta
 open System
+open IO IO.Process
 
 
 namespace PrettyFormat
@@ -751,7 +749,7 @@ def FormatResult.preservesCst (res : FormatResult) : Bool :=
     | .some _ => false
   def nanosecondsToSeconds (ns : Nat) : Float :=
     ns.toFloat / 1_000_000_000.0
-  def FormatResult.reportAsComment (res : FormatResult): String := Id.run do
+  def FormatResult.reportAsComment (res : FormatResult): IO String := do
     let stx := res.stx
     let opts := res.opts
     let generatedSyntax := res.generatedSyntax
@@ -783,11 +781,19 @@ def FormatResult.preservesCst (res : FormatResult) : Bool :=
         errString := errString ++ s!"{kind}:({stx.length}) \n"
 
     if (PrettyFormat.getDebugDoc opts) then
-      errString := errString ++ "\n---- Generated PPL ----\n" ++ (doc.toString)
+      errString := errString ++ "\n---- debugDoc ----\n" ++ (doc.toString)
 
     if (PrettyFormat.getDebugNoSolution opts) then
-      -- errString := errString ++ "\n---- Path  ----\n" ++ (ppl.printDependencies)
-      errString := errString ++ "\n---- Path  ----\n" ++ (doc.toJSON)
+      let process ← IO.Process.output {cmd := "curl", args := #["-o", "debugDoc.html", "https://github.com/frit007/lean-formatter/raw/main/debugDependencies.html"], stdout := .piped, stderr := .piped, stdin := .null}
+      if process.exitCode != 0 then
+        errString := errString ++ "\n---- Could not create html page ----\n" ++ (doc.toJSON)
+      else
+        -- errString := errString ++ "\n---- Path  ----\n" ++ (doc.toJSON)
+        let file ← IO.FS.readFile "debugDoc.html"
+        let path ← IO.FS.realPath "debugDoc.html"
+        errString := errString ++ "\n---- Debug page ----\n" ++ s!"{path}" ++ "\n"
+        let updatedFile := file.replace "//@@@@@replace@@@@@" s!"reconstructVal({doc.toJSON})"
+        IO.FS.writeFile "debugDoc.html" updatedFile
 
     if (PrettyFormat.getDebugTime opts) then
       errString := errString ++ s!"\n---- timingPPL ----\ntimePF{nanosecondsToSeconds res.timePF}s\ntimeDoc{nanosecondsToSeconds res.timeDoc}s\ntimeReparse{nanosecondsToSeconds res.timeReparse}s"
@@ -820,11 +826,7 @@ partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters :
     return pfTopLevel stx formatters)
   -- printAllIds
   let (formattedPPL, timeDoc) ← measureTime (fun _ => do
-    if getDebugLog opts then
-      doc.prettyPrintLog DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts) (computationWidth := PrettyFormat.getPFLineLength opts)
-    else
-      -- return ppl.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
-      doc.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts) (computationWidth := PrettyFormat.getPFLineLength opts)
+    return doc.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts) (computationWidth := PrettyFormat.getPFLineLength opts)
   )
 
   let (generatedSyntax, timeReparse) ← measureTime ( fun _ => do

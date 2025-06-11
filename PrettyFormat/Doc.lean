@@ -376,7 +376,6 @@ def createKey (indent col :Nat) (flatten : Flatten) (leftBridge rightBridge : Br
 
 abbrev CacheArray χ := Array (Cache χ)
 
-
 -- Insert into array at correct position to keep it sorted
 def CacheArray.insertSorted [Cost χ] (arr : CacheArray χ) (idx : Nat) (val : Cache χ) : CacheArray χ :=
   arr.insertIdx! idx val
@@ -401,22 +400,12 @@ partial def CacheArray.find? [Cost χ] (arr : CacheArray χ) (key : UInt64) : Fo
   go 0 arr.size
 
 structure CacheStore (χ : Type) where
-  log : Option (List (String))
-  giveUp : Nat -- give up if we reach zero
   lastMeasurement : Nat -- the last time we took a measurement
   size:Nat
   -- for every node create a unique cache
   content : Array (CacheArray χ)
 
-abbrev MeasureResult χ := StateT (CacheStore χ) IO
-
-
-
-def cacheLog (message : Unit → String): (MeasureResult χ) Unit := do
-  modify (fun s =>
-    match s.log with
-    | none => s
-    | some log => { s with log := some (log ++ [message ()]) })
+abbrev MeasureResult χ := StateT (CacheStore χ) Id
 
 def Doc.toString (ppl:Doc) : String :=
   output' 0 ppl
@@ -618,13 +607,6 @@ def measureTime (f : Unit → IO α) : IO (α × Nat):= do
   let res ← f ()
   let after ← IO.monoNanosNow
   return (res, after - before)
-
-def measureDiff (str:String): MeasureResult χ Unit := do
-  -- return () -- TODO: remove
-  let now ← IO.monoNanosNow
-  let s ← get
-  set {s with lastMeasurement := now}
-  IO.println s!"{str}::PERF {(now - s.lastMeasurement).toFloat / 1000000000.0} ({now})"
 
 def formatThen [ToDoc α] [ToDoc β] (sep : α) (ppl : β) : Doc :=
   let p := toDoc ppl

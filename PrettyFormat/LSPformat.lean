@@ -82,7 +82,7 @@ unsafe def elabFormatDebugCmd : CommandElab
     let formatters ← getFormatters env
     let result ← pfTopLevelWithDebug stx env formatters opts (← getFileName)
 
-    logInfo s!"\n{result.reportAsComment ++ result.formattedPPL}"
+    logInfo s!"\n{(← result.reportAsComment) ++ result.formattedPPL}"
   | stx => logError m!"Syntax tree?: {stx.getKind}"
 
 def findLineEnd (source:String) (pos:String.Pos) : String.Pos:= Id.run do
@@ -144,7 +144,7 @@ open CodeAction Server RequestM in
 -- @[command_code_action Lean.Parser.Command.declaration]
 @[command_code_action]
 def formatCmdCodeAction : CommandCodeAction := fun p _ info node => do
-  let .node i ts := node | return #[]
+  let .node i _ := node | return #[]
 
   let opts := info.options
   let stx :Syntax := i.stx
@@ -169,7 +169,7 @@ def formatCmdCodeAction : CommandCodeAction := fun p _ info node => do
 
       let result ← pfTopLevelWithDebug (stx) info.env formatters opts p.textDocument.uri
 
-      let newText := result.reportAsComment ++ result.formattedPPL
+      let newText := (← result.reportAsComment) ++ result.formattedPPL
 
       pure { eager with
         edit? := some <|.ofTextEdit doc.versionedIdentifier {
@@ -178,6 +178,3 @@ def formatCmdCodeAction : CommandCodeAction := fun p _ info node => do
         }
       }
   }]
-
-
-

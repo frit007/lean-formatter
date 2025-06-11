@@ -167,8 +167,7 @@
 
       return str.length === 1 ? str[0] : `(${str.join("|||")})`;
     }
-
-    const docData = {
+    const defaultDocData = {
       type: "concat",
       lhs: {
         type: "text",
@@ -180,7 +179,10 @@
         lhs: { type: "choice", lhs: { type: "text", s: "world1" }, rhs: { type: "text", s: "world2" } },
         rhs: { type: "newline", s: null }
       }
-    };
+    }
+
+    const docData = //@@@@@replace@@@@@
+      (defaultDocData); 
 
     function transformDoc(node) {
       if (!node) return null;
@@ -269,7 +271,6 @@
      */
     // note output also updates the bridge calculation
     function output(node, flatten, doc, leftBridge) {
-      // debugger
       console.log("node?", node, "flatten", flatten, "doc", doc, "leftBridge", leftBridge)
       node.leftBridge = leftBridge
       // function updateSelect
@@ -427,11 +428,13 @@
       return d
     }
 
-
+    function reconstructVal (docs) {
+      reconstruct(docs.start, docs)
+    }
     async function updateTransform() {
       const docs = JSON.parse(outputBox.value)
-      console.log("the doc", docs)
-      const start = reconstruct(docs.start, docs)
+      // console.log("the doc", docs)
+      const start = reconstructVal(docs)
       // console.log("newRootData", start, rootData)
       rootData = transformDoc(start)
       render(rootData)
