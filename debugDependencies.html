@@ -429,7 +429,7 @@
     }
 
     function reconstructVal (docs) {
-      reconstruct(docs.start, docs)
+      return reconstruct(docs.start, docs)
     }
     async function updateTransform() {
       const docs = JSON.parse(outputBox.value)
