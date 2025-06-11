@@ -784,15 +784,14 @@ def FormatResult.preservesCst (res : FormatResult) : Bool :=
       errString := errString ++ "\n---- debugDoc ----\n" ++ (doc.toString)
 
     if (PrettyFormat.getDebugNoSolution opts) then
-      let process ← IO.Process.output {cmd := "curl", args := #["-o", "debugDoc.html", "https://github.com/frit007/lean-formatter/raw/main/debugDependencies.html"], stdout := .piped, stderr := .piped, stdin := .null}
+      let process ← IO.Process.output {cmd := "curl", args := #["-Lo", "debugDoc.html", "https://github.com/frit007/lean-formatter/raw/main/debugDependencies.html"], stdout := .piped, stderr := .piped, stdin := .null}
       if process.exitCode != 0 then
         errString := errString ++ "\n---- Could not create html page ----\n" ++ (doc.toJSON)
       else
-        -- errString := errString ++ "\n---- Path  ----\n" ++ (doc.toJSON)
         let file ← IO.FS.readFile "debugDoc.html"
         let path ← IO.FS.realPath "debugDoc.html"
         errString := errString ++ "\n---- Debug page ----\n" ++ s!"{path}" ++ "\n"
-        let updatedFile := file.replace "//@@@@@replace@@@@@" s!"reconstructVal({doc.toJSON})"
+        let updatedFile := file.replace "//@@@@@replace@@@@@" s!"reconstructVal(JSON.parse(`{doc.toJSON}`));"
         IO.FS.writeFile "debugDoc.html" updatedFile
 
     if (PrettyFormat.getDebugTime opts) then
