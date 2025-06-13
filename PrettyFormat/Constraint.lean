@@ -49,12 +49,13 @@ where mergeConstraints' (lhs rhs merged: Array (Bridge × Bridge)) (li ri : Nat)
   ) #[]
 /--
 The goal is to avoid to avoid paying for the complexity of bridges when they are not used.
-We want to achieve this using to methods:
- - We want to avoid following the pointer to
+This tagged union has the following performance goals:
+ - We want to avoid following the pointer to the (bridge x bridge) array
+ - When possible avoid iterating through all left bridges
 -/
 inductive Constraint where
 /--
-all bridges in the left side can lead to all bridges in the right side.
+all bridges on the left side lead to all bridges on the right side.
 -/
 | uniform (left : Bridge) (right : Bridge)
 /--

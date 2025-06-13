@@ -240,7 +240,7 @@ where
 
       let left ← (lhs.resolve col indent widthLimit computationWidth leftBridge newRight flattenLhs)
       let taintedState : TaintedState := {col:=col, indent:=indent, widthLimit:=widthLimit, computationWidth := computationWidth, leftBridge := leftBridge, rightBridge := rightBridge, flatten := flattenRhs}
-      processConcat left rhs taintedState m.id flattenRhs
+      processConcat left rhs taintedState flattenRhs
     | .choice lhs rhs _ => do
       -- let leftHasSolution := (lhs.meta.findPath flatten).any (fun (l, r) => l.overlapsWith leftBridge && r.overlapsWith rightBridge)
       let leftHasSolution := (lhs.meta.findPath flatten).overlapsWidth leftBridge rightBridge
@@ -315,13 +315,13 @@ where
   Compute the set that contains the concatenations of all possible lhs measures
   with their corresponding rhs measure.
   -/
-  processConcat (left : MeasureSet χ) (right : Doc) (state: TaintedState) (concatId : Nat) (flattenRhs : Flatten) : MeasureResult χ (MeasureSet χ) := do
+  processConcat (left : MeasureSet χ) (right : Doc) (state: TaintedState) (flattenRhs : Flatten) : MeasureResult χ (MeasureSet χ) := do
     match left with
     | .tainted leftThunk =>
       -- If the lhs is already tainted we can wrap the computation of the rhs
       -- in a tainted thunk, thus prunning it away.
       -- dbg_trace s!"tainted lb{state.leftBridge} rb{state.rightBridge}"
-      return .tainted (TaintedTrunk.leftTainted leftThunk right state concatId)
+      return .tainted (TaintedTrunk.leftTainted leftThunk right state)
     | .set lefts =>
       let concatOneWithRight (l : Measure χ) : MeasureResult χ (MeasureSet χ) := do
         -- This is an optimized version of dedup from the paper. We use it to maintain
@@ -338,7 +338,7 @@ where
               dedup rights (currentBest :: result) current
 
         match ← (right.resolve l.last state.indent widthLimit computationWidth l.bridgeR rightBridge flattenRhs) with
-        | .tainted rightThunk => return .tainted (TaintedTrunk.rightTainted l rightThunk {state with rightBridge := rightBridge} concatId)
+        | .tainted rightThunk => return .tainted (TaintedTrunk.rightTainted l rightThunk {state with rightBridge := rightBridge})
         | .set (r :: rights) => return .set (dedup rights [] (l.concat r))
         | .set [] =>
           dbg_trace "concat::no right solution"
@@ -357,14 +357,14 @@ partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrun
     expandTainted' trunk
   where
   expandTainted' : TaintedTrunk χ → MeasureResult χ (Measure χ)
-  | .leftTainted (left : (TaintedTrunk χ)) (right:Doc) (state:TaintedState) (_:Nat) => do
+  | .leftTainted (left : (TaintedTrunk χ)) (right:Doc) (state:TaintedState)=> do
     let leftMeasure ← expandTainted left
     let r ← right.resolve leftMeasure.last state.indent state.widthLimit state.computationWidth leftMeasure.bridgeR state.rightBridge state.flatten
     match r with
     | .tainted t => return leftMeasure.concat (← expandTainted t)
     | .set (m::_) => return leftMeasure.concat m
     | _ => return impossibleMeasure "tainted::no right solution"
-  | .rightTainted left right _ _ => do
+  | .rightTainted left right _ => do
     let r ← expandTainted right
     return left.concat r
   | .value m => do

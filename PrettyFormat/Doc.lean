@@ -307,8 +307,8 @@ structure TaintedState where
 
 
 inductive TaintedTrunk (χ : Type) where
-| leftTainted (left: TaintedTrunk χ) (doc: Doc) (state : TaintedState) (id: Nat)
-| rightTainted (left : Measure χ) (right: TaintedTrunk χ) (state : TaintedState) (id: Nat)
+| leftTainted (left: TaintedTrunk χ) (doc: Doc) (state : TaintedState)
+| rightTainted (left : Measure χ) (right: TaintedTrunk χ) (state : TaintedState)
 | value (m : Measure χ)
 
 inductive MeasureSet (χ : Type)
@@ -340,13 +340,6 @@ instance : Repr (MeasureSet χ) where
       s!"MeasureSet.set {s.length} {children}"
     | MeasureSet.tainted _, _ =>
       "MeasureSet.tainted "
-
-def TaintedTrunk.cacheInfo (trunk : TaintedTrunk χ) : Option (TaintedState × Nat) :=
-  match trunk with
-  | .leftTainted _ _ s id => some (s, id)
-  | .rightTainted _ _ s id => some (s, id)
-  | _ => none
-
 
 -- note that node id is implicit at this point because the entire array belongs to a single node.
 structure Cache (χ : Type) where
