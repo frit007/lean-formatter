@@ -100,13 +100,13 @@ partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (col inde
   if doc.meta.shouldBeCached then
     let key := createKey col indent
     match (← get).content[doc.meta.id]!.find? key with
-    | some x =>
-      return x.result
-    | _ =>
+    | .found ms =>
+      return ms
+    | .miss index =>
       let value ← core doc
       let _ ← modify (fun cacheStore => {
         cacheStore with
-        content := cacheStore.content.modify doc.meta.id (fun cacheArr => cacheArr.insertSorted {key:=key, result:=value})
+        content := cacheStore.content.modify doc.meta.id (fun cacheArr => cacheArr.insertIdx! index {key:=key, result:=value})
         })
       -- addToCache doc.meta.id indent col leftBridge rightBridge flatten value
       return value
@@ -243,7 +243,6 @@ partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrun
     return m
 
 structure PrintResult (χ : Type) where
-  log : Option (List String)
   layout : String
   isTainted : Bool
   cost : χ
@@ -252,20 +251,18 @@ deriving Inhabited
 /--
 Find an optimal layout for a document and render it.
 -/
-partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat) (log : Option (List String)): IO (PrintResult χ) := do
-  let (preferredGroups, cache) ← ((doc.resolve (χ := χ) col 0 widthLimit computationWidth).run (initCache cacheSize log))
+partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat): (PrintResult χ) := Id.run do
+  let (preferredGroups, cache) ← ((doc.resolve (χ := χ) col 0 widthLimit computationWidth).run (initCache cacheSize ))
 
   match preferredGroups with
   | .set ([]) =>
     return {
-      log := cache.log,
       layout := "No solution found",
       isTainted := false,
       cost := Cost.text 0 0 0
     }
   | .set (m::_) =>
     return {
-      log := cache.log,
       layout := String.join (m.layout []).reverse,
       isTainted := false,
       cost := m.cost
@@ -274,7 +271,6 @@ partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimi
     -- dbg_trace "tainted it was tainted..."
     let (m, cache) ← ((expandTainted t)|>.run cache)
     return {
-      log := cache.log,
       layout := String.join (m.layout []).reverse,
       isTainted := true,
       cost := m.cost
@@ -282,23 +278,13 @@ partial def Doc.print (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimi
 
 where
 
-  initCache (cacheSize:Nat) (log : Option (List String)): CacheStore χ :=
-    -- allocate twice the space needed, so flatten is separated into its own category
-    -- {size := n, content := Array.mkArray (n*2) [], log := log, giveUp := 1000, lastMeasurement := 0}
-    {size := cacheSize, log := log, giveUp := 1000, lastMeasurement := 0, content := Array.mkArray cacheSize #[]}
+  initCache (cacheSize:Nat) : CacheStore χ :=
+    {size := cacheSize, lastMeasurement := 0, content := Array.mkArray cacheSize #[]}
 
 /--
 Find an optimal layout for a document and render it.
 -/
-partial def Doc.prettyPrint (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat) : IO String := do
-  return (← Doc.print χ doc cacheSize col widthLimit computationWidth (none)) |>.layout
-
-partial def Doc.prettyPrintLog (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat) : IO String := do
-  let l ← Doc.print χ doc cacheSize col widthLimit computationWidth (some [])
-  match l.log with
-  | none => return l.layout
-  | some log =>
-    return (s!"Log: {String.join (log.intersperse "\n\n")} {l.layout}")
-
+partial def Doc.prettyPrint (χ : Type) [Cost χ] (doc : Doc) (cacheSize col widthLimit computationWidth : Nat) : String :=
+  Doc.print χ doc cacheSize col widthLimit computationWidth |>.layout
 
 end PrettyFormat

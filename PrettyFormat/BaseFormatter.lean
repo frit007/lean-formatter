@@ -728,11 +728,7 @@ partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters :
     return pfTopLevel stx formatters)
   -- printAllIds
   let (formattedPPL, timeDoc) ← measureTime (fun _ => do
-    if getDebugLog opts then
-      doc.prettyPrintLog DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts) (computationWidth := PrettyFormat.getPFLineLength opts)
-    else
-      -- return ppl.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts)
-      doc.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts) (computationWidth := PrettyFormat.getPFLineLength opts)
+    return doc.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts) (computationWidth := PrettyFormat.getPFLineLength opts)
   )
 
   let (generatedSyntax, timeReparse) ← measureTime ( fun _ => do

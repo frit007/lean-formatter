@@ -343,19 +343,21 @@ where
     else
       binSearchIdx' arr key lo mid
 
--- Insert into array at correct position to keep it sorted
-def CacheArray.insertSorted [Cost χ] (arr : CacheArray χ) (val : Cache χ) : CacheArray χ :=
-  let idx := binSearchIdx arr val.key
-  arr.insertIdx! idx val
+inductive FoundOrIndex (χ : Type)
+| found (result: MeasureSet χ)
+| miss (index: Nat)
+
+instance [Cost χ]: Inhabited (FoundOrIndex χ) where
+  default := .miss 0
 
 -- Check if a value exists (using binary search)
-partial def CacheArray.find? [Cost χ] (arr : CacheArray χ) (key : UInt64) : Option (Cache χ) :=
-  let rec go (lo hi : Nat) : Option (Cache χ) :=
-    if lo ≥ hi then none
+partial def CacheArray.find? [Cost χ] (arr : CacheArray χ) (key : UInt64) : FoundOrIndex χ :=
+  let rec go (lo hi : Nat) : FoundOrIndex χ :=
+    if lo ≥ hi then .miss lo
     else
       let mid := (lo + hi) / 2
       let entry := arr[mid]!
-      if key == entry.key then some entry
+      if key == entry.key then .found entry.result
       else if key < entry.key then go lo mid
       else go (mid + 1) hi
   go 0 arr.size
@@ -364,22 +366,13 @@ partial def CacheArray.find? [Cost χ] (arr : CacheArray χ) (key : UInt64) : Op
 
 
 structure CacheStore (χ : Type) where
-  log : Option (List (String))
-  giveUp : Nat -- give up if we reach zero
   lastMeasurement : Nat -- the last time we took a measurement
   size:Nat
   -- for every node create a unique cache
   content : Array (CacheArray χ)
 
-abbrev MeasureResult χ := StateT (CacheStore χ) IO
+abbrev MeasureResult χ := StateT (CacheStore χ) Id
 
-
-
-def cacheLog (message : Unit → String): (MeasureResult χ) Unit := do
-  modify (fun s =>
-    match s.log with
-    | none => s
-    | some log => { s with log := some (log ++ [message ()]) })
 
 def Doc.toString (ppl:Doc) : String :=
   output' 0 ppl
@@ -567,13 +560,6 @@ def measureTime (f : Unit → IO α) : IO (α × Nat):= do
   let res ← f ()
   let after ← IO.monoNanosNow
   return (res, after - before)
-
-def measureDiff (str:String): MeasureResult χ Unit := do
-  -- return () -- TODO: remove
-  let now ← IO.monoNanosNow
-  let s ← get
-  set {s with lastMeasurement := now}
-  IO.println s!"{str}::PERF {(now - s.lastMeasurement).toFloat / 1000000000.0} ({now})"
 
 def formatThen [ToDoc α] [ToDoc β] (sep : α) (ppl : β) : Doc :=
   let p := toDoc ppl

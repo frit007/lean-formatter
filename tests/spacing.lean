@@ -167,4 +167,3 @@ partial def nchoicenl : Nat → FormatM Doc
 
   -- IO.println s!"Time: {timeDoc.toFloat / 1000000000.0}s \n{out} the doc\n{doc.toString}"
   IO.println s!"Time format: {timeDoc.toFloat / 1000000000.0}s \n{out}"
-

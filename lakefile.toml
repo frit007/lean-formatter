@@ -1,6 +1,6 @@
 name = "PrettyFormat"
 version = "0.1.0"
-defaultTargets = ["Format", "BaseFormatter", "LSPformat", "Bridge", "Doc", "Constraint"]
+defaultTargets = ["Format", "BaseFormatter", "LSPformat", "Doc"]
 
 
 [[lean_lib]]
@@ -17,16 +17,6 @@ srcDir = "PrettyFormat"
 [[lean_lib]]
 name = "CoreFormatters"
 root = "CoreFormatters"
-srcDir = "PrettyFormat"
-
-[[lean_lib]]
-name = "Bridge"
-root = "Bridge"
-srcDir = "PrettyFormat"
-
-[[lean_lib]]
-name = "Constraint"
-root = "Constraint"
 srcDir = "PrettyFormat"
 
 [[lean_lib]]
