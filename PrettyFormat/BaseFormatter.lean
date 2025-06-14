@@ -101,7 +101,7 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
 
   match doc with
   | .text s m =>
-    let constraint := if s.length == 0 then Constraint.passthrough else acceptFlex
+    let constraint := if s.length == 0 then passthrough else acceptFlex
     cachePPL (.text s {m with flattenLPath := constraint, flattenRPath := constraint, flattenPath := constraint, eventuallyFlattenPath := constraint, path := constraint}) 0
   | .newline s m =>
     if s.isSome then
@@ -114,10 +114,10 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
       }) 0
     else
       cachePPL (.newline s {m with
-        flattenLPath := Constraint.impossible,
-        flattenRPath := Constraint.impossible,
-        flattenPath := Constraint.impossible,
-        eventuallyFlattenPath := Constraint.impossible,
+        flattenLPath := #[],
+        flattenRPath := #[],
+        flattenPath := #[],
+        eventuallyFlattenPath := #[],
         path := acceptFlex, nlCount := 1
       }) 0
   | .choice originalLeft originalRight m => do
@@ -211,11 +211,11 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
     }) (inner.meta.cacheWeight)
   | .bubbleComment s m =>
     cachePPL (.bubbleComment s {m with
-      path := Constraint.passthrough,
-      eventuallyFlattenPath := Constraint.passthrough,
-      flattenRPath := Constraint.passthrough,
-      flattenLPath := Constraint.passthrough,
-      flattenPath := Constraint.passthrough,
+      path := passthrough,
+      eventuallyFlattenPath := passthrough,
+      flattenRPath := passthrough,
+      flattenLPath := passthrough,
+      flattenPath := passthrough,
       nlCount := 1
       }) 0
   | .stx stx _ =>
@@ -247,17 +247,17 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
   | .provide b m  =>
     cachePPL (.provide b {m with
       nlCount := if b.overlapsWith bridgeNl then 1 else 0,
-      path := Constraint.provide b,
-      eventuallyFlattenPath := Constraint.provide b,
-      flattenRPath := Constraint.provide b,
-      flattenLPath := Constraint.provide b,
-      flattenPath := if b.flatten == bridgeNull then Constraint.impossible else Constraint.provide b.flatten
+      path := provideConstraint b,
+      eventuallyFlattenPath := provideConstraint b,
+      flattenRPath := provideConstraint b,
+      flattenLPath := provideConstraint b,
+      flattenPath := if b.flatten == bridgeNull then #[] else provideConstraint b.flatten
     }) 0
   | .require b m =>
     -- let parts := b.parts
     let initial := if (bridgeAny ||| bridgeNone).contains b then bridgeFlex else bridgeNull
-    let constraint := Constraint.uniform (initial ||| b) bridgeFlex
-    let flattenConstraint := if b.flatten == bridgeNull then Constraint.impossible else  Constraint.uniform (initial ||| b.flatten) bridgeFlex
+    let constraint := constraintUniformToComplex (initial ||| b) bridgeFlex
+    let flattenConstraint := if b.flatten == bridgeNull then #[] else  constraintUniformToComplex (initial ||| b.flatten) bridgeFlex
 
 
     cachePPL (.require b {m with
@@ -271,11 +271,11 @@ partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
   | .cost c m =>
     cachePPL (.cost c {m with
       nlCount := c,
-      path := Constraint.passthrough,
-      eventuallyFlattenPath := Constraint.passthrough,
-      flattenRPath := Constraint.passthrough,
-      flattenLPath := Constraint.passthrough,
-      flattenPath := Constraint.passthrough
+      path := passthrough,
+      eventuallyFlattenPath := passthrough,
+      flattenRPath := passthrough,
+      flattenLPath := passthrough,
+      flattenPath := passthrough
     }) 0
 where
   cachePPL (doc:Doc) (childCacheWeight:Nat) : FormatM Doc := do

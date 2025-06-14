@@ -114,11 +114,11 @@ structure DocMeta where
   collapsesBridges : Ternary := Ternary.yes
   nlCount : Nat := 0
 
-  path : Constraint := Constraint.passthrough
-  flattenPath : Constraint := Constraint.passthrough
-  eventuallyFlattenPath : Constraint := Constraint.passthrough
-  flattenLPath : Constraint := Constraint.passthrough
-  flattenRPath : Constraint := Constraint.passthrough
+  path : Constraint := passthrough
+  flattenPath : Constraint := passthrough
+  eventuallyFlattenPath : Constraint := passthrough
+  flattenLPath : Constraint := passthrough
+  flattenRPath : Constraint := passthrough
 deriving Inhabited, Repr
 
 
@@ -681,7 +681,7 @@ where
   printNl : Nat → String
   | indent => "\n".pushn ' ' indent
   printMeta (indentation:Nat): DocMeta → String
-  | m => s!"meta: \{ id := {m.id},{printNl indentation}cacheWeight := {m.cacheWeight},{printNl indentation}collapsesBridges := {repr m.collapsesBridges},{printNl indentation}flattenPath := {m.flattenPath.toComplex},{printNl indentation}flattenRPath := {m.flattenRPath.toComplex},{printNl indentation}flattenLPath := {m.flattenLPath.toComplex},{printNl indentation}eventuallyFlattenPath := {m.eventuallyFlattenPath.toComplex},{printNl indentation}path := {m.path.toComplex} }"
+  | m => s!"meta: \{ id := {m.id},{printNl indentation}cacheWeight := {m.cacheWeight},{printNl indentation}collapsesBridges := {repr m.collapsesBridges},{printNl indentation}flattenPath := {m.flattenPath},{printNl indentation}flattenRPath := {m.flattenRPath},{printNl indentation}flattenLPath := {m.flattenLPath},{printNl indentation}eventuallyFlattenPath := {m.eventuallyFlattenPath},{printNl indentation}path := {m.path} }"
   printNode (indentation:Nat): Doc → (String × Std.HashMap Nat String)
   | .text s m => (s!"(Doc.text \"{s}\" {printNl indentation}{printMeta indentation m})", results)
   | .newline s m => (s!"(Doc.newline {s} {printNl indentation}{printMeta indentation m})", results)
@@ -779,7 +779,7 @@ where
   | indent => "\n".pushn ' ' indent
 
   approximation (path:Constraint): String :=
-    let x := path.toComplex.foldl (fun acc v =>
+    let x := path.foldl (fun acc v =>
       if acc.length > 0 then
         acc  ++ s!", [{v.fst}, {v.snd}]"
       else
