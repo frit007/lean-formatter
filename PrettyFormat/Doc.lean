@@ -331,17 +331,6 @@ def createKey (indent col :Nat) : UInt64 :=
 abbrev CacheArray χ := Array (Cache χ)
 
 -- Public wrapper
-partial def CacheArray.binSearchIdx [Cost χ] (arr : CacheArray χ) (key : UInt64) : Nat :=
-  binSearchIdx' arr key 0 arr.size
-where
-  binSearchIdx'(arr : CacheArray χ) (key : UInt64) (lo hi : Nat) : Nat :=
-  if lo ≥ hi then lo
-  else
-    let mid := (lo + hi) / 2
-    if (arr[mid]!).key < key then
-      binSearchIdx' arr key (mid + 1) hi
-    else
-      binSearchIdx' arr key lo mid
 
 inductive FoundOrIndex (χ : Type)
 | found (result: MeasureSet χ)
