@@ -791,7 +791,9 @@ def FormatResult.preservesCst (res : FormatResult) : Bool :=
         let file ← IO.FS.readFile "debugDoc.html"
         let path ← IO.FS.realPath "debugDoc.html"
         errString := errString ++ "\n---- Debug page ----\n" ++ s!"{path}" ++ "\n"
-        let updatedFile := file.replace "//@@@@@replace@@@@@" s!"reconstructVal(JSON.parse(`{doc.toJSON}`));"
+        let json := doc.toJSON.replace "`" "'"
+        let json := json.replace "\\" "/"
+        let updatedFile := file.replace "//@@@@@replace@@@@@" s!"reconstructVal(JSON.parse(`{json}`));"
         IO.FS.writeFile "debugDoc.html" updatedFile
 
     if (PrettyFormat.getDebugTime opts) then

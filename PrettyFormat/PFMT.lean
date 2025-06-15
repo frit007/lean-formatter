@@ -34,19 +34,8 @@ termination_by lhs.length + rhs.length
 
 def enableDebugging := false
 
-structure FlattenState where
-  nextId : Nat
-  cached : Std.HashMap (Nat × Bool × Bool) Doc
 
-abbrev FlattenStateM a := (StateM FlattenState) a
-
-
-def FlattenStateM.genId : FlattenStateM Nat := do
-  let state ← get
-  let _ ← set {state with nextId := state.nextId + 1}
-  return state.nextId
-
-@[inline] def leafSet [Inhabited χ] [Cost χ] (m : Measure χ): MeasureResult χ (MeasureSet χ) :=
+@[inline] def leafSet [Cost χ] (m : Measure χ): MeasureResult χ (MeasureSet χ) :=
   return .set [m]
 
 /--
@@ -145,7 +134,7 @@ a `Doc` at a certain column position with a certain indentation level and width 
 leftBridge: the bridges before this document, these limit the types of documents we can create
 rightBridge: the bridges after this document, these are the bridges that will be followed by leafNodes, they are created by provideR
 -/
-partial def Doc.resolve [Inhabited χ] [Cost χ] [Repr χ] (doc : Doc) (col indent widthLimit computationWidth : Nat) (leftBridge rightBridge: Bridge) (flatten : Flatten) : MeasureResult χ (MeasureSet χ) := do
+partial def Doc.resolve [Cost χ] (doc : Doc) (col indent widthLimit computationWidth : Nat) (leftBridge rightBridge: Bridge) (flatten : Flatten) : MeasureResult χ (MeasureSet χ) := do
   if enableDebugging then
     dbg_trace s!"doc : lb {leftBridge} rb {rightBridge} kind {doc.kind} flatten: {repr flatten} :::: {doc.toString} path:({doc.meta.findPath flatten |> repr})"
   if doc.meta.shouldBeCached then
@@ -283,12 +272,9 @@ where
           bridgeR := possibilities
         }
     | .require b _ =>
-      let b := if flatten.isFlat then b.flatten else b
-      if leftBridge == bridgeFlex && b != bridgeFlex then
-        return impossibleMeasureSet "require::leftBridge is missing"
-      else
-        let possibilities := leftBridge.requireIntersection b
-        return possibilitiesToMeasureSet possibilities col indent widthLimit "" true
+      let b := if flatten.shouldFlattenNl then b.flatten else b
+      let possibilities := leftBridge.requireIntersection b
+      return possibilitiesToMeasureSet possibilities col indent widthLimit "" true
     | .rule _ doc _ =>
       doc.resolve col indent widthLimit computationWidth leftBridge rightBridge flatten
     | .flatten inner _ =>
@@ -353,7 +339,7 @@ where
          | l :: ls => do return (← concatOneWithRight l).merge (← concatAllWithRight ls)
       concatAllWithRight lefts
 
-partial def expandTainted [Inhabited χ] [Repr χ] [Cost χ] (trunk :TaintedTrunk χ): MeasureResult χ (Measure χ) := do
+partial def expandTainted [Cost χ] (trunk :TaintedTrunk χ): MeasureResult χ (Measure χ) := do
     expandTainted' trunk
   where
   expandTainted' : TaintedTrunk χ → MeasureResult χ (Measure χ)

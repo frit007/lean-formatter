@@ -111,17 +111,6 @@ partial def pfDeclId : Rule
 
 
 
-/-
----- let operator ----
--/
-
-#coreFmt Lean.Parser.Term.let fun
-| #[letSymbol, declaration, unknown1, after] =>
-  -- should we require a newline before let?
-  return (letSymbol <_> declaration <> unknown1 <$$> after)
-| _ => failure
-
-
 -- TODO: figure out what the suffix is used for.
 
 -- #coreFmt Lean.Parser.Termination.suffix fun
@@ -140,14 +129,7 @@ partial def pfDeclId : Rule
 | _ => failure
 
 
-#coreFmt Lean.Parser.Term.app fun
-| #[functionName, arguments]  => do
-  let functionName ← formatStx functionName
-  let arguments ← formatStxs arguments.getArgs
-  -- let this := functionName <_> (combine (.<**>.) arguments)
-  -- dbg_trace s!"app_str: {this.toString}"
-  return functionName <_> (combine (.<**>.) arguments)
-| _ => failure
+
 
 #coreFmt Term.app fun
 | #[functionName, arguments]  => do
@@ -163,7 +145,7 @@ def termOperator : Rule := fun
 | #[left, operator, right] => do
   let left ← formatStx left
   let right ← formatStx right
-  return (left <**> operator <_> right)
+  return (left <**> (operator <**> right).preferFlatten)
     <^> (left <_> operator <> bridgeImmediate !> right)
 | _ => failure
 
@@ -199,18 +181,22 @@ def termOperator : Rule := fun
 #coreFmt «term_>>_» termOperator
 #coreFmt «term_≠_» termOperator
 #coreFmt «term_×__1» termOperator
+#coreFmt «term_<*>_» termOperator
+#coreFmt «term_<*_» termOperator
+#coreFmt «term_*>_» termOperator
+#coreFmt «term_>>=_» termOperator
+
 
 #coreFmt «term{}» combine' (.<>.)
 
 #coreFmt Lean.Parser.Term.hole trivialPPL
-#coreFmt Lean.Parser.Tactic.rcasesPatMed trivialPPL
 #coreFmt Lean.binderIdent trivialPPL
 #coreFmt fieldIdx trivialPPL
 #coreFmt Lean.explicitBinders trivialPPL
 #coreFmt Lean.Parser.Term.ellipsis trivialPPL
 #coreFmt Lean.Parser.Tactic.tacticRfl trivialPPL
 #coreFmt num trivialPPL
-#coreFmt Lean.Parser.Term.doExpr trivialPPL
+
 #coreFmt Lean.Parser.Command.protected trivialPPL
 
 
@@ -236,20 +222,6 @@ def termOperator : Rule := fun
 -- #coreFmt Lean.Parser.Term.structInstField combine' (. <_> .)
 
 
--- TODO: Fix double space issue
-#coreFmt Lean.Parser.Term.basicFun fun
-| #[args, typeDecl, arrowAtom, content] => do
-  let content ← formatStx content
-  let typeDecl ← formatStx typeDecl
-  -- assumeMissing unknown1
-  let argsFormatted := combine (· <_> ·) args.getArgs
-  return (bridgeImmediate <! combine (. <_> .) #[argsFormatted, flattenDoc (toDoc typeDecl), toDoc arrowAtom] <> (Doc.nl <> content))
-   <^> (
-    combine (· <_> ·) #[argsFormatted, flattenDoc (toDoc typeDecl), toDoc arrowAtom] <> ((nestDoc 2 (Doc.nl <> content)) <^> ("" <_> (flattenDoc (toDoc content))))
-   )
-  -- return combine " " #[argsFormatted, flatten (toPPL typeDecl), toPPL arrowAtom] <> ((nestDoc 2 (PPL.nl <> content)) <^> (" " <> (flatten (toPPL content))))
-    -- return argsFormatted <> text " " <> arrowAtom <> ((text " " <> flatten (toPPL content)) <^> (PPL.nl <> content))
-| _ => failure
 
 #coreFmt Lean.Parser.Term.typeAscription fun
 | #[firstParen, vars, atom, type, lastParen] => do
@@ -477,12 +449,7 @@ def combineParenExpression [ToDoc a] [Inhabited a] (sep: Doc → Doc → Doc) (a
 | _ => failure
 
 
-#coreFmt Lean.Parser.Term.match fun
-| #[matchAtom, unknown1, unknown2, matchDiscr, withAtom, matchAlts] => do
-  assumeMissing unknown1
-  assumeMissing unknown2
-  return matchAtom <> bridgeSpace !> matchDiscr <_> withAtom <> bridgeNl !> matchAlts
-| _ => failure
+
 
 
 
@@ -642,21 +609,6 @@ def combineParenExpression [ToDoc a] [Inhabited a] (sep: Doc → Doc → Doc) (a
 #coreFmt Lean.Parser.Term.syntheticHole combine' (.<>.)
 #coreFmt Lean.«binderTerm∈_» combine' (.<_>.)
 
-#coreFmt Lean.Parser.Command.instance fun
-| #[kind, instanceAtom, declId, typeSpec, decl, whereStructInst] => do
-  let kind ← formatStx kind
-  let instanceAtom ← formatStx instanceAtom
-  let declId ← formatStx declId
-  let typeSpec ← formatStx typeSpec
-  let decl ← formatStx decl
-  let whereStructInst ← formatStx whereStructInst
-
-  let declaration := nestDoc 4 (combine (.<**>.) #[kind, instanceAtom, declId, typeSpec, decl])
-  let struct := (toDoc whereStructInst)
-  -- dbg_trace "should have given instance_str"
-  -- dbg_trace s!"instance_str: {(declaration <> bridgeAny !> struct).toString}"
-  return declaration <> bridgeAny !> struct
-| _ => failure
 
 
 
@@ -764,10 +716,6 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
   return tacticSeqIndentSeparators args.getArgs.toList
 | _ => failure
 
-#coreFmt Lean.Parser.Term.haveIdDecl fun
-| #[haveId, variables, typeSpec, assignAtom, val] => do
-  return haveId <_> combine (.<_>.) variables.getArgs <**> typeSpec <_> assignAtom <**> val
-| _ => failure
 
 #coreFmt Lean.Parser.Tactic.renameI fun
 | #[rename_iAtom, variables] =>
@@ -805,6 +753,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
 
 #coreFmt Lean.Parser.Term.doSeqItem fun
 | #[doExpr, unknown1] => do
+  -- TODO: this unknown1 might contain a semicolon
   assumeMissing unknown1
   return toDoc doExpr
 | _ => failure
@@ -817,19 +766,8 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
     (doAtom <> (""<$$$>value <^> "" <_> flattenDoc (value)))
 | _ => failure
 
-#coreFmt Lean.Parser.Term.let fun
-| #[letSymbol, declaration, sep, after] =>
-  if isEmpty sep then
-    return (letSymbol <_> declaration <> bridgeHardNl !> after)
-  else
-    return (letSymbol <_> declaration <> sep <_> after)
-| _ => failure
 
-#coreFmt Lean.Parser.Command.structSimpleBinder fun
-| #[declmodifiers, ident, optSig, unknown1] => do
-  assumeMissing unknown1
-  return declmodifiers <> ident <_> optSig
-| _ => failure
+
 
 #coreFmt «term{_:_//_}» fun
 | #[lpar, ident, type, slashAtom, val ,rpar] =>
@@ -928,10 +866,6 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
   return showAtom <_> proof
 | _ => failure
 
-#coreFmt Lean.Parser.Term.structInstFieldDef fun
-| #[assignAtom, value] =>
-  return assignAtom <_>  bridgeImmediate ||| bridgeSpace ||| bridgeSpaceNl !> value
-| _ => failure
 
 #coreFmt Lean.Parser.Term.sort fun
 | #[sortAtom, value] =>
@@ -1009,10 +943,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
   return letAtom <_> nestDoc 2 (recAtom <_> val)
 | _ => failure
 
-#coreFmt Lean.Parser.Term.structInstField fun
-| #[field, value] =>
-  return field <_> combine (·<_>·) value.getArgs
-| _ => failure
+
 
 #coreFmt Lean.Parser.Attr.simple combine' (· <_> ·)
 #coreFmt Batteries.Tactic.Lint.nolint combine' (· <_> ·)
@@ -1044,14 +975,6 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
 
 #coreFmt Lean.Parser.Termination.suffix combine' (· <$$> ·)
 
-#coreFmt Lean.Parser.Term.letIdDecl fun
-| #[var, unknown1, typeInfo, assignOperator, content] => do
-  assumeMissing unknown1
-  -- return (← pf var) <> text " " <> (← pf unknown1) <> (← pf typeInfo) <> (← pf assignOperator) <> (← nest 2 (do (text " " <^> PPL.nl)<>(← pf content)))
-  return var <_> unknown1 <> (typeInfo) <> assignOperator <> nestDoc 2 ("" <_> content)
-| _ => do
-  failure
-
 -- #coreFmt Lean.Parser.Tactic.simpAll combine' (· <**> ·)
 #coreFmt Lean.Parser.Tactic.simpAll fun
 | #[simpAll, optConfig, unknown1, onlyAtomContainer, proof] => do
@@ -1064,13 +987,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
 | _ => failure
 
 
-#coreFmt Lean.Parser.Term.let fun
-| #[letSymbol, declaration, sep, after] =>
-  if isEmpty sep then
-    return (letSymbol <_> declaration <$$$> after )
-  else
-    return (letSymbol <_> declaration <> sep <_> after)
-| _ => failure
+
 
 #coreFmt Lean.Parser.Term.doLet combine' (.<_>.)
 #coreFmt Lean.Parser.Term.doIf fun
@@ -1093,15 +1010,6 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
   return returnAtom <_> nestDoc 2 (toDoc content)
 | _ => failure
 
-#coreFmt Lean.Parser.Term.structInst fun
-| #[lpar, baseStruct, structFields, optEllipsis, unknown2, rpar] => do
-  let structFields ← formatStx structFields
-  -- assumeMissing unknown1
-  assumeMissing unknown2
-
-  return ((Doc.require bridgeImmediate <_> "" <^> "") <> lpar <$$> nestDoc 2 ((combine (.<_>.) baseStruct.getArgs) <$$> structFields <> ((""<$$>"") <? optEllipsis)) <> rpar).group
-  -- return toDoc "what"
-| _ => failure
 
 
 
@@ -1154,19 +1062,6 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
   return dsimpAtom <_> optConfig <_> onlyAtom <**> proof <**> location
 | _ => failure
 
-#coreFmt Lean.Parser.Command.declValSimple fun
-| #[assignAtom, value, suffix, whereDecls] => do
-  -- dbg_trace s!"declValSimple {assignAtom} ({value}) {suffix} {whereDecls}"
-  let value ← formatStx value
-  -- dbg_trace s!"declValSimple value {repr value}"
-  -- dbg_trace s!"declValSimple combined {repr (assignAtom <>("" <_> value))}"
-  return (nestDoc 2 (assignAtom <> ((("" <_> (flattenDoc value))
-  <^> ("" <$$> value))))
-  -- we require space here because we let the do notation handle the next indentation, which means that we momentarily have no indentation
-  <^> bridgeSpace <! assignAtom <> bridgeImmediate !> value)
-  <> (Doc.nl <? suffix)
-  <> (Doc.nl <? whereDecls)
-| _ => failure
 
 
 
@@ -1284,11 +1179,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
 
 
 
-#coreFmt Lean.Parser.Term.byTactic' fun
-| #[byAtom, proof] => do
-  let proof ← formatStx proof
-  return (bridgeImmediate <! "" <_> byAtom <^> byAtom) <$$> proof.group
-| _ => failure
+
 
 
 #coreFmt Lean.Parser.Tactic.simpa fun
@@ -1321,33 +1212,14 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
   return combine (.<_>.) #[casesAtom, casesTarget, proof]
 | _ => failure
 
-#coreFmt Lean.Parser.Term.byTactic fun
-| #[byAtom, tactic] => do
-  let tactic ← formatStx tactic
 
-  let content := byAtom <> (nestDoc 2 (bridgeHardNl !> tactic) <^> flattenDoc (bridgeSpace !> tactic))
-  return (((((bridgeImmediate <! " ") <> (nestDoc 2 (byAtom <$$> tactic).group)))))
-    <^> (bridgeNl <! byAtom <> nestDoc 2 (bridgeNl !> tactic))
-    <^> (((bridgeSpace ||| bridgeNone) <! content <^> costDoc 9 <> content/-allow any bridge, but at high a cost-/))
-  -- return bridgeImmediate <! "i am by tactic (I accept immediate)"
-  -- return (((((bridgeImmediate <! " ") <> (nestDoc 2 (byAtom <$$> tactic).group)))))
-| _ => failure
 
 -- #coreFmt Lean.Parser.Command.declValEqns fun
 -- | args => do
 --   return "" <$$$>"declValEqns"
 --   -- return (combine (.<>.) args)
 
-#coreFmt Lean.Parser.Command.theorem fun
-| #[theoremAtom, ident, typeSignature, content] => do
-  let typeSignature ← formatStx typeSignature
-  let content ← formatStx content
-  -- must allow newline after typeSignature, because it could be followed by
 
-  let val := (requireDoc bridgeSpace <> bridgeImmediate !> content) <^> (("" <$$> content).group <> costDoc 3)
-
-  return ((theoremAtom <**> nestDoc 4 (ident <**> (typeSignature ?> (""<**>"")))).group <> val)
-| _ => failure
 
 #coreFmt Lean.Parser.Term.matchAltsWhereDecls fun
 | #[wheres, suffix, unknown1] => do
@@ -1356,29 +1228,6 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
   -- return toDoc "matchAltsWhereDecls"
 | _ => failure
 
-#coreFmt Lean.Parser.Term.matchAlt fun
-| #[barAtom, pattern, arrowAtom, value] => do
-  let value ← formatStx value
-  let patternSyntax :=
-    if pattern.matchesNull 1 && (pattern.getArgs.get! 0|>.getKind) == `null then
-      addSpaceAfterCommas (pattern.getArgs.get! 0|>.getArgs)
-    else
-      toDoc pattern
-
-  return (bridgeNl !> barAtom) <_> (flattenDoc patternSyntax) <_> ((nestDoc 2 (arrowAtom <> (bridgeNl !> value <^> (bridgeSpace !>flattenDoc value)))) <^> (arrowAtom <> bridgeImmediate !> value))
-| _ => failure
-
-#coreFmt Lean.Parser.Command.declValSimple fun
-| #[assignAtom, value, suffix, whereDecls] => do
-  -- declValSimple breaks the rule "bridges should accept any"
-  let value ← formatStx value
-  return (nestDoc 2 ((bridgeImmediate|||bridgeSpace) <! assignAtom <> ((
-  ("" <$$> value)<^> ("" <_> (flattenDoc value)))))
-  -- we require space here because we let the do notation handle the next indentation, which means that we momentarily have no indentation
-  <^> bridgeImmediate <! assignAtom <> bridgeImmediate !> value)
-  <> (Doc.nl <? suffix)
-  <> (Doc.nl <? whereDecls)
-| _ => failure
 
 
 #coreFmt Lean.Parser.Tactic.locationHyp fun
@@ -1396,7 +1245,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
   return toDoc simpAtom <> ("" <_> "")<? nestDoc 2 content.group
 | _ => failure
 
-#coreFmt «term_::_» combine' (.<>.)
+
 
 #coreFmt Lean.«term∃__,_» fun
 | #[existAtom, binder, binderTerm, commaAtom, app] => do
@@ -1404,20 +1253,244 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
 | _ => failure
 
 
-#coreFmt Lean.Parser.Term.typeSpec combine' (.<_>.)
 
-#coreFmt Lean.Parser.Command.structure fun
-| #[structureAtom, declId, explicitBinder, unknown1, typeDecl, structFields, optDeriving] => do
-  assumeMissing unknown1
-  match structFields.getArgs with
-  | #[whereAtom, unknown2, structs] =>
-    assumeMissing unknown2
-    return structureAtom <_> declId <_> (combine (.<**>.) explicitBinder.getArgs) <> ((""<_>"")<?(combine (.<**>.) typeDecl.getArgs)) <_> whereAtom <$$$> structs <> ((""<$$$>"") <? optDeriving)
-  | _ => failure
-| _ => failure
+
+
 
 #coreFmt Lean.Parser.Term.forall fun
 | #[forallAtom, binder, typeInfo, commaAtom, arrow] => do
   let spacedTypeInfo := combine (.<_>.) typeInfo.getArgs
   return forallAtom <_> ((combine (.<**>.) #[combine (.<_>.) binder.getArgs, spacedTypeInfo]) <> commaAtom <_> arrow)
+| _ => failure
+
+
+#coreFmt Lean.Parser.Command.export fun
+| #[exportAtom, name, lparen, value, rparen] =>
+  -- return toDoc value
+  return exportAtom <_> nestDoc 2 (name <_> lparen <> combine (.<**>.) value.getArgs <>rparen)
+| _ => failure
+
+#coreFmt Lean.Parser.Term.typeSpec fun
+| #[colonAtom, type] =>
+  return colonAtom <**> (toDoc type).preferFlatten
+| _ => failure
+
+
+
+
+
+
+
+#coreFmt Lean.Parser.Tactic.rcases fun
+| #[rcasesAtom, target, withAtom] =>
+  return rcasesAtom <_> addSpaceAfterCommas target.getArgs <_> combine (.<_>.) withAtom.getArgs
+| _ => failure
+
+#coreFmt Tactic.rcasesPatMed combine' (.<_>.)
+
+#coreFmt Lean.Parser.Command.instance fun
+| #[kind, instanceAtom, declId, typeSpec, decl, whereStructInst] => do
+
+  let declaration := combine (.<_>.) #[kind, instanceAtom] <_> nestDoc 4 (combine (.<**>.) #[declId, typeSpec, decl])
+  let struct := (toDoc whereStructInst)
+  -- dbg_trace "should have given instance_str"
+  -- dbg_trace s!"instance_str: {(declaration <> bridgeAny !> struct).toString}"
+  return declaration <> bridgeAny !> struct
+| _ => failure
+
+
+#coreFmt Lean.Parser.Command.theorem fun
+| #[theoremAtom, ident, typeSignature, content] => do
+  -- must allow newline after typeSignature, because it could be followed by
+
+  let val := (requireDoc bridgeSpace <> bridgeImmediate !> content) <^> (("" <$$> content).group <> costDoc 3)
+
+  return ((theoremAtom <**> nestDoc 4 (ident <**> ((typeSignature) ?> (""<**>"")))).group <> val.group).group
+| _ => failure
+
+#coreFmt Lean.Parser.Term.byTactic fun
+| #[byAtom, tactic] => do
+  let tactic ← formatStx tactic
+
+  let content := byAtom <> (nestDoc 2 (bridgeHardNl !> tactic) <^> flattenDoc (bridgeSpace !> tactic))
+  return (((((bridgeImmediate <! " ") <> (nestDoc 2 (byAtom <$$> tactic).group)))))
+    <^> (bridgeNl <! byAtom <> costDoc 1 <> nestDoc 2 (bridgeNl !> tactic)) /-discourage newline, compared to bridge Immediate-/
+    <^> (((bridgeSpace ||| bridgeNone) <! content))
+| _ => failure
+
+#coreFmt Lean.Parser.Command.declValSimple fun
+| #[assignAtom, value, suffix, whereDecls] => do
+  -- declValSimple breaks the rule "bridges should accept any"
+  let value ← formatStx value
+  return (nestDoc 2 ((bridgeImmediate|||bridgeSpace) <! assignAtom <> ((
+  ("" <$$> value)<^> ("" <_> (flattenDoc value)))))
+  -- we require space here because we let the do notation handle the next indentation, which means that we momentarily have no indentation
+  <^> bridgeImmediate <! assignAtom <> bridgeImmediate !> value
+  )
+  <> (Doc.nl <? suffix)
+  <> (Doc.nl <? whereDecls)
+| _ => failure
+
+#coreFmt «term_∨_» combine' (.<_>.)
+
+#coreFmt Lean.Parser.Term.nomatch combine' (.<_>.)
+#coreFmt Lean.Parser.Command.extends combine' (.<_>.)
+
+#coreFmt Lean.Parser.Term.basicFun fun
+| #[args, typeDecl, arrowAtom, content] => do
+  let content ← formatStx content
+  let typeDecl ← formatStx typeDecl
+
+  let argsFormatted := combine (· <_> ·) args.getArgs
+  return (bridgeImmediate <! " " <> nestDoc 2 (combine (. <_> .) #[argsFormatted, flattenDoc (toDoc typeDecl), toDoc arrowAtom] <> (Doc.nl <> content)))
+   <^> (
+    combine (· <_> ·) #[argsFormatted, flattenDoc (toDoc typeDecl), toDoc arrowAtom] <> ((nestDoc 2 (Doc.nl <> content)) <^> ("" <_> (flattenDoc (toDoc content))))
+   )
+| _ => failure
+
+
+#coreFmt Lean.Parser.Term.match fun
+| #[matchAtom, unknown1, unknown2, matchDiscr, withAtom, matchAlts] => do
+  assumeMissing unknown1
+  assumeMissing unknown2
+  -- we might want to allow a variation of bridgeImmediate, because we might want to allow match being assigned to a value,
+  -- (bridgeImmediate <! " "<> matchAtom <_> nestDoc 2 (matchDiscr <_> withAtom <> bridgeNl !> matchAlts)) <^>
+  return (matchAtom <_> matchDiscr <_> withAtom <> bridgeNl !> matchAlts)
+| _ => failure
+
+#coreFmt Lean.Parser.Term.instBinder fun
+| #[lparen, inst, app, rparen] =>
+  return lparen <> combine (.<_>.) #[combine (.<_>.) inst.getArgs, toDoc app] <> rparen
+| _ => failure
+
+
+
+#coreFmt Lean.Parser.Term.structInst fun
+| #[lpar, baseStruct, structFields, optEllipsis, unknown2, rpar] => do
+  let structFields ← formatStx structFields
+  -- assumeMissing unknown1
+  assumeMissing unknown2
+
+  let value := lpar <$$> nestDoc 2 ((combine (.<_>.) baseStruct.getArgs) <$$> structFields <> ((""<$$>"") <? optEllipsis)) <> rpar
+  return (Doc.require bridgeImmediate <_> nestDoc 2 value <^> value).group
+  -- return toDoc "what"
+| _ => failure
+
+#coreFmt boolIfThenElse fun
+| #[ifAtom, condition, thenAtom, positiveBody, elseAtom, negativeBody] => do
+  let condition ← formatStx condition
+  let positiveBody ← formatStx positiveBody
+  let negativeBody ← formatStx negativeBody
+
+  let content := "" <_> condition <_> thenAtom <> nestDoc 2 ("" <$$> positiveBody) <$$> elseAtom <> nestDoc 2 ("" <$$> negativeBody)
+  return ifAtom <> content.group
+| _ => failure
+
+#coreFmt «term_::_» combine' (.<_>.)
+
+
+#coreFmt «term_%_» termOperator
+
+#coreFmt Lean.Parser.Term.matchAlt fun
+| #[barAtom, pattern, arrowAtom, value] => do
+  let value ← formatStx value
+  let patternSyntax :=
+    if pattern.getKind == `null then
+      combine (.<_>.) (pattern.getArgs.map (fun a =>
+        if a.getKind == `null then
+          addSpaceAfterCommas a.getArgs
+        else
+          toDoc a
+      ))
+      -- addSpaceAfterCommas (.get! 0|>.getArgs)
+    else
+      toDoc pattern
+
+  return (bridgeNl !> barAtom) <_> (flattenDoc patternSyntax) <_> ((nestDoc 2 (arrowAtom <> (bridgeNl !> value <^> (bridgeSpace !>flattenDoc value)))) <^> (arrowAtom <> bridgeImmediate !> value))
+| _ => failure
+
+
+#coreFmt Lean.Parser.Term.pipeProj fun
+| #[left, pipe, func, target] =>
+  return left <_> pipe <> func <> ((""<_>"") <? (combine (.<**>.) target.getArgs))
+| _ => failure
+
+#coreFmt Lean.Parser.Term.letrec fun
+| #[letRecGroup, defintition, unknown1, after] => do
+  assumeMissing unknown1;
+  return combine (.<_>.) letRecGroup.getArgs <**> defintition <$$$> after
+| _ => failure
+
+
+#coreFmt Lean.Parser.Command.mixfix combine' (.<_>.) -- TODO: There is probably more to this. It is used to define scoped infixl
+
+
+
+#coreFmt Lean.Parser.Command.structSimpleBinder fun
+-- | #[declmodifiers, ident, optSig, unknown1] => do
+--   assumeMissing unknown1
+--   return declmodifiers <> ident <_> optSig
+
+| #[declmodifiers, ident, optSig, binder] => do
+  -- assumeMissing unknown1
+  return declmodifiers <> ident <_> optSig <> ((""<_>"") <? binder)
+-- | #[a,b,c,d,e] => return toDoc "5 ahahah"
+| _ => failure
+
+#coreFmt Lean.Parser.Command.structure fun
+| #[structureAtom, declId, explicitBinder, extend, typeDecl, structFields, optDeriving] => do
+
+  match structFields.getArgs with
+  | #[whereAtom, renamer, structs] =>
+    -- assumeMissing unknown2
+    -- return toDoc unknown2
+    if (PrettyFormat.isEmpty renamer) then
+      return structureAtom <_> declId <_> (combine (.<**>.) explicitBinder.getArgs) <> (""<_>""<?extend) <> ((""<_>"")<?(combine (.<**>.) typeDecl.getArgs)) <_> whereAtom <$$$> structs <> ((""<$$$>"") <? optDeriving)
+    else
+      return structureAtom <_> declId <_> (combine (.<**>.) explicitBinder.getArgs) <> (""<_>""<?extend) <> ((""<_>"")<?(combine (.<**>.) typeDecl.getArgs)) <_> whereAtom <$$$> nestDoc 2 renamer <$$$> structs <> ((""<$$$>"") <? optDeriving)
+  | #[] =>
+    return structureAtom <_> declId <_> (combine (.<**>.) explicitBinder.getArgs) <> (""<_>""<?extend) <> ((""<_>"")<?(combine (.<**>.) typeDecl.getArgs))  <> ((""<$$$>"") <? optDeriving)
+  | _ => failure
+| _ => failure
+
+#coreFmt «term_&&_» termOperator
+
+
+#coreFmt Lean.Parser.Term.byTactic' fun
+| #[byAtom, proof] => do
+  let proof ← formatStx proof
+  return ((bridgeImmediate <! " " <> byAtom <$$> nestDoc 2 proof) <^> byAtom <$$> proof <> costDoc 1).group
+| _ => failure
+
+#coreFmt Lean.Parser.Term.haveIdDecl fun
+| #[haveId, variables, typeSpec, assignAtom, val] => do
+  return haveId <_> nestDoc 2 (combine (.<_>.) variables.getArgs <**> typeSpec <_> assignAtom <**> val)
+| _ => failure
+
+#coreFmt Lean.Parser.Term.structInstFieldDef fun
+| #[assignAtom, value] =>
+  return assignAtom <**> nestDoc 2 (value)
+    <^> (assignAtom <> bridgeImmediate !> value)
+| _ => failure
+
+
+
+
+#coreFmt Lean.Parser.Term.let fun
+| #[letSymbol, declaration, sep, after] =>
+  if PrettyFormat.isEmpty sep then
+    return (bridgeHardNl<!letSymbol <_> declaration <> bridgeHardNl !> after)
+  else
+    return (bridgeHardNl<!letSymbol <_> declaration <> sep <**> after)
+| _ => failure
+
+
+#coreFmt Lean.Parser.Term.structInstField fun
+| #[field, value] => do
+  match value.getArgs with
+  | #[t, sep, val] =>
+    -- assumeMissing unknown1
+    return field <_> combine (·<_>·) #[combine (.<_>.) t.getArgs, toDoc sep, toDoc val]
+  | _ =>
+    return field <> ((""<_>"") <? addSpaceAfterCommas value.getArgs)
 | _ => failure

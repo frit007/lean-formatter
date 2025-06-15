@@ -141,9 +141,9 @@ def Bridge.str (b : Bridge) : String := Id.run do
 
 
 @[inline] def Bridge.requireIntersection (l r : Bridge) :=
-  if l == bridgeFlex && r.contains (bridgeAny ||| bridgeNone) then
+  if l == bridgeFlex && r.overlapsWith (bridgeAny ||| bridgeNone) then
     r
-  else if r == bridgeFlex && l.contains (bridgeAny ||| bridgeNone) then
+  else if r == bridgeFlex && l.overlapsWith (bridgeAny ||| bridgeNone) then
     l
   else
     l.intersection r
