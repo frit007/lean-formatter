@@ -12,8 +12,8 @@ Format an entire folder
 ```
 lake exe Format -folder ../batteries/Batteries -include ../batteries/.lake/build/lib  -include .lake/build/lib -filesPrWorker 1 -workers 16
 ```
-[!CAUTION]
-At the moment when formatting a folder we expect the toolchain bin to be part of the users path, because it is used to interpret files in the folder. This could be this folder ".elan\toolchains\leanprover--lean4---v4.17.0-rc1\bin" depending on the version.
+>[!CAUTION]
+>At the moment when formatting a folder we expect the toolchain bin to be part of the users path, because it is used to interpret files in the folder. This could be this folder ".elan\toolchains\leanprover--lean4---v4.17.0-rc1\bin" depending on the version.
 
 # Installation
 Add the project as a dependency to your project
