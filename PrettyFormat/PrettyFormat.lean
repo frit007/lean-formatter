@@ -206,10 +206,16 @@ instance : Alternative RuleM where
 
 
 
-register_option pf.lineLength : Nat := {
+register_option pf.pageWidth : Nat := {
   defValue := 100
   group    := "pf"
   descr    := "(pretty format) Maximum number of characters in a line"
+}
+
+register_option pf.computationWidth : Nat := {
+  defValue := 120
+  group    := "pf"
+  descr    := "(pretty format) Maximum number of characters before the formatter will pick any solution"
 }
 
 register_option pf.debugSyntax : Bool := {
@@ -232,10 +238,10 @@ register_option pf.debugMissingFormatters : Bool := {
   group    := "pf"
   descr    := "(pretty format) List syntax that do not have an associated formatting rule"
 }
-register_option pf.debugNoSolution : Bool := {
+register_option pf.debugAsHtml : Bool := {
   defValue := false
   group    := "pf"
-  descr    := "(pretty format) Output the document as JSON, which can be viewed using the debugDependencies.html document. Pase the JSON in the textfield and press import"
+  descr    := "(pretty format) generates HTML view of the document, this is useful for debugging"
 }
 register_option pf.debugDoc : Bool := {
     defValue := false
@@ -259,17 +265,18 @@ register_option pf.cacheDistance : Nat := {
     descr    := "(pretty format) To reduce memory usage we do not have cache every element. A larger cache distance means fewer elements get cached"
 }
 
-def getPFLineLength (o : Options) : Nat := o.get pf.lineLength.name pf.lineLength.defValue
+def getPageWidth (o : Options) : Nat := o.get pf.pageWidth.name pf.pageWidth.defValue
+def getComputationWidth (o : Options) : Nat := o.get pf.computationWidth.name pf.computationWidth.defValue
+def getCacheDistance (o : Options) : Nat := (o.get pf.cacheDistance.name pf.cacheDistance.defValue)
 
 def getDebugSyntax (o : Options) : Bool := (o.get pf.debugSyntax.name pf.debugSyntax.defValue)
 def getDebugSyntaxAfter (o : Options) : Bool := (o.get pf.debugSyntaxAfter.name pf.debugSyntaxAfter.defValue)
 def getDebugErrors (o : Options) : Bool := (o.get pf.debugErrors.name pf.debugErrors.defValue)
 def getDebugMissingFormatters (o : Options) : Bool := (o.get pf.debugMissingFormatters.name pf.debugMissingFormatters.defValue)
-def getDebugNoSolution (o : Options) : Bool := (o.get pf.debugNoSolution.name pf.debugNoSolution.defValue)
+def getDebugAsHtml (o : Options) : Bool := (o.get pf.debugAsHtml.name pf.debugAsHtml.defValue)
 def getDebugDoc (o : Options) : Bool := (o.get pf.debugDoc.name pf.debugDoc.defValue)
 def getWarnCSTmismatch (o : Options) : Bool := (o.get pf.warnCSTmismatch.name pf.warnCSTmismatch.defValue)
 def getDebugTime (o : Options) : Bool := (o.get pf.debugTime.name pf.debugTime.defValue)
-def getCacheDistance (o : Options) : Nat := (o.get pf.cacheDistance.name pf.cacheDistance.defValue)
 
 initialize coreFormatters : IO.Ref (Std.HashMap Name (Rule)) ← IO.mkRef {}
 

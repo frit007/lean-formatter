@@ -138,6 +138,7 @@ def cleanArguments (args : List String) : List String:= Id.run do
       | _ => newParams := a::newParams
   return newParams.reverse
 
+
 unsafe def formatFile (fileName : String) (args : InputArguments): IO (String × FormatReport) := do
   let ((moduleStx, env), timeReadAndParse) ← measureTime (fun _ => do
     let input ← IO.FS.readFile (fileName)
@@ -220,6 +221,8 @@ partial def RunnerState.waitUntilAtLeastOneProcessIsDone (state : RunnerState) :
         let stderr ← IO.ofExcept p.errorStream.get
         if stderr != "" then
           IO.println s!"err ({p.arguments})\n: {stderr}"
+
+        IO.println s!"all: {output}"
 
         state := { state with
           results := updatedResults

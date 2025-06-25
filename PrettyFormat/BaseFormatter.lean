@@ -67,7 +67,6 @@ where
     return p.byteIdx
   | _ => none
 
-
 partial def printAllIds (stx:Syntax): Nat :=
   -- dbg_trace s!"working on ids {nextId}"
   match stx with
@@ -95,229 +94,223 @@ where
 -- At this point we also tag the syntax with Ids, bug only if they should be cached
 -- At this point we want to add bridgeInformation
 -- At this point we could also remove failures
-partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc := do
-  if doc.meta.hasBeenExpanded then
-    return doc
-
-  match doc with
-  | .text s m =>
-    let constraint := if s.length == 0 then Constraint.passthrough else acceptFlex
-    cachePPL (.text s {m with flattenLPath := constraint, flattenRPath := constraint, flattenPath := constraint, eventuallyFlattenPath := constraint, path := constraint}) 0
-  | .newline s m =>
-    if s.isSome then
-      cachePPL (.newline s {m with
-        flattenLPath := acceptFlex,
-        flattenRPath := acceptFlex,
-        flattenPath := acceptFlex,
-        eventuallyFlattenPath := acceptFlex,
-        path := acceptFlex, nlCount := 1
-      }) 0
-    else
-      cachePPL (.newline s {m with
-        flattenLPath := Constraint.impossible,
-        flattenRPath := Constraint.impossible,
-        flattenPath := Constraint.impossible,
-        eventuallyFlattenPath := Constraint.impossible,
-        path := acceptFlex, nlCount := 1
-      }) 0
-  | .choice originalLeft originalRight m => do
-    let left ← expandSyntax r originalLeft
-    let right ← expandSyntax r originalRight
-    cachePPL (.choice left right {m with
-      path := left.meta.path.union right.meta.path,
-      flattenLPath := left.meta.flattenLPath.union right.meta.flattenLPath,
-      flattenRPath := left.meta.flattenRPath.union right.meta.flattenRPath,
-      flattenPath := left.meta.flattenPath.union right.meta.flattenPath,
-      eventuallyFlattenPath := left.meta.eventuallyFlattenPath.union right.meta.eventuallyFlattenPath,
-      collapsesBridges := left.meta.collapsesBridges.and right.meta.collapsesBridges,
-      nlCount := max left.meta.nlCount right.meta.nlCount
-    }) (max left.meta.cacheWeight right.meta.cacheWeight)
-  | .flatten inner m =>
-    let inner ← expandSyntax r inner
-    -- TODO: fix paths
-    cachePPL (.flatten inner {m with
-      collapsesBridges := inner.meta.collapsesBridges,
-      path := inner.meta.eventuallyFlattenPath,
-      eventuallyFlattenPath := inner.meta.eventuallyFlattenPath,
-      flattenRPath := inner.meta.flattenRPath,
-      flattenLPath := inner.meta.flattenLPath,
-      flattenPath := inner.meta.flattenPath,
-      nlCount := 0
-    }) (inner.meta.cacheWeight)
-  | .align inner m =>
-    let inner ← expandSyntax r inner
-    cachePPL (.align inner {m with
-      collapsesBridges := inner.meta.collapsesBridges,
-      path := inner.meta.path,
-      eventuallyFlattenPath := inner.meta.eventuallyFlattenPath,
-      flattenRPath := inner.meta.flattenRPath,
-      flattenLPath := inner.meta.flattenLPath,
-      flattenPath := inner.meta.flattenPath,
-      nlCount := inner.meta.nlCount
-      }) (inner.meta.cacheWeight)
-  | .nest n inner m =>
-    let inner ← expandSyntax r inner
-    cachePPL (.nest n inner {m with
-      collapsesBridges := inner.meta.collapsesBridges,
-      path := inner.meta.path,
-      eventuallyFlattenPath := inner.meta.eventuallyFlattenPath,
-      flattenRPath := inner.meta.flattenRPath,
-      flattenLPath := inner.meta.flattenLPath,
-      flattenPath := inner.meta.flattenPath,
-      nlCount := inner.meta.nlCount,
-    }) (inner.meta.cacheWeight)
-  | .concat left right m =>
-    let left ← expandSyntax r left
-    let right ← expandSyntax r right
-    -- Note that in case of unknown we over estimate the bridges required
-    let combinedPath := left.meta.path.concat right.meta.path
-    let flattenedPath := left.meta.flattenPath.concat right.meta.flattenPath
-    cachePPL (.concat left right { m with
-      path := left.meta.path.concat right.meta.path,
-      flattenPath := flattenedPath,
-      nlCount := left.meta.nlCount + right.meta.nlCount,
-      eventuallyFlattenPath :=
-        match (left.meta.collapses, right.meta.collapses) with
-        | (true, true) => left.meta.flattenRPath.concat right.meta.flattenLPath
-        | (false, true) => left.meta.path.concat right.meta.eventuallyFlattenPath
-        | (true, false) => left.meta.eventuallyFlattenPath.concat right.meta.path
-        |_ => combinedPath
-      flattenLPath :=
-        match (right.meta.collapses) with
-        | true => left.meta.flattenPath.concat right.meta.flattenLPath
-        | false => left.meta.flattenLPath.concat right.meta.path
-      /-
-      imagine the following cases where we start with flattenR:
-      ("collapse") <> "" -- this is the left collapses case
-      "" <> ("no collapse") -- in this case left does not collapse
-      -/
-      flattenRPath :=
-        match (left.meta.collapses) with
-        | true => left.meta.flattenRPath.concat right.meta.flattenPath
-        | false => left.meta.path.concat right.meta.flattenRPath
-      }) (max left.meta.cacheWeight right.meta.cacheWeight)
-  | .rule name inner m =>
-    let inner ← expandSyntax r inner
-    -- if inner.isDead then
-      -- dbg_trace s!"should not be dead {inner.toString} repr inner: {repr inner}"
-    cachePPL (.rule name inner {m with
-      collapsesBridges := inner.meta.collapsesBridges,
-      path := inner.meta.path,
-      eventuallyFlattenPath := inner.meta.eventuallyFlattenPath,
-      flattenRPath := inner.meta.flattenRPath,
-      flattenLPath := inner.meta.flattenLPath,
-      flattenPath := inner.meta.flattenPath,
-      nlCount := inner.meta.nlCount,
-    }) (inner.meta.cacheWeight)
-  | .bubbleComment s m =>
-    cachePPL (.bubbleComment s {m with
-      path := Constraint.passthrough,
-      eventuallyFlattenPath := Constraint.passthrough,
-      flattenRPath := Constraint.passthrough,
-      flattenLPath := Constraint.passthrough,
-      flattenPath := Constraint.passthrough,
-      nlCount := 1
-      }) 0
-  | .stx stx _ =>
-    match getSyntaxId stx with
-    | .some syntaxId =>
-      let s ← get
-      match s.stxCache.get? syntaxId with
-      | some cachedDoc =>
-        return cachedDoc
-      | _ =>
-        let value ← (expandSyntax r (← r stx))
-        modify (fun s => {s with stxCache := s.stxCache.insert syntaxId value})
-        return value
-    | _ =>
-      expandSyntax r (← r stx)
-  | .reset inner m =>
-    let inner ← expandSyntax r inner
-    -- if inner.isDead then
-      -- dbg_trace s!"should not be dead {inner.toString} repr inner: {repr inner}"
-    cachePPL (.reset inner { m with
-      collapsesBridges := inner.meta.collapsesBridges,
-      nlCount := inner.meta.nlCount,
-      path := inner.meta.path,
-      eventuallyFlattenPath := inner.meta.eventuallyFlattenPath,
-      flattenRPath := inner.meta.flattenRPath,
-      flattenLPath := inner.meta.flattenLPath,
-      flattenPath := inner.meta.flattenPath
-    }) (inner.meta.cacheWeight)
-  | .provide b m  =>
-    cachePPL (.provide b {m with
-      nlCount := if b.overlapsWith bridgeNl then 1 else 0,
-      path := Constraint.provide b,
-      eventuallyFlattenPath := Constraint.provide b,
-      flattenRPath := Constraint.provide b,
-      flattenLPath := Constraint.provide b,
-      flattenPath := if b.flatten == bridgeNull then Constraint.impossible else Constraint.provide b.flatten
-    }) 0
-  | .require b m =>
-    -- let parts := b.parts
-    let initial := if (bridgeAny ||| bridgeNone).contains b then bridgeFlex else bridgeNull
-    let constraint := Constraint.uniform (initial ||| b) bridgeFlex
-    let flattenConstraint := if b.flatten == bridgeNull then Constraint.impossible else  Constraint.uniform (initial ||| b.flatten) bridgeFlex
-
-
-    cachePPL (.require b {m with
-      path := constraint,
-      nlCount := if b.overlapsWith bridgeNl then 1 else 0,
-      eventuallyFlattenPath := flattenConstraint,
-      flattenRPath := flattenConstraint,
-      flattenLPath := flattenConstraint,
-      flattenPath := flattenConstraint
-    }) 0
-  | .cost c m =>
-    cachePPL (.cost c {m with
-      nlCount := c,
-      path := Constraint.passthrough,
-      eventuallyFlattenPath := Constraint.passthrough,
-      flattenRPath := Constraint.passthrough,
-      flattenLPath := Constraint.passthrough,
-      flattenPath := Constraint.passthrough
-    }) 0
+partial def expandSyntax (r : RuleRec) (doc : Doc) : FormatM Doc :=
+  do
+    if doc.meta.hasBeenExpanded then return doc
+    match doc with
+    | .text s m =>
+      let constraint := if s.length == 0 then Constraint.passthrough else acceptFlex
+      cachePPL (.text s {
+            m with
+            flattenLPath := constraint,
+            flattenRPath := constraint,
+            flattenPath := constraint,
+            eventuallyFlattenPath := constraint,
+            path := constraint
+          }) 0
+    | .newline s m =>
+        if s.isSome then
+          cachePPL (.newline s {
+                m with
+                flattenLPath := acceptFlex,
+                flattenRPath := acceptFlex,
+                flattenPath := acceptFlex,
+                eventuallyFlattenPath := acceptFlex,
+                path := acceptFlex,
+                nlCount := 1
+              }) 0
+        else
+          cachePPL (.newline s {
+                m with
+                flattenLPath := Constraint.impossible,
+                flattenRPath := Constraint.impossible,
+                flattenPath := Constraint.impossible,
+                eventuallyFlattenPath := Constraint.impossible,
+                path := acceptFlex,
+                nlCount := 1
+              }) 0
+    | .choice originalLeft originalRight m =>
+        do
+          let left ← expandSyntax r originalLeft
+          let right ← expandSyntax r originalRight
+          cachePPL (.choice left right {
+                m with
+                path := left.meta.path.union right.meta.path,
+                flattenLPath := left.meta.flattenLPath.union right.meta.flattenLPath,
+                flattenRPath := left.meta.flattenRPath.union right.meta.flattenRPath,
+                flattenPath := left.meta.flattenPath.union right.meta.flattenPath,
+                eventuallyFlattenPath := left.meta.eventuallyFlattenPath.union right.meta.eventuallyFlattenPath,
+                collapsesBridges := left.meta.collapsesBridges.and right.meta.collapsesBridges,
+                nlCount := max left.meta.nlCount right.meta.nlCount
+              }) (max left.meta.cacheWeight right.meta.cacheWeight)
+    | .flatten inner m =>
+        let inner ← expandSyntax r inner
+        cachePPL (.flatten inner {
+              m with
+              collapsesBridges := inner.meta.collapsesBridges,
+              path := inner.meta.eventuallyFlattenPath,
+              eventuallyFlattenPath := inner.meta.eventuallyFlattenPath,
+              flattenRPath := inner.meta.flattenRPath,
+              flattenLPath := inner.meta.flattenLPath,
+              flattenPath := inner.meta.flattenPath,
+              nlCount := 0
+            }) (inner.meta.cacheWeight)
+    | .align inner m =>
+        let inner ← expandSyntax r inner
+        cachePPL (.align inner {
+              m with
+              collapsesBridges := inner.meta.collapsesBridges,
+              path := inner.meta.path,
+              eventuallyFlattenPath := inner.meta.eventuallyFlattenPath,
+              flattenRPath := inner.meta.flattenRPath,
+              flattenLPath := inner.meta.flattenLPath,
+              flattenPath := inner.meta.flattenPath,
+              nlCount := inner.meta.nlCount
+            }) (inner.meta.cacheWeight)
+    | .nest n inner m =>
+        let inner ← expandSyntax r inner
+        cachePPL (.nest n inner {
+              m with
+              collapsesBridges := inner.meta.collapsesBridges,
+              path := inner.meta.path,
+              eventuallyFlattenPath := inner.meta.eventuallyFlattenPath,
+              flattenRPath := inner.meta.flattenRPath,
+              flattenLPath := inner.meta.flattenLPath,
+              flattenPath := inner.meta.flattenPath,
+              nlCount := inner.meta.nlCount,
+            }) (inner.meta.cacheWeight)
+    | .concat left right m =>
+        let left ← expandSyntax r left
+        let right ← expandSyntax r right
+        -- Note that in case of unknown we over estimate the bridges required
+        let combinedPath := left.meta.path.concat right.meta.path
+        let flattenedPath := left.meta.flattenPath.concat right.meta.flattenPath
+        cachePPL (.concat left right {
+              m with
+              path := left.meta.path.concat right.meta.path,
+              flattenPath := flattenedPath,
+              nlCount := left.meta.nlCount + right.meta.nlCount,
+              eventuallyFlattenPath := match (left.meta.collapses, right.meta.collapses)
+              with
+              | (true, true) => left.meta.flattenRPath.concat right.meta.flattenLPath
+              | (false, true) => left.meta.path.concat right.meta.eventuallyFlattenPath
+              | (true, false) => left.meta.eventuallyFlattenPath.concat right.meta.path
+              | _ => combinedPath
+              flattenLPath := match (right.meta.collapses)
+              with
+              | true => left.meta.flattenPath.concat right.meta.flattenLPath
+              | false => left.meta.flattenLPath.concat right.meta.path
+              /-
+              imagine the following cases where we start with flattenR:
+              ("collapse") <> "" -- this is the left collapses case
+              "" <> ("no collapse") -- in this case left does not collapse
+              -/
+              flattenRPath := match (left.meta.collapses)
+              with
+              | true => left.meta.flattenRPath.concat right.meta.flattenPath
+              | false => left.meta.path.concat right.meta.flattenRPath
+            }) (max left.meta.cacheWeight right.meta.cacheWeight)
+    | .rule name inner m =>
+        let inner ← expandSyntax r inner
+        cachePPL (.rule name inner {
+              m with
+              collapsesBridges := inner.meta.collapsesBridges,
+              path := inner.meta.path,
+              eventuallyFlattenPath := inner.meta.eventuallyFlattenPath,
+              flattenRPath := inner.meta.flattenRPath,
+              flattenLPath := inner.meta.flattenLPath,
+              flattenPath := inner.meta.flattenPath,
+              nlCount := inner.meta.nlCount,
+            }) (inner.meta.cacheWeight)
+    | .bubbleComment s m =>
+        cachePPL (.bubbleComment s {
+              m with
+              path := Constraint.passthrough,
+              eventuallyFlattenPath := Constraint.passthrough,
+              flattenRPath := Constraint.passthrough,
+              flattenLPath := Constraint.passthrough,
+              flattenPath := Constraint.passthrough,
+              nlCount := 1
+            }) 0
+    | .stx stx _ =>
+        match getSyntaxId stx with
+        | .some syntaxId =>
+            let s ← get
+            match s.stxCache.get? syntaxId with
+            | some cachedDoc => return cachedDoc
+            | _ =>
+                let value ← (expandSyntax r (← r stx))
+                modify (fun s => { s with stxCache := s.stxCache.insert syntaxId value })
+                return value
+        | _ => expandSyntax r (← r stx)
+    | .reset inner m =>
+        let inner ← expandSyntax r inner
+        cachePPL (.reset inner {
+              m with
+              collapsesBridges := inner.meta.collapsesBridges,
+              nlCount := inner.meta.nlCount,
+              path := inner.meta.path,
+              eventuallyFlattenPath := inner.meta.eventuallyFlattenPath,
+              flattenRPath := inner.meta.flattenRPath,
+              flattenLPath := inner.meta.flattenLPath,
+              flattenPath := inner.meta.flattenPath
+            }) (inner.meta.cacheWeight)
+    | .provide b m =>
+        cachePPL (.provide b {
+              m with
+              nlCount := if b.overlapsWith bridgeNl then 1 else 0,
+              path := Constraint.provide b,
+              eventuallyFlattenPath := Constraint.provide b,
+              flattenRPath := Constraint.provide b,
+              flattenLPath := Constraint.provide b,
+              flattenPath := if b.flatten == bridgeNull then
+                Constraint.impossible
+              else
+                Constraint.provide b.flatten
+            }) 0
+    | .require b m =>
+        let initial := if (bridgeAny|||bridgeNone).contains b then bridgeFlex else bridgeNull
+        let constraint := Constraint.uniform (initial|||b) bridgeFlex
+        let flattenConstraint := if b.flatten == bridgeNull then
+            Constraint.impossible
+          else
+            Constraint.uniform (initial|||b.flatten) bridgeFlex
+        cachePPL (.require b {
+              m with
+              path := constraint,
+              nlCount := if b.overlapsWith bridgeNl then 1 else 0,
+              eventuallyFlattenPath := flattenConstraint,
+              flattenRPath := flattenConstraint,
+              flattenLPath := flattenConstraint,
+              flattenPath := flattenConstraint
+            }) 0
+    | .cost c m =>
+        cachePPL (.cost c {
+              m with
+              nlCount := c,
+              path := Constraint.passthrough,
+              eventuallyFlattenPath := Constraint.passthrough,
+              flattenRPath := Constraint.passthrough,
+              flattenLPath := Constraint.passthrough,
+              flattenPath := Constraint.passthrough
+            }) 0
 where
-  cachePPL (doc:Doc) (childCacheWeight:Nat) : FormatM Doc := do
-    -- let newMeta := doc.calcMeta
-    -- -- dbg_trace s!"cachePPL {repr doc} {repr newMeta}"
-    -- if newMeta.shouldBeExpanded then
-    --   return doc
-    -- else
-    if childCacheWeight >= (← get).cacheDistance then
-    -- if childCacheWeight >= 1 then
-      -- return doc leftBridge (← FormatM.genId) 0 true
-      -- dbg_trace s!"cachePPL we generate a new id"
+  cachePPL (doc : Doc) (childCacheWeight : Nat) : FormatM Doc:= do
+    if childCacheWeight>=(← get).cacheDistance then
       let newId ← FormatM.genId
-      -- dbg_trace s!"gedId: {newId}"
-      return doc.setMeta {
-        doc.meta with
-        cacheWeight := 0,
-        id := newId
-      }
+      return doc.setMeta { doc.meta with cacheWeight := 0, id := newId }
     else
-      -- dbg_trace s!"cachePPL we skip new id"
-      return doc.setMeta {
-        doc.meta with
-        cacheWeight := childCacheWeight + 1,
-        id := 0
-      }
+      return doc.setMeta { doc.meta with cacheWeight := childCacheWeight + 1, id := 0 }
   getSyntaxId : Syntax → Option Nat
   | .missing => none
-  | .node (si : SourceInfo) _ _ =>
-    getSourceId si
-  | .atom (si : SourceInfo) _ =>
-    getSourceId si
-  | .ident  (si : SourceInfo) _ _ _ =>
-    getSourceId si
-
+  | .node (si : SourceInfo) _ _ => getSourceId si
+  | .atom (si : SourceInfo) _ => getSourceId si
+  | .ident (si : SourceInfo) _ _ _ => getSourceId si
   getSourceId : SourceInfo → Option Nat
-    | .original _ (pos : String.Pos) _ _ =>
-      some pos.byteIdx
-    | .synthetic (pos : String.Pos) _ _ =>
-      some pos.byteIdx
-    | _ =>
-      none
+  | .original _ (pos : String.Pos) _ _ => some pos.byteIdx
+  | .synthetic (pos : String.Pos) _ _ => some pos.byteIdx
+  | _ => none
+
 
 -- this functions assumes that there are no Syntax objects in the doc
 def simpleFormattingContext (doc:FormatM Doc) (cacheDistance : Nat := 2) : (Doc × FormatState) :=
@@ -334,7 +327,6 @@ def fmt (doc : Doc) : FormatM Doc :=
 
 
 partial def findFirstMatch (fmts : List (Name → Option Rule)) (kind : SyntaxNodeKind) (r : RuleRec) (stx : Syntax) :FormatM (List FormatError ⊕ Doc):= do
-  -- -- dbg_trace s!"findFirstMatch {stx.getKind}"
   let mut errors : List FormatError := []
   for fmt in fmts do
     -- let options := pFormatAttr.getValues env kind
@@ -347,9 +339,6 @@ partial def findFirstMatch (fmts : List (Name → Option Rule)) (kind : SyntaxNo
       | .ok ppl =>
 
         let res ← expandSyntax r ppl
-        -- if stx.getKind == `Lean.Parser.Tactic.tacticSeq then
-        --   let diag := (← get).diagnostic
-        --   return Sum.inr (PPL.text s!"found! {repr diag.missingFormatters}")
         return Sum.inr res
       | .error e => errors := e::errors
 
@@ -510,7 +499,10 @@ combineEndOfLineComments (comments : List CommentInfo) : Doc :=
 partial def surroundWithComments (info : SourceInfo) (p:Doc): Doc :=
   match info with
   | .original (leading : Substring) _ (trailing : Substring) _ =>
-    commentStringToPPL leading.toString true p |> commentStringToPPL trailing.toString false
+    if leading.trim.isEmpty && trailing.trim.isEmpty then
+      p
+    else
+      commentStringToPPL leading.toString true p |> commentStringToPPL trailing.toString false
     -- commentStringToPPL leading.toString true
     -- <> p <> commentStringToPPL trailing.toString false
   | _ => p
@@ -543,12 +535,8 @@ partial def pf (formatters : Formatters) (stx: Syntax): FormatM Doc := updateSyn
 
       match formatted with
       | Sum.inr ppl =>
-        -- if stx.getKind == `Lean.Parser.Tactic.tacticSeq then
-        --   return text "capture good"
         expandSyntax formattingRule (Doc.rule (toString kind) ppl {collapsesBridges := ppl.meta.collapsesBridges})
       | Sum.inl errs =>
-        -- if stx.getKind == `Lean.Parser.Tactic.tacticSeq then
-        --   return text "capture err"
         let s ← get
         let d := s.diagnostic
         if errs.length == 0 then
@@ -658,22 +646,20 @@ private def getTrailing (info:SourceInfo) : String :=
   | _ => ""
 
 -- keep the syntax exactly the same
--- TODO: remove Id.run
-partial def topLevelUnformatedSyntaxToPPL (stx:Syntax): Doc := Id.run do
+partial def topLevelUnformatedSyntaxToPPL (stx:Syntax): Doc :=
   match stx with
-  | .missing => return toDoc ""
+  | .missing => toDoc ""
   | .node   _ _ (args : Array Syntax) =>
-    let combined ← args.foldlM (fun acc c => do return acc <> (← topLevelUnformatedSyntaxToPPL c) ) (toDoc "")
-    return combined
+    let combined := args.foldl (fun acc c => acc <> (topLevelUnformatedSyntaxToPPL c) ) (toDoc "")
+    combined
     -- info.
-  | .atom   (info : SourceInfo) (val : String) => return (getLeading info |> whitespaceToPPL) <> toDoc val <> (getTrailing info |> whitespaceToPPL)
+  | .atom   (info : SourceInfo) (val : String) => (getLeading info |> whitespaceToPPL) <> toDoc val <> (getTrailing info |> whitespaceToPPL)
   | .ident  (info : SourceInfo) (rawVal : Substring) _ _ =>
-    return (getLeading info |> whitespaceToPPL) <> toDoc rawVal.toString <> (getTrailing info |> whitespaceToPPL)
+    (getLeading info |> whitespaceToPPL) <> toDoc rawVal.toString <> (getTrailing info |> whitespaceToPPL)
 
 
 
--- @[inline] def formatMeta (stx: Syntax) (ctx:FormatContext) (s:MyState) : MetaM PPL :=
---   pf stx |>.run ctx |>.run' s
+
 structure CSTCompareError where
   before : String
   after : String
@@ -783,7 +769,7 @@ def FormatResult.preservesCst (res : FormatResult) : Bool :=
     if (PrettyFormat.getDebugDoc opts) then
       errString := errString ++ "\n---- debugDoc ----\n" ++ (doc.toString)
 
-    if (PrettyFormat.getDebugNoSolution opts) then
+    if (PrettyFormat.getDebugAsHtml opts) then
       let process ← IO.Process.output {cmd := "curl", args := #["-Lo", "debugDoc.html", "https://github.com/frit007/lean-formatter/raw/main/debugDependencies.html"], stdout := .piped, stderr := .piped, stdin := .null}
       if process.exitCode != 0 then
         errString := errString ++ "\n---- Could not create html page ----\n" ++ (doc.toJSON)
@@ -793,6 +779,7 @@ def FormatResult.preservesCst (res : FormatResult) : Bool :=
         errString := errString ++ "\n---- Debug page ----\n" ++ s!"{path}" ++ "\n"
         let json := doc.toJSON.replace "`" "'"
         let json := json.replace "\\" "/"
+        let json := json.replace "\"" "\\\""
         let updatedFile := file.replace "//@@@@@replace@@@@@" s!"reconstructVal(JSON.parse(`{json}`));"
         IO.FS.writeFile "debugDoc.html" updatedFile
 
@@ -821,13 +808,74 @@ partial def someComputation (sum:Nat) (n : Nat) : IO Nat :=
     someComputation (sum * 3) (n-1)
 
 
+def dagSize (seen:Std.HashSet Nat) (doc : Doc): (Nat × Std.HashSet Nat) :=
+  -- dbg_trace s!"dagSize: {doc.meta.id} a"
+  if (seen.contains doc.meta.id) && doc.meta.id != 0 then
+    -- dbg_trace s!"dagSize: {doc.meta.id} already seen"
+    (0, seen)
+  else
+    let seen := seen.insert doc.meta.id
+    dagSize' seen doc
+where
+  dagSize' (seen:Std.HashSet Nat) : Doc → (Nat × Std.HashSet Nat)
+  | .text _ _=> (1, seen)
+  | .newline _ _=> (1, seen)
+  | .choice left right _=>
+    let (l, seen) := dagSize seen left
+    let (r, seen) := dagSize seen right
+    (l + r + 1, seen)
+  | .flatten inner _=>
+    let (size, seen) := dagSize seen inner
+    (size + 1, seen)
+  | .align inner _=>
+    let (size, seen) := dagSize seen inner
+    (size + 1, seen)
+  | .nest _ inner _=>
+    let (size, seen) := dagSize seen inner
+    (size + 1, seen)
+  | .concat left right _=>
+    let (l, seen) := dagSize seen left
+    let (r, seen) := dagSize seen right
+    (l + r + 1, seen)
+  | .stx s _=> (1, seen)
+  | .reset inner _=>
+    let (size, seen) := dagSize seen inner
+    (size + 1, seen)
+  | .rule _ inner _=>
+    let (size, seen) := dagSize seen inner
+    (size + 1, seen)
+  | .provide _ _=> (1, seen)
+  | .require _ _=> (1, seen)
+  | .bubbleComment _ _=> (1, seen)
+  | .cost _ _=> (1, seen)
+
+partial def findSyntax (seen:Std.HashSet String) : Syntax → Std.HashSet String
+  | .missing => seen
+  | .node _ (kind : SyntaxNodeKind) args =>
+    match args with
+    | #[one] => if one.getKind != `null then
+        seen -- this syntax is a wrapper for a single syntax node, so we do not need to add it
+      else
+        findSyntax (seen.insert (toString kind)) one
+    | args =>
+        args.foldl findSyntax (seen.insert (toString kind))
+  | .atom _ _ =>
+    seen
+  | .ident _ _ _ _ =>
+    seen
+
+partial def containsKind (kind' : SyntaxNodeKind): Syntax → Bool
+  | .missing => false
+  | .node _ kind args => kind == kind' ||  args.any (fun a => containsKind kind' a)
+  | .atom _ _ => false
+  | .ident _ _ _ _ => false
+
 -- Also fallback to standard syntax if formatting fails
 partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters : List (Name → Option Rule)) (opts : Options) (fileName:String): IO FormatResult := do
   let ((doc, state), timePF) ← measureTime (fun _ => do
     return pfTopLevel stx formatters)
-  -- printAllIds
   let (formattedPPL, timeDoc) ← measureTime (fun _ => do
-    return doc.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPFLineLength opts) (computationWidth := PrettyFormat.getPFLineLength opts)
+    return doc.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPageWidth opts) (computationWidth := PrettyFormat.getComputationWidth opts)
   )
 
   let (generatedSyntax, timeReparse) ← measureTime ( fun _ => do
@@ -841,20 +889,19 @@ partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters :
     | Except.error _ => compareCst stx Syntax.missing
     | Except.ok generatedStx => compareCst stx generatedStx
 
+  -- let a := findSyntax {} stx
+  -- let (size,_) := dagSize {} doc
+  -- dbg_trace s!"pfdag {size},{timePF},{timeDoc},{if cstDifferenceError.isSome then "1" else "0"},{if containsKind `Lean.Parser.Command.docComment stx then "1" else "0"},{if containsKind `Lean.Parser.Module.header stx then "1" else "0"}"
+  -- let syntaxString := a.fold (fun acc s => acc ++ s ++ " ,,,,,,, ") ""
+  -- dbg_trace s!"syntax {syntaxString}"
+
   if stx.getKind == `Lean.Parser.Module.header then
     cstDifferenceError := none
 
   return {stx, doc, opts, formattedPPL, generatedSyntax, state, cstDifferenceError, timePF, timeReparse, timeDoc}
-  -- return {stx, ppl, opts, doc := Pfmt.Doc.text "skip", formattedPPL := "formatted", generatedSyntax := .error "nope", state, cstDifferenceError := none, timePF, timeReparse, timeDoc := 0}
 where
   reparseSyntax (formattedPPL fileName: String) (env : Environment) (opts : Options): IO (Except String Syntax) := do
     let inputCtx := Parser.mkInputContext formattedPPL fileName
-    -- assume that the user environment is the first one in the list
-    -- because the this allows the user to override formatting options that are set by the formatter
-    -- match envs.get? 0 with
-    -- | none => .error "Could not parse syntax again: no environment"
-    -- | some env => do
-    --   return .error s!"the ppl:={formattedPPL}"
 
     let s ← IO.processCommands inputCtx {}
       { Command.mkState env {} opts with infoState := { enabled := true } }
@@ -983,9 +1030,12 @@ unsafe def parseModule (input : String) (fileName : String) (opts : Options := {
   let env := env.setMainModule mainModuleName
 
   if messages.hasErrors then
+    let mut m := ""
     for msg in messages.toList do
+      m := s!"{m}  :::\n   {← msg.toString}"
       IO.println s!"{← msg.toString}"
-    failWith s!"error in process header{fileName}"
+
+    failWith s!"error in process header{fileName} {repr m}"
   -- let env0 := env
   let s ← IO.processCommands inputCtx parserState -- TODO: learn about this line
     { Command.mkState env messages opts with infoState := { enabled := true } }
