@@ -294,7 +294,6 @@ partial def RunnerState.delegateWork (state : RunnerState) : IO RunnerState := d
 
 unsafe def formatFolder (folderName : String) (args : InputArguments) (cleanedArguments : List String) : IO (List (FormatReport)) := do
   let files ← findAllLeanFilesInProject folderName
-  IO.println s!"filesaa {files}"
   let before ← IO.monoNanosNow
   let r : RunnerState := {
     maxWorkers := args.workers

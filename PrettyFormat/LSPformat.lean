@@ -122,10 +122,11 @@ def formatCmdCodeAction : CommandCodeAction := fun p _ info node => do
         | none => r.start
       let tail := r.stop
 
-
       let formatters ← getFormatters info.env
-
-      let result ← pfTopLevelWithDebug (stx) info.env formatters opts p.textDocument.uri
+      let result ← if getDebugMode opts then
+        pfTopLevelWithDebug (stx) info.env formatters opts p.textDocument.uri
+      else
+        pfTopLevelWithDebugDelegate (stx) info.env opts p.textDocument.uri
 
       let newText := (← result.reportAsComment) ++ result.formattedPPL
 

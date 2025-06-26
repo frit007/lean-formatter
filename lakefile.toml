@@ -1,6 +1,6 @@
 name = "PrettyFormat"
 version = "0.1.0"
-defaultTargets = ["Format", "BaseFormatter", "LSPformat", "Bridge", "Doc", "Constraint", "MissingAnalysis", "ProjectFormat"]
+defaultTargets = ["Format", "BaseFormatter", "LSPformat", "Bridge", "Doc", "Constraint", "ProjectFormat"]
 
 
 [[lean_lib]]

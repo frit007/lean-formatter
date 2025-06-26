@@ -883,20 +883,27 @@ partial def compilerBasedFormatter (stx : Syntax) (_:options) : IO (Doc × Forma
 
   return (toDoc "enable debug mode to view...", {}, timeCST, formattedPPL, timeFormat)
 
-partial def formatHere (stx : Syntax) (formatters : List (Name → Option Rule)) (opts : Options) : IO (Doc × FormatState × Nat × String × Nat) := do
+def reparseSyntax (formattedPPL fileName: String) (env : Environment) (opts : Options): IO (Except String Syntax) := do
+  let inputCtx := Parser.mkInputContext formattedPPL fileName
+
+  let s ← IO.processCommands inputCtx {}
+    { Command.mkState env {} opts with infoState := { enabled := true } }
+  let topLevelCmds ← extractTopLevelCommands s
+  if topLevelCmds.size == 2 || topLevelCmds.size == 1 then
+    match topLevelCmds.get? 0 with
+    | some command => return .ok command.stx
+    | none => return .error "Could not parse syntax again: no command"
+  else
+    let combinedCommands := topLevelCmds.map (fun c => toString (repr c)) |>.toList |> "\n".intercalate
+
+    return .error s!"Could not parse syntax again: Expected 2 commands to be generated, your top level command and end of file\n But generated {topLevelCmds.size} commands {combinedCommands}"
+
+partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters : List (Name → Option Rule)) (opts : Options) (fileName:String): IO FormatResult := do
   let ((doc, state), timePF) ← measureTime (fun _ => do
     return pfTopLevel stx formatters)
   let (formattedPPL, timeDoc) ← measureTime (fun _ => do
     return doc.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPageWidth opts) (computationWidth := PrettyFormat.getComputationWidth opts)
   )
-  return (doc, state, timePF, formattedPPL, timeDoc)
--- Also fallback to standard syntax if formatting fails
-partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters : List (Name → Option Rule)) (opts : Options) (fileName:String): IO FormatResult := do
-  let (doc, state, timePF, formattedPPL, timeDoc) ←
-    if getDebugMode opts then
-      formatHere stx formatters opts
-    else
-      compilerBasedFormatter stx opts
 
   let (generatedSyntax, timeReparse) ← measureTime ( fun _ => do
     try
@@ -919,21 +926,25 @@ partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters :
     cstDifferenceError := none
 
   return {stx, doc, opts, formattedPPL, generatedSyntax, state, cstDifferenceError, timePF, timeReparse, timeDoc}
-where
-  reparseSyntax (formattedPPL fileName: String) (env : Environment) (opts : Options): IO (Except String Syntax) := do
-    let inputCtx := Parser.mkInputContext formattedPPL fileName
 
-    let s ← IO.processCommands inputCtx {}
-      { Command.mkState env {} opts with infoState := { enabled := true } }
-    let topLevelCmds ← extractTopLevelCommands s
-    if topLevelCmds.size == 2 || topLevelCmds.size == 1 then
-      match topLevelCmds.get? 0 with
-      | some command => return .ok command.stx
-      | none => return .error "Could not parse syntax again: no command"
-    else
-      let combinedCommands := topLevelCmds.map (fun c => toString (repr c)) |>.toList |> "\n".intercalate
+partial def pfTopLevelWithDebugDelegate (stx : Syntax) (env : Environment) (opts : Options) (fileName:String): IO FormatResult := do
+  let (doc, state, timePF, formattedPPL, timeDoc) ← compilerBasedFormatter stx opts
+  let (generatedSyntax, timeReparse) ← measureTime ( fun _ => do
+    try
+      return ← reparseSyntax formattedPPL fileName env opts
+    catch e =>
+      return Except.error e.toString
+  )
 
-      return .error s!"Could not parse syntax again: Expected 2 commands to be generated, your top level command and end of file\n But generated {topLevelCmds.size} commands {combinedCommands}"
+  let mut cstDifferenceError := match generatedSyntax with
+    | Except.error _ => compareCst stx Syntax.missing
+    | Except.ok generatedStx => compareCst stx generatedStx
+
+  if stx.getKind == `Lean.Parser.Module.header then
+    cstDifferenceError := none
+
+  return {stx, doc, opts, formattedPPL, generatedSyntax, state, cstDifferenceError, timePF, timeReparse, timeDoc}
+
 
 def formatterFromEnvironment (env : Environment) (name : Name) : Option Rule := do
   let fmts := pFormatAttr.getValues env name
