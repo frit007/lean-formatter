@@ -41,6 +41,7 @@ inductive PPLOutput
 structure InputArguments where
   files : Option (List String) := none
   folder : Option String := none
+  cst : Option String := none
   workers : Nat := 4
   filesPrWorker : Nat := 7
   output : PPLOutput := PPLOutput.copy ".formatted" -- TODO: This must change to replace, when the formatter is reliable
@@ -48,9 +49,14 @@ structure InputArguments where
   opts : Options := {}
   serializedOutput : Bool := false
 
+
 def parseArguments (args:List String) : Except String InputArguments := do
   match args with
-  | [] => return {}
+  | [] =>
+    let a : InputArguments := {}
+    let a := {a with opts := a.opts.setBool `pf.debugMode false}
+
+    return a
   | "-oCopy"::outputFileExtension::xs =>
     return { (← parseArguments xs) with output := PPLOutput.copy outputFileExtension }
   | "-oNone":: xs =>
@@ -108,6 +114,8 @@ def parseArguments (args:List String) : Except String InputArguments := do
     return { (←  parseArguments xs) with  files := files }
   | "-folder"::folderName::xs =>
     return { (←  parseArguments xs) with  folder := folderName }
+  | "-cst"::cst::xs =>
+    return { (←  parseArguments xs) with  cst := cst }
   | "-workers"::workers::xs =>
     let workers := match workers.toNat? with
     | some n => n
@@ -239,7 +247,7 @@ partial def RunnerState.waitUntilAtLeastOneProcessIsDone (state : RunnerState) :
     return state
   else
     -- Wait a bit before polling again (avoid busy looping)
-    IO.sleep 100
+    IO.sleep 10
     state.waitUntilAtLeastOneProcessIsDone
 
 partial def RunnerState.startUpToNProcesses (state : RunnerState) : IO RunnerState := do
@@ -250,8 +258,9 @@ partial def RunnerState.startUpToNProcesses (state : RunnerState) : IO RunnerSta
     let args := args.append state.configArguments
     let args := "-serializedOutput"::args
 
-    let arguments := s!".lake/build/bin/Format.exe {String.join (args|>.intersperse " ")}"
-    let child :ChildI ← IO.Process.spawn {cmd := ".lake/build/bin/Format.exe", args := args.toArray, stdout := .piped, stderr := .piped, stdin := .null}
+    let exe := if System.Platform.isWindows then ".lake/build/bin/ProjectFormat.exe" else ".lake/build/bin/ProjectFormat"
+    let arguments := s!"{exe} {String.join (args|>.intersperse " ")}"
+    let child :ChildI ← IO.Process.spawn {cmd := exe, args := args.toArray, stdout := .piped, stderr := .piped, stdin := .null}
 
     -- Start reading the output from child processes, to avoid child processes being blocked by writing to a buffer that is not being cleared
     let readOutput ← IO.asTask (IO.FS.Handle.readToEnd (child.stdout)) Task.Priority.dedicated
@@ -285,6 +294,7 @@ partial def RunnerState.delegateWork (state : RunnerState) : IO RunnerState := d
 
 unsafe def formatFolder (folderName : String) (args : InputArguments) (cleanedArguments : List String) : IO (List (FormatReport)) := do
   let files ← findAllLeanFilesInProject folderName
+  IO.println s!"filesaa {files}"
   let before ← IO.monoNanosNow
   let r : RunnerState := {
     maxWorkers := args.workers
@@ -316,7 +326,26 @@ def printReport (report : FormatReport) : IO Unit := do
 def printUsage : IO Unit := do
   IO.println "Usage: reformat -file <file> -folder <folder> -o <outputFileName> -noWarnCST -debugSyntax -debugSyntaxAfter -debugErrors -debugMissingFormatters -debugNoSolution -warnMissingFormatters -lineLength <length>"
 
-unsafe def main (originalArgs : List String) : IO (Unit) := do
+def formatSyntax (cst:String) (inputArgs : InputArguments): IO (Unit) := do
+  -- IO.println s!"path:{cst}"
+  let cst ← IO.FS.readFile cst
+  -- IO.println s!"cst:{cst}"
+  let stx := Base64.decodeSyntax cst
+  -- IO.println s!"stx:{stx}"
+  let opts := inputArgs.opts
+  let coreFormatters : Name → (Option Rule) ← getCoreFormatters
+  let formatters := [coreFormatters]
+
+  let ((doc, state), _) ← measureTime (fun _ => do
+    return pfTopLevel stx formatters)
+  let (formattedPPL, _) ← measureTime (fun _ => do
+    return doc.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPageWidth opts) (computationWidth := PrettyFormat.getComputationWidth opts)
+  )
+  -- IO.println ("formatedppl:::"++formattedPPL)
+  IO.println (Base64.encode64Str formattedPPL)
+  return
+
+unsafe def formatMain (originalArgs : List String) : IO (Unit) := do
 
   let inputArgs := parseArguments originalArgs
 
@@ -327,31 +356,28 @@ unsafe def main (originalArgs : List String) : IO (Unit) := do
   | Except.ok args => do
 
     initSearchPath (← findSysroot) (args.includeFolders.map (fun c => FilePath.mk c))
+    match args.cst with
+    | some cst =>
+      formatSyntax cst args
+    | _ =>
+      match args.files with
+      | some files => do
+        for file in files do
+          let (_,report) ← (formatFile file args)
+          if args.serializedOutput then
+            IO.println s!"serialized: {report.serialize}"
+          else
+            printReport report
 
-    match args.files with
-    | some files => do
-      for file in files do
-        let (_,report) ← (formatFile file args)
-        if args.serializedOutput then
-          IO.println s!"serialized: {report.serialize}"
-        else
-          printReport report
+      | none => match args.folder with
+        | some folder => do
+          let reports ← formatFolder folder args (cleanArguments originalArgs)
+          let combined := reports.foldl (fun acc report => report.combineReports acc) {}
 
-    | none => match args.folder with
-      | some folder => do
-        let reports ← formatFolder folder args (cleanArguments originalArgs)
-        let combined := reports.foldl (fun acc report => report.combineReports acc) {}
-
-        if args.serializedOutput then
-          IO.println s!"serialized: {combined.serialize}"
-        else
-          printReport combined
-      | none =>
-        IO.println "No file or folder specified"
-        printUsage
-
-unsafe def mainLog (args : List String) : IO (Unit) := do
-  try
-    main args
-  catch e =>
-    IO.println e
+          if args.serializedOutput then
+            IO.println s!"serialized: {combined.serialize}"
+          else
+            printReport combined
+        | none =>
+          IO.println "No file or folder specified"
+          printUsage

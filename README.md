@@ -10,10 +10,15 @@ lake exe Format -file ../batteries/Batteries/Logic.lean -include ../batteries/.l
 
 Format an entire folder
 ```
-lake exe Format -folder ../batteries/Batteries -include ../batteries/.lake/build/lib  -include .lake/build/lib -filesPrWorker 1 -workers 16
+lake exe ProjectFormat -folder ../batteries/Batteries -include ../batteries/.lake/build/lib  -include .lake/build/lib -filesPrWorker 1 -workers 16
+
+lake exe ProjectFormat -folder ./PrettyFormat  -include .lake/build/lib -filesPrWorker 1 -workers 16
+
+
+lake exe ProjectFormat -folder ../mathlib4-master -include ../mathlib4-master/.lake/build/lib  -include .lake/build/lib -filesPrWorker 1 -workers 16
 ```
-[!CAUTION]
-At the moment when formatting a folder we expect the toolchain bin to be part of the users path, because it is used to interpret files in the folder. This could be this folder ".elan\toolchains\leanprover--lean4---v4.17.0-rc1\bin" depending on the version.
+>[!CAUTION]
+>At the moment when formatting a folder we expect the toolchain bin to be part of the users path, because it is used to interpret files in the folder. This could be this folder ".elan\toolchains\leanprover--lean4---v4.17.0-rc1\bin" depending on the version.
 
 # Installation
 Add the project as a dependency to your project
@@ -23,6 +28,23 @@ Add dependency on PrettyFormat in toml
 name = "PrettyFormat"
 git = "https://github.com/frit007/lean-formatter"
 rev = "main"
+
+-- Create a formatter executable (we need this because formatting lines using the interpreter is too slow, therefore we compile all formatting rules)
+[[lean_exe]]
+name = "ProjectFormat"
+root = "ProjectFormat"
+supportInterpreter = true
+```
+
+Create the following ProjectFormat.lean file here
+```
+import Format
+open PrettyFormat
+
+-- define your own formatters here using the #coreFmt syntax
+
+unsafe def main (originalArgs : List String) : IO (Unit) :=
+  formatMain originalArgs
 ```
 
 # LSP formatting
@@ -33,11 +55,12 @@ import LSPformat
 ```
 
 # Writing custom formatters
-If you want to format a new piece of syntax start by importing the PrettyFormat
+If we want to format a new piece of syntax start by importing the PrettyFormat
 ```
 -- During development use LSPformat
 import LSPformat
 open PrettyFormat
+set_option pf.debugMode true -- this allows us to define formatting rules with #fmt
 ```
 
 ```
@@ -48,7 +71,8 @@ open PrettyFormat
 ### Adding a new formatter
 For example this would be the formatter for the `termIfThenElse` Syntax.
 ```
--- use #fmt during development, but #coreFmt if your formatter gets added to Coreformatters
+set_option pf.debugMode true 
+-- use #fmt during development, but #coreFmt when your formatter gets added to ProjectFormat
 #fmt termIfThenElse fun
 | #[ifAtom, condition, thenAtom, positiveBody, elseAtom, negativeBody] => do
   let content := "" <_> condition <_> thenAtom <> nestDoc 2 ("" <$$> positiveBody) <$$> elseAtom <> nestDoc 2 ("" <$$> negativeBody)

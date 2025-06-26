@@ -1,6 +1,6 @@
 name = "PrettyFormat"
 version = "0.1.0"
-defaultTargets = ["Format", "BaseFormatter", "LSPformat", "Bridge", "Doc", "Constraint"]
+defaultTargets = ["Format", "BaseFormatter", "LSPformat", "Bridge", "Doc", "Constraint", "MissingAnalysis", "ProjectFormat"]
 
 
 [[lean_lib]]
@@ -46,8 +46,19 @@ root = "LSPformat"
 srcDir = "PrettyFormat"
 
 
-[[lean_exe]]
+[[lean_lib]]
 name = "Format"
 root = "Format"
+srcDir = "PrettyFormat"
+supportInterpreter = true
+
+[[lean_exe]]
+name = "ProjectFormat"
+root = "ProjectFormat"
+srcDir = "PrettyFormat"
+
+[[lean_exe]]
+name = "MissingAnalysis"
+root = "MissingAnalysis"
 srcDir = "PrettyFormat"
 supportInterpreter = true

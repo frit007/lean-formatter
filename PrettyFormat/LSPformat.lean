@@ -10,49 +10,6 @@ open System
 
 
 
--- #guard_msgs in
--- #eval false
-
--- def add (a b:Nat) : Nat := a + b
-
--- def a : List Nat := Id.run do
---   let mut aa := []
---   for i in [:10] do
---     aa := (10-1-i)::aa
---   return aa
-
--- #eval a
-
--- partial def removeTheLastComment (stx:Syntax) : (Syntax) :=
---   let (_, stx') := removeTheLastComment' stx
---   stx'
--- where
--- removeTheLastComment' (stx:Syntax) : (Bool × Syntax) := Id.run do
---   match stx with
---   | .missing =>
---     return (false, stx)
---   | .node (info : SourceInfo) (kind : SyntaxNodeKind) (args : Array Syntax) =>
---     for i in [:args.size] do
---       let idx := args.size - i - 1
---       let (found, stx') := removeTheLastComment' args[idx]!
---       if found then
---         let updated := args.set! idx stx'
---         return (true, mkNode kind updated)
---     return (false, stx)
---   | .atom (info : SourceInfo) (val : String) =>
---     -- return (true, mkAtom (removeTrailing info) val)
---     return (true, mkAtom info "myvalue!!s")
---   | .ident  (info : SourceInfo) (rawVal : Substring) (val : Name) (preresolved : List Syntax.Preresolved) =>
---     return (true, mkAtom info "myvalue2!!s")
---     -- return (true, .ident (removeTrailing info) rawVal val preresolved)
--- removeTrailing (info : SourceInfo) : SourceInfo :=
---     match info with
---     | .original (leading : Substring) (pos : String.Pos) (trailing : Substring) (endPos : String.Pos) =>
---       .original "".toSubstring pos "".toSubstring endPos
---     | .synthetic (pos : String.Pos) (endPos : String.Pos) (canonical) =>
---       .synthetic pos endPos canonical
---     | .none => .none
-
 syntax (name := formatCmd)
   "#format" ppLine command : command
 
@@ -164,6 +121,7 @@ def formatCmdCodeAction : CommandCodeAction := fun p _ info node => do
         | some pos => pos
         | none => r.start
       let tail := r.stop
+
 
       let formatters ← getFormatters info.env
 

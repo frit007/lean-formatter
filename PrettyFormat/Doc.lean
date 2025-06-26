@@ -793,7 +793,7 @@ where
     s!"{nl}}"
   printNode (indentation:Nat) (results : Std.HashMap Nat String): Doc → (String × Std.HashMap Nat String)
   | .text s m =>
-    (s!"{lparen}\"type\": \"text\", \"s\": \"{s.replace "\"" "\\\""}\",{printNl indentation}{printMeta indentation m}}", results)
+    (s!"{lparen}\"type\": \"text\", \"s\": \"{s.replace "\"" "”" |>.replace "\n" "¬"}\",{printNl indentation}{printMeta indentation m}}", results)
 
   | .newline s m =>
     (s!"{lparen}\"type\": \"newline\", \"flattened\": \"{s}\",{printNl indentation}{printMeta indentation m}}", results)
@@ -858,7 +858,7 @@ where
     )
   | .bubbleComment s m =>
     (
-      s!"{lparen}\"type\": \"bubbleComment\", \"comment\": \"{s}\",{printNl indentation}{printMeta indentation m}}",
+      s!"{lparen}\"type\": \"bubbleComment\", \"comment\": \"{s.replace "\"" "”" |>.replace "\n" "¬"}\",{printNl indentation}{printMeta indentation m}}",
       results
     )
   | .cost n m =>

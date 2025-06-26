@@ -870,13 +870,33 @@ partial def containsKind (kind' : SyntaxNodeKind): Syntax → Bool
   | .atom _ _ => false
   | .ident _ _ _ _ => false
 
--- Also fallback to standard syntax if formatting fails
-partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters : List (Name → Option Rule)) (opts : Options) (fileName:String): IO FormatResult := do
+partial def compilerBasedFormatter (stx : Syntax) (_:options) : IO (Doc × FormatState × Nat × String × Nat) := do
+  let (cst, timeCST) ← measureTime (fun _ => do return Base64.encodeSyntax stx)
+  let (formattedPPL, timeFormat) ← measureTime (fun _ => do
+    let (_, file) ← IO.FS.createTempFile
+    -- TODO: pass options to the child process
+    IO.FS.writeFile file cst
+    let a ← IO.Process.output {cmd := ".lake/build/bin/ProjectFormat.exe", args := #["-cst", file.toString]}
+    IO.FS.removeFile file
+    return s!"{Base64.decode64Str! a.stdout}"
+  )
+
+  return (toDoc "enable debug mode to view...", {}, timeCST, formattedPPL, timeFormat)
+
+partial def formatHere (stx : Syntax) (formatters : List (Name → Option Rule)) (opts : Options) : IO (Doc × FormatState × Nat × String × Nat) := do
   let ((doc, state), timePF) ← measureTime (fun _ => do
     return pfTopLevel stx formatters)
   let (formattedPPL, timeDoc) ← measureTime (fun _ => do
     return doc.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPageWidth opts) (computationWidth := PrettyFormat.getComputationWidth opts)
   )
+  return (doc, state, timePF, formattedPPL, timeDoc)
+-- Also fallback to standard syntax if formatting fails
+partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters : List (Name → Option Rule)) (opts : Options) (fileName:String): IO FormatResult := do
+  let (doc, state, timePF, formattedPPL, timeDoc) ←
+    if getDebugMode opts then
+      formatHere stx formatters opts
+    else
+      compilerBasedFormatter stx opts
 
   let (generatedSyntax, timeReparse) ← measureTime ( fun _ => do
     try

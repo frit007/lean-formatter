@@ -855,11 +855,6 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
   return (lhs <_> nestDoc 2 (assignAtom <_> rhs))
 | _ => failure
 
-#coreFmt Batteries.Tactic.seq_focus fun
-| #[splitAtom, separatorAtom, lparen, proof, rparen] =>
-
-  return splitAtom <_> separatorAtom <**> lparen <> (addSpaceAfterDelimiter (fun s => s == ";") proof.getArgs) <> rparen
-| _ => failure
 
 #coreFmt Lean.Parser.Command.abbrev fun
 | #[abbrevAtom, decl, optSignature, declSimple] =>
@@ -874,7 +869,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
 
 
 #coreFmt Lean.Parser.Attr.simple combine' (· <_> ·)
-#coreFmt Batteries.Tactic.Lint.nolint combine' (· <_> ·)
+
 
 
 
@@ -1505,27 +1500,7 @@ def tacticSeqIndentSeparators : List Lean.Syntax → Doc
 
 
 
-#coreFmt Batteries.Tactic.Alias.alias fun
-| #[modifiers, aliasAtom, aliasIdent, assignAtom, nameIdent] =>
-  return ((modifiers) ?> ""<**>"")<> aliasAtom <> PrettyFormat.nestDoc 2 (" "
-  <> aliasIdent <> " "
-  <> assignAtom <> (" " <^> PrettyFormat.Doc.nl) <> nameIdent )
-| _ =>
-  failure
 
-#coreFmt Batteries.Tactic.Alias.aliasLR fun
--- | `($modifiers "alias" ⟨$aliasFwd, $aliasRev⟩ ":=" $name) =>
---   return (modifiers ?> (" " <^> PrettyFormat.PPL.nl)) <> "alias" <> PrettyFormat.PPL.nest 2 (" "
---   <> "⟨" <> aliasFwd <> ", " <> aliasRev <> "⟩" <> " "
---   <> ":=" <> " " <> name)
-
-| #[modifiers, aliasAtom, lpar, binder, comma, right ,rpar,assignAtom, nameIdent] => do
-  let binder ← PrettyFormat.formatStx binder
-  return (modifiers ?> (" " <^> PrettyFormat.Doc.nl)) <> aliasAtom <> PrettyFormat.nestDoc 2 (" "
-  <> lpar <> binder <> comma <> " " <> right <> rpar <> " "
-  <> assignAtom <**> nameIdent)
-| _ =>
-  failure
 
 #coreFmt Lean.Parser.Term.doTry fun
 | #[tryAtom, doSequence, doCatch, unknown1] => do
@@ -1741,10 +1716,7 @@ def structSeparators : List Lean.Syntax → Doc
   return lparen <>name <>barAtom <_> val <> rparen
 | _ => failure
 
-#coreFmt Batteries.CodeAction.tactic_code_action fun
-| #[nameAtom, args] =>
-  return nameAtom <_> combine (.<_>.) args.getArgs
-| _ => failure
+
 
 #coreFmt Lean.Parser.Command.elab_rules fun
 | #[docComment, unknown1, attrKind, elabRulesAtom, unknown2, colonAtom, unknown3, matchAlts] => do
