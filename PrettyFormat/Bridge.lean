@@ -41,7 +41,9 @@ def bridgeHardNl :Bridge := 4 -- flattens to fail
 def bridgeNl :Bridge := bridgeSpaceNl ||| bridgeHardNl
 def bridgeSpace :Bridge := 8
 def bridgeNone :Bridge := 16
-def bridgeImmediate :Bridge := 32
+def bridgeImmediateNone : Bridge := 32
+def bridgeImmediateSpace :Bridge := 64
+def bridgeImmediate :Bridge := bridgeImmediateNone + bridgeImmediateSpace
 def bridgeAny := bridgeSpace ||| bridgeNl ||| bridgeHardNl
 def bridgeEnding := bridgeAny ||| bridgeFlex
 
@@ -112,9 +114,12 @@ def Bridge.str (b : Bridge) : String := Id.run do
   if bridge.contains bridgeSpace then
     str := str ++ ["bridgeSpace"]
     bridge := bridge.erase bridgeSpace
-  if bridge.contains bridgeImmediate then
-    str := str ++ ["bridgeImmediate"]
-    bridge := bridge.erase bridgeImmediate
+  if bridge.contains bridgeImmediateSpace then
+    str := str ++ ["bridgeImmediateSpace"]
+    bridge := bridge.erase bridgeImmediateSpace
+  if bridge.contains bridgeImmediateNone then
+    str := str ++ ["bridgeImmediateNone"]
+    bridge := bridge.erase bridgeImmediateNone
   if bridge.contains bridgeNone then
     str := str ++ ["bridgeNone"]
     bridge := bridge.erase bridgeNone

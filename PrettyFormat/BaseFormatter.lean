@@ -837,7 +837,7 @@ where
     let (l, seen) := dagSize seen left
     let (r, seen) := dagSize seen right
     (l + r + 1, seen)
-  | .stx s _=> (1, seen)
+  | .stx _ _=> (1, seen)
   | .reset inner _=>
     let (size, seen) := dagSize seen inner
     (size + 1, seen)
@@ -870,15 +870,21 @@ partial def containsKind (kind' : SyntaxNodeKind): Syntax → Bool
   | .atom _ _ => false
   | .ident _ _ _ _ => false
 
-partial def compilerBasedFormatter (stx : Syntax) (_:options) : IO (Doc × FormatState × Nat × String × Nat) := do
-  let (cst, timeCST) ← measureTime (fun _ => do return Base64.encodeSyntax stx)
+def syntaxDelimiter := "/--/--/--/--$$$$$$$$$$$$Delimiter$$$$$$$$$$$$-/-/-/-/"
+
+partial def compilerBasedFormatter (states: List (Lean.Syntax × Environment × Options)) : IO (Doc × FormatState × Nat × (List String) × Nat) := do
+  let stxs := states.map (fun s => s.fst)
+  let (cst, timeCST) ← measureTime (fun _ => do return Transport.encodeSyntax stxs)
+
   let (formattedPPL, timeFormat) ← measureTime (fun _ => do
     let (_, file) ← IO.FS.createTempFile
     -- TODO: pass options to the child process
     IO.FS.writeFile file cst
-    let a ← IO.Process.output {cmd := ".lake/build/bin/ProjectFormat.exe", args := #["-cst", file.toString]}
+    let _ ← IO.Process.output {cmd := ".lake/build/bin/ProjectFormat.exe", args := #["-cst", file.toString]}
+    let out ← IO.FS.readFile file
+    let parts := out.splitOn syntaxDelimiter
     IO.FS.removeFile file
-    return s!"{Base64.decode64Str! a.stdout}"
+    return parts
   )
 
   return (toDoc "enable debug mode to view...", {}, timeCST, formattedPPL, timeFormat)
@@ -927,23 +933,33 @@ partial def pfTopLevelWithDebug (stx : Syntax) (env : Environment) (formatters :
 
   return {stx, doc, opts, formattedPPL, generatedSyntax, state, cstDifferenceError, timePF, timeReparse, timeDoc}
 
-partial def pfTopLevelWithDebugDelegate (stx : Syntax) (env : Environment) (opts : Options) (fileName:String): IO FormatResult := do
-  let (doc, state, timePF, formattedPPL, timeDoc) ← compilerBasedFormatter stx opts
-  let (generatedSyntax, timeReparse) ← measureTime ( fun _ => do
-    try
-      return ← reparseSyntax formattedPPL fileName env opts
-    catch e =>
-      return Except.error e.toString
-  )
+partial def pfTopLevelWithDebugDelegate (states: List (Syntax × Environment × Options)) (fileName:String): IO (List FormatResult) := do
+  let (doc, state, timePF, formattedPPLs, timeDoc) ← compilerBasedFormatter states
+  let mut results := #[]
+  let mut i := 0
 
-  let mut cstDifferenceError := match generatedSyntax with
-    | Except.error _ => compareCst stx Syntax.missing
-    | Except.ok generatedStx => compareCst stx generatedStx
+  IO.FS.writeFile "a.txt" s!"encode:{timePF} format:{timeDoc}"
+  for formattedPPL in formattedPPLs do
+    match states[i]? with
+    | some (stx,env,opts) =>
+      let (generatedSyntax, timeReparse) ← measureTime ( fun _ => do
+        try
+          return ← reparseSyntax formattedPPL fileName env opts
+        catch e =>
+          return Except.error e.toString
+      )
 
-  if stx.getKind == `Lean.Parser.Module.header then
-    cstDifferenceError := none
+      let mut cstDifferenceError := match generatedSyntax with
+        | Except.error _ => compareCst stx Syntax.missing
+        | Except.ok generatedStx => compareCst stx generatedStx
 
-  return {stx, doc, opts, formattedPPL, generatedSyntax, state, cstDifferenceError, timePF, timeReparse, timeDoc}
+      if stx.getKind == `Lean.Parser.Module.header then
+        cstDifferenceError := none
+
+      results := results.push {stx, doc, opts, formattedPPL, generatedSyntax, state, cstDifferenceError, timePF, timeReparse, timeDoc}
+    | _ => panic! s!"Returned incorrect number of arguments. Formatted {results.size} but expected {states.length}"
+    i := i + 1
+  return results.toList
 
 
 def formatterFromEnvironment (env : Environment) (name : Name) : Option Rule := do
@@ -1067,13 +1083,13 @@ unsafe def parseModule (input : String) (fileName : String) (opts : Options := {
       IO.println s!"{← msg.toString}"
 
     failWith s!"error in process header{fileName} {repr m}"
-  -- let env0 := env
+
   let s ← IO.processCommands inputCtx parserState -- TODO: learn about this line
     { Command.mkState env messages opts with infoState := { enabled := true } }
 
   let topLevelCmds : Array CommandSyntax ← extractTopLevelCommands s
 
-  return (#[{ env := s.commandState.env, options:= opts, stx := header : CommandSyntax }] ++ topLevelCmds, env)
+  return (#[{ env := s.commandState.env, options:= opts, stx := header : CommandSyntax }] ++ topLevelCmds, s.commandState.env)
 
 unsafe def parseModule' (fileName : String) (opts : Options) : IO (Array CommandSyntax × Environment):= do
   let input ← IO.FS.readFile fileName

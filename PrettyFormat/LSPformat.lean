@@ -97,8 +97,7 @@ where
     findStrPosRev s pos "/-" (fun _ => true)
 
 open CodeAction Server RequestM in
--- @[command_code_action]
--- @[command_code_action Lean.Parser.Command.declaration]
+
 @[command_code_action]
 def formatCmdCodeAction : CommandCodeAction := fun p _ info node => do
   let .node i _ := node | return #[]
@@ -123,17 +122,78 @@ def formatCmdCodeAction : CommandCodeAction := fun p _ info node => do
       let tail := r.stop
 
       let formatters ← getFormatters info.env
-      let result ← if getDebugMode opts then
-        pfTopLevelWithDebug (stx) info.env formatters opts p.textDocument.uri
-      else
-        pfTopLevelWithDebugDelegate (stx) info.env opts p.textDocument.uri
+      let mut result : Option FormatResult :=none
+      if getDebugMode opts then do
+        result := (← pfTopLevelWithDebug (stx) info.env formatters opts p.textDocument.uri)
+      else do
+        match (← pfTopLevelWithDebugDelegate [(stx,info.env, opts)] p.textDocument.uri ) with
+        | x::_ => result := x
+        | _ => result := none
 
-      let newText := (← result.reportAsComment) ++ result.formattedPPL
+      match result with
+      | some res =>
+        let newText := (← res.reportAsComment) ++ res.formattedPPL
+
+        pure { eager with
+          edit? := some <|.ofTextEdit doc.versionedIdentifier {
+            range := doc.meta.text.utf8RangeToLspRange ⟨start, tail⟩
+            newText
+          }
+        }
+      | _ =>
+        pure { eager with
+          edit? := some <|.ofTextEdit doc.versionedIdentifier {
+            range := doc.meta.text.utf8RangeToLspRange ⟨start, tail⟩
+            newText := "fail"
+          }
+        }
+  }]
+
+
+syntax (name := formatDocCmd)
+  "#formatDoc" : command
+
+
+@[command_elab formatDocCmd]
+unsafe def elabFormatDocCmd : CommandElab
+  | _ => liftTermElabM do
+    logInfo s!"\nUse quick action to reformat the document"
+
+
+open CodeAction Server RequestM in
+@[command_code_action formatDocCmd]
+def formatDocCmdCodeAction : CommandCodeAction := fun p _ info _ => do
+  let doc ← readDoc
+  let eager :Lsp.CodeAction := {
+    title := s!"Reformat document"
+    kind? := "refactor.rewrite"
+    isPreferred? := true
+  }
+
+  let t := doc.cmdSnaps.getAll
+
+
+  pure #[{
+    eager
+    lazy? := some do
+
+      let snapShots: List Snapshots.Snapshot := t.fst
+      let states := snapShots.map (fun s => (s.stx, s.cmdState.env, info.options)) -- TODO: get options at the specific command
+
+      let (results, time) ← measureTime (fun _ => pfTopLevelWithDebugDelegate states p.textDocument.uri)
+      let timeDoc := results.foldl (fun _ a => a.timeDoc) 0
+      let timePf := results.foldl (fun _ a => a.timePF) 0
+      let timeReparse := results.foldl (fun acc a => acc + a.timeReparse) 0
+      dbg_trace s!"wallTime {(Float.ofNat time)/1000000000} doc: {(Float.ofNat timeDoc)/1000000000} pf: {(Float.ofNat timePf)/1000000000} reparse:{(Float.ofNat timeReparse)/1000000000}"
+
+      let newText := results.foldl (fun (acc:String) a => acc ++ "\n\n" ++ a.formattedPPL) ""
+      let tail :String.Pos := states.foldl ( fun (_:String.Pos) (stx,_,_) => stx.getRange?.orElse (fun () => String.Range.mk ⟨0⟩  ⟨0⟩ )|>.get!.stop ) ⟨0⟩
+
 
       pure { eager with
         edit? := some <|.ofTextEdit doc.versionedIdentifier {
-          range := doc.meta.text.utf8RangeToLspRange ⟨start, tail⟩
-          newText
+          range := doc.meta.text.utf8RangeToLspRange ⟨0, tail⟩
+          newText := newText
         }
       }
   }]

@@ -147,14 +147,18 @@ def cleanArguments (args : List String) : List String:= Id.run do
   return newParams.reverse
 
 
+def copyOpts (src target :Options) : Options :=
+  Lean.KVMap.mergeBy (fun _ _ r => r) src target
+
 unsafe def formatFile (fileName : String) (args : InputArguments): IO (String × FormatReport) := do
+  let options := args.opts
   let ((moduleStx, env), timeReadAndParse) ← measureTime (fun _ => do
     let input ← IO.FS.readFile (fileName)
-    parseModule input fileName
+    parseModule input fileName options
   )
-  let options := args.opts
 
   -- leadUpdated update trailing and leading. And the characters the content is assigned to atoms and ident
+  -- let leadingUpdated := mkNullNode (moduleStx.map (·.stx)) |>.updateLeading |>.getArgs
   let leadingUpdated := mkNullNode (moduleStx.map (·.stx)) |>.updateLeading |>.getArgs
   -- let withComments := introduceCommentsToTheCST leadingUpdated
 
@@ -162,13 +166,20 @@ unsafe def formatFile (fileName : String) (args : InputArguments): IO (String ×
   let mut formatted := ""
   let mut report : FormatReport := {}
 
-
+  let mut i := 0
   for a in leadingUpdated do
     let formatters ← getFormatters env
-    let result ← pfTopLevelWithDebug a env formatters options fileName
+    let localOpts := match moduleStx[i]? with
+      | none => options
+      -- | some l => copyOpts l.options options -- prefer overriding options
+      -- | some l => l.options -- prefer overriding options
+      | some l => l.options -- prefer overriding options
+
+    let result ← pfTopLevelWithDebug a env formatters localOpts fileName
 
     formatted := formatted ++ ((← result.reportAsComment) ++ result.formattedPPL) ++ "\n\n"
     report := report.combineReports ({result.toReport with formattedCommands := if result.cstDifferenceError.isNone then 1 else 0, totalCommands := 1})
+    i := i + 1
 
   let fileName := match args.output with
   | .copy ext => some (fileName ++ ext)
@@ -325,23 +336,29 @@ def printReport (report : FormatReport) : IO Unit := do
 def printUsage : IO Unit := do
   IO.println "Usage: reformat -file <file> -folder <folder> -o <outputFileName> -noWarnCST -debugSyntax -debugSyntaxAfter -debugErrors -debugMissingFormatters -debugNoSolution -warnMissingFormatters -lineLength <length>"
 
-def formatSyntax (cst:String) (inputArgs : InputArguments): IO (Unit) := do
+def formatSyntax (file:String) (inputArgs : InputArguments): IO (Unit) := do
   -- IO.println s!"path:{cst}"
-  let cst ← IO.FS.readFile cst
+  let cst ← IO.FS.readFile file
   -- IO.println s!"cst:{cst}"
-  let stx := Base64.decodeSyntax cst
+  let (stxs,symbols) := Transport.decodeSyntax cst
   -- IO.println s!"stx:{stx}"
-  let opts := inputArgs.opts
-  let coreFormatters : Name → (Option Rule) ← getCoreFormatters
-  let formatters := [coreFormatters]
+  let mut formatted := #[]
 
-  let ((doc, state), _) ← measureTime (fun _ => do
-    return pfTopLevel stx formatters)
-  let (formattedPPL, _) ← measureTime (fun _ => do
-    return doc.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPageWidth opts) (computationWidth := PrettyFormat.getComputationWidth opts)
-  )
+  for stx in stxs do
+    let opts := inputArgs.opts
+    let coreFormatters : Name → (Option Rule) ← getCoreFormatters
+    let formatters := [coreFormatters]
+
+    let ((doc, state), _) ← measureTime (fun _ => do
+      return pfTopLevel stx formatters)
+    let (formattedPPL, _) ← measureTime (fun _ => do
+      return doc.prettyPrint DefaultCost state.nextId (col := 0) (widthLimit := PrettyFormat.getPageWidth opts) (computationWidth := PrettyFormat.getComputationWidth opts)
+    )
+    formatted := formatted.push formattedPPL
   -- IO.println ("formatedppl:::"++formattedPPL)
-  IO.println (Base64.encode64Str formattedPPL)
+  -- IO.println (Base64.encode64Str formattedPPL)
+  IO.FS.writeFile file (formatted.toList |>.intersperse syntaxDelimiter |> String.join)
+  IO.println s!"formatted: {stxs.length}"
   return
 
 unsafe def formatMain (originalArgs : List String) : IO (Unit) := do

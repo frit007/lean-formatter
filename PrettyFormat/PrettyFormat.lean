@@ -303,177 +303,62 @@ def FormatM.genId : FormatM Nat := do
 
 
 
-namespace Base64
-
-def base64Table : Array Char :=
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".toList.toArray
-
--- def reverseTable : Std.HashMap Char UInt8 :=
---   base64Table.foldl (init := {}) (fun (acc : Std.HashMap Char UInt8) c => acc.insert c (c.toUInt8))
-def reverseTable : Std.HashMap Char UInt8 :=
-  base64Table.mapIdx (fun i c => (i, c)) |>.foldl (init := {}) (fun acc (i,c) => acc.insert c (i.toUInt8))
-
-def encodeChunk (chunk : List UInt8) : String :=
-  let bytes := chunk ++ List.replicate (3 - chunk.length) 0
-  let b := bytes.map (·.toUInt32)
-  let n := (b[0]! <<< 16) ||| (b[1]! <<< 8) ||| b[2]!
-  let c1 := base64Table.get! ((n >>> 18) &&& 0x3F).toNat
-  let c2 := base64Table.get! ((n >>> 12) &&& 0x3F).toNat
-  let c3 := if chunk.length > 1 then base64Table.get! ((n >>> 6) &&& 0x3F).toNat else '='
-  let c4 := if chunk.length > 2 then base64Table.get! (n &&& 0x3F).toNat else '='
-  s!"{c1}{c2}{c3}{c4}"
-
-partial def encode (bytes : ByteArray) : String :=
-  let rec go (i : Nat) (acc : String) :=
-    if i ≥ bytes.size then acc
-    else
-      let chunk := (List.range 3).filterMap fun j =>
-        if i + j < bytes.size then some (bytes.get! (i + j)) else none
-      go (i + 3) (acc ++ encodeChunk chunk)
-  go 0 ""
-
-def decodeChar (c : Char) : Option UInt8 :=
-  if c == '=' then none else reverseTable[c]?
-
-def decodeBlock (block : List Char) : Option (List UInt8) := do
-  if block.length ≠ 4 then
-    panic! "not equal to 4"
-  else
-    let vals? := block.map decodeChar
-    -- Bail if invalid char (not padding or base64 char)
-    -- if vals?.any (·.isNone) ∧ block.any (fun c => c ≠ '=') then
-    --   -- none
-    --   panic! s!"bad char {repr block} {vals?.any (·.isNone)} ??? {block.any (fun c => c ≠ '=')}"
-    -- else
-    let vals := vals?.map (Option.getD · 0)
-    let n := (vals[0]!.toUInt32 <<< 18) ||| (vals[1]!.toUInt32 <<< 12) |||
-              (vals[2]!.toUInt32 <<< 6) ||| vals[3]!.toUInt32
-    let padCount := block.count '='
-    let out :=
-      match padCount with
-      | 0 => [((n >>> 16) &&& 0xFF).toUInt8,
-              ((n >>> 8) &&& 0xFF).toUInt8,
-              (n &&& 0xFF).toUInt8]
-      | 1 => [((n >>> 16) &&& 0xFF).toUInt8,
-              ((n >>> 8) &&& 0xFF).toUInt8]
-      | 2 => [((n >>> 16) &&& 0xFF).toUInt8]
-      | _ => []  -- shouldn't happen with valid base64
-    some out
-
-partial def chunk (n : Nat) (xs : List α) : List (List α) :=
-  let rec go (acc : List (List α)) (xs : List α) :=
-    match xs with
-    | [] => acc.reverse
-    | _ =>
-      let (first, rest) := xs.splitAt n
-      go (first :: acc) rest
-  go [] xs
-
-def decode (str : String) : Option ByteArray :=
-  let clean := str.data.filter (fun c => c ≠ '\n' ∧ c ≠ '\r' ∧ c ≠ ' ')
-  let blocks := chunk 4 clean
-  let rec go (acc : List UInt8) (blocks : List (List Char)) :=
-    match blocks with
-    | [] => some (ByteArray.mk acc.toArray)
-    | b :: bs =>
-      match decodeBlock b with
-      | some decoded => go (acc ++ decoded) bs
-      | none => none
-  go [] blocks
-
-def testRoundtrip (s : String) : IO Unit := do
-  let encoded := Base64.encode (ByteArray.mk s.toUTF8.data)
-  match Base64.decode encoded with
-  | some decoded =>
-    match String.fromUTF8? decoded with
-    | some decodedStr =>
-      if decodedStr == s then
-        IO.println s!"ok: roundtrip passed"
-      else
-        IO.println s!"fail: roundtrip mismatch: {decodedStr} ≠ {s}"
-    | none => IO.println "fail: invalid UTF-8"
-  | none => IO.println "fail: decode failed"
-
-/-- info: ok: roundtrip passed -/
-#guard_msgs in
-#eval testRoundtrip ""
-
-/-- info: ok: roundtrip passed -/
-#guard_msgs in
-#eval testRoundtrip "f"
-
-/-- info: ok: roundtrip passed -/
-#guard_msgs in
-#eval testRoundtrip "fo"
-
-/-- info: ok: roundtrip passed -/
-#guard_msgs in
-#eval testRoundtrip "foo1"
-
-/-- info: ok: roundtrip passed -/
-#guard_msgs in
-#eval testRoundtrip "foo"
-
-
-/-- info: ok: roundtrip passed -/
-#guard_msgs in
-#eval testRoundtrip "hello!"
-
-/-- info: ok: roundtrip passed -/
-#guard_msgs in
-#eval testRoundtrip "Lean `"
-
-/--
-error: invalid field 'repeat', the environment does not contain 'String.repeat'
-  "a"
-has type
-  String
--/
-#guard_msgs in
-#eval testRoundtrip ("a".repeat 1000)
-
-def encode64Str (str:String): String :=
-  Base64.encode (ByteArray.mk str.toUTF8.data)
-
-def decode64Str! (encoded:String): String :=
-  match Base64.decode encoded with
-  | some decoded =>
-    match String.fromUTF8? decoded with
-    | some decodedStr =>
-      decodedStr
-    | none => panic! "fail: invalid UTF-8"
-  | none => panic! "fail: decode failed"
-
-
-def generateBigString : String :=
-  String.mk (List.replicate 100000 'a')  -- 10,000 'a's
-
--- note we skip positions
-def encodeSourceInfo : SourceInfo → String
-  | .original (leading : Substring) _ (trailing : Substring) _ =>
-    s!"o_{encode64Str leading.toString}_{encode64Str trailing.toString}"
-  | .synthetic _ _ _ =>
-    s!"s"
-  | .none =>
-    "n"
+namespace Transport
 
 abbrev NodeId := Nat
 
 structure EncState where
   nextId : NodeId := 0
+  -- store all strings in a long list string, they can later be restored
+  symbols : String := ""
   defs   : Std.HashMap NodeId String := {}
 
 abbrev EncM := StateM EncState
 
-partial def encodeName : Name → String
-  | Name.anonymous => "anon"
-  | Name.str p s   => s!"str_{encode64Str s}_{encodeName p}"
-  | Name.num p n   => s!"num_{toString n}_{encodeName p}"
+structure DecState where
+  -- store all strings in a long list string, they can later be restored
+  symbols : String := ""
+abbrev DecM := StateM DecState
 
-partial def decodeName : List String → Name
- | "anon"::_ => Name.anonymous
- | "str"::val::xs => Name.str (decodeName xs) (decode64Str! val)
- | "num"::n::xs => Name.num (decodeName xs) (n.toNat!)
+-- TODO: maybe optimize by reusing string that have already occured
+partial def storeString (s:String): EncM String := do
+  let state ← get
+  let start := state.symbols.utf8ByteSize
+
+  let stop := state.symbols.utf8ByteSize + s.utf8ByteSize
+  modify (fun state => {state with symbols := state.symbols ++ s})
+  return s!"{start}&{stop}"
+
+partial def getString (s:String): DecM String := do
+  let state ← get
+  let parts := s.splitOn "&"
+  match parts with
+  | start::stop::[] =>
+    match (start.toNat?, stop.toNat?) with
+    | (some start,some stop) =>
+      return state.symbols.extract ⟨start⟩ ⟨stop⟩
+    | _ => panic! s!"could not getString with '{s}' as input"
+  | _ => panic! "invalidPattern"
+
+-- note we skip positions
+def encodeSourceInfo : SourceInfo → EncM String
+  | .original (leading : Substring) _ (trailing : Substring) _ => do
+    return s!"o_{← storeString leading.toString}_{← storeString trailing.toString}"
+  | .synthetic _ _ _ =>
+    return s!"s"
+  | .none =>
+    return "n"
+
+
+partial def encodeName : Name → EncM String
+  | Name.anonymous => return "anon"
+  | Name.str p s   => return s!"str_{← storeString s}_{← encodeName p}"
+  | Name.num p n   => return s!"num_{toString n}_{← encodeName p}"
+
+partial def decodeName : List String → DecM Name
+ | "anon"::_ => return Name.anonymous
+ | "str"::val::xs => do return Name.str (← decodeName xs) (← getString val)
+ | "num"::n::xs => do return Name.num (← decodeName xs) (n.toNat!)
  | _ => panic "invalid name"
 
 partial def encodeSyntaxDAG (stx : Syntax) : EncM NodeId := do
@@ -485,15 +370,15 @@ partial def encodeSyntaxDAG (stx : Syntax) : EncM NodeId := do
     modify fun s => {s with defs := s.defs.insert id "m"}
     return id
   | .atom info val =>
-    let node := s!"a,{encodeSourceInfo info},{encode64Str val}"
+    let node := s!"a,{← encodeSourceInfo info},{← storeString val}"
     modify fun s => {s with defs := s.defs.insert id node}
     return id
   | .ident info raw name _ =>
-    let node := s!"i,{encodeSourceInfo info},{encode64Str raw.toString},{encode64Str name.toString}"
+    let node := s!"i,{← encodeSourceInfo info},{← storeString raw.toString},{← storeString name.toString}"
     modify fun s => {s with defs := s.defs.insert id node}
     return id
   | .node _ kind args =>
-    let kindStr := encodeName kind
+    let kindStr ← encodeName kind
     let argIds ← args.toList.mapM encodeSyntaxDAG
     let argString := ((argIds.map toString).intersperse ";") |> String.join
 
@@ -502,44 +387,41 @@ partial def encodeSyntaxDAG (stx : Syntax) : EncM NodeId := do
     modify fun s => {s with defs := s.defs.insert id node}
     return id
 
-partial def encodeSyntax (stx:Syntax) : String :=
-  let (_,state) := encodeSyntaxDAG stx |>.run {nextId:= 0, defs := {}}
-  state.defs.map (fun id str => s!"{id}:{str}") |>.toList |>.map Prod.snd |>.intersperse "|" |> String.join
 
 
 /-- Decode a source info string like:
     o,<leading>,<trailing> | s | n
 -/
-def decodeSourceInfo (parts : List String) : (SourceInfo) :=
+def decodeSourceInfo (parts : List String) : DecM (SourceInfo) := do
   match parts with
   | ["o", leading, trailing] =>
-    let lead := (decode64Str! leading).toSubstring
-    let trail := (decode64Str! trailing).toSubstring
-    (SourceInfo.original lead ⟨0⟩ trail ⟨0⟩)
-  | ["s"] => (SourceInfo.synthetic ⟨0⟩ ⟨0⟩ true)
-  | ["n"] => (SourceInfo.none)
+    let lead := (← getString leading).toSubstring
+    let trail := (← getString trailing).toSubstring
+    return (SourceInfo.original lead ⟨0⟩ trail ⟨0⟩)
+  | ["s"] => return (SourceInfo.synthetic ⟨0⟩ ⟨0⟩ true)
+  | ["n"] => return (SourceInfo.none)
   | _ => panic! s!"Invalid source info encoding: {parts}"
 
 /-- Parse a single encoded node into `Syntax`, using the recursive node map. -/
-partial def decodeNode (strMap : Std.HashMap NodeId String) (id : NodeId) : Syntax := Id.run do
+partial def decodeNode (strMap : Std.HashMap NodeId String) (id : NodeId) : DecM Syntax := do
   let str := strMap[id]!
   let parts := str.splitOn ","
   let (stx : Syntax) ← match parts with
     | ["m"] => return .missing
 
     | ["a", sourceInfo, val] =>
-      let info := decodeSourceInfo (sourceInfo.splitOn "_")
-      let val := decode64Str! val
+      let info ← decodeSourceInfo (sourceInfo.splitOn "_")
+      let val ← getString val
       return .atom info val
 
     | ["i", sourceInfo, raw, name] =>
-      let info := decodeSourceInfo (sourceInfo.splitOn "_")
-      let raw := decode64Str! raw
-      let val := decode64Str! name
+      let info ← decodeSourceInfo (sourceInfo.splitOn "_")
+      let raw ← getString raw
+      let val ← getString name
       return .ident info raw.toSubstring (Name.mkSimple val) []
 
     | ["n", kind, argIdsStr] =>
-      let kind := decodeName (kind.splitOn "_")
+      let kind ← decodeName (kind.splitOn "_")
       let argIds := if argIdsStr.isEmpty then [] else argIdsStr.splitOn ";"
       let argIdsNat := argIds.map String.toNat!
       let args ← argIdsNat.mapM (decodeNode strMap)
@@ -548,23 +430,46 @@ partial def decodeNode (strMap : Std.HashMap NodeId String) (id : NodeId) : Synt
     | _ => panic! s!"Invalid node encoding: {str}"
   return stx
 
+
+partial def encodeSyntax (stxs: List Syntax) : String := Id.run do
+  let mut symbols := ""
+  let mut fmtStxs := #[]
+  for stx in stxs do
+    let (_,state) := encodeSyntaxDAG stx |>.run {nextId:= 0, defs := {}, symbols := symbols}
+    symbols := state.symbols
+    fmtStxs := fmtStxs.push (state.defs.map (fun id str => s!"{id}:{str}") |>.toList |>.map Prod.snd |>.intersperse "|" |> String.join)
+
+  let formatted := fmtStxs.toList |>.intersperse "$" |> String.join
+  return s!"{formatted}~{symbols}"
+
 /-- Top-level decode function. Takes the full encoded string and returns a `Syntax`. -/
-def decodeSyntax (s : String) : Syntax :=
-  let lines := s.splitOn "|"
-  let idStrs := lines.filterMap fun line =>
-    let parts := line.splitOn ":"
-    match parts with
-    | [idStr, rest] =>
-      match String.toNat? idStr with
-      | some id => some (id, rest)
-      | none => none
-    | _ => none
-  let strMap : Std.HashMap NodeId String := idStrs.foldl (fun acc (id, str) => acc.insert id str) {}
-  let rootId := 0 -- Always the first ID assigned during encoding
-  decodeNode strMap rootId
+def decodeSyntax (s : String) : ((List Syntax)× String) := Id.run do
+  let mut found := #[]
+  -- the document is split into 2 parts based on "~"
+  let splitPos := s.find (fun c => c == '~')
+  let symbols := s.extract (splitPos + ⟨1⟩) ⟨s.utf8ByteSize⟩
+  let s := s.extract ⟨0⟩ splitPos
+  let syntaxes := s.splitOn "$"
+
+  for synt in syntaxes do
+    let lines := synt.splitOn "|"
+    let idStrs := lines.filterMap fun line =>
+      let parts := line.splitOn ":"
+      match parts with
+      | [idStr, rest] =>
+        match String.toNat? idStr with
+        | some id => some (id, rest)
+        | none => none
+      | _ => none
+    let strMap : Std.HashMap NodeId String := idStrs.foldl (fun acc (id, str) => acc.insert id str) {}
+    let rootId := 0 -- Always the first ID assigned during encoding
+    let (stx, _) := (decodeNode strMap rootId |>.run {symbols := symbols})
+    found := found.push stx
+
+  return (found.toList, symbols)
 
 
-end Base64
+end Transport
 
 
 end PrettyFormat

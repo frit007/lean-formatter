@@ -75,7 +75,7 @@ def possibilitiesToMeasureSet [Cost χ] (possibilities : Bridge) (col indent wid
     }])::options
 
   -- In any other case we we let the child handle the separation
-  if possibilities.overlapsWith bridgeSpace then
+  if possibilities.overlapsWith (bridgeSpace) || (possibilities.overlapsWith (bridgeImmediateSpace) && expect) then
     options := (MeasureSet.set [{
       last := col + text.length + 1,
       bridgeR := bridgeFlex,
@@ -86,7 +86,7 @@ def possibilitiesToMeasureSet [Cost χ] (possibilities : Bridge) (col indent wid
   -- anything other than space or newline get shortened to nothing
   if expect then
     -- To accept an immediate bridge you must expect it, to avoid accidental immediate bridges
-    if (possibilities.erase (bridgeSpace ||| bridgeNl)) != 0 then
+    if (possibilities.erase (bridgeSpace ||| bridgeNl ||| bridgeImmediateSpace)) != 0 then
       options := (MeasureSet.set [{
         last := col + text.length,
         bridgeR := bridgeFlex,
